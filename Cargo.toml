@@ -1,0 +1,12 @@
+[package]
+name = "bevy_ggf"
+version = "0.1.0"
+edition = "2021"
+description = "A framework for creating grid based games in bevy"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/NoahShomette/bevy_ggf"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
