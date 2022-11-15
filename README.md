@@ -20,6 +20,10 @@ This crate is actively developed however it is still very early in development. 
 
 ---
 
+# Current Features
+
+* Massively inprogresss
+
 # MVP Requirements
 In no particular order, here are the features required for a true 1.0.0 release. These features would provide all the fundamentals needed to create a game in the style of Advanced Wars.
 - [ ] Mapping
