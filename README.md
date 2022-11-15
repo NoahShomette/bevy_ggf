@@ -43,7 +43,7 @@ In no particular order, here are the features required for a true 1.0.0 release.
 ---
 
 # Dependencies
-Bevy_ggf depends on the outstanding community of developers and their excellent crates that have helped to make Bevy_ggf. Some of the bigger crates that this project depends on are listed below. Thank you to everyone who has contributed to these crates!
+Bevy_ggf depends on the outstanding community of developers and their excellent crates that have helped to make Bevy_ggf what it is. Some of the bigger crates that this project depends on are listed below. Thank you to everyone who has contributed to these crates!
 
 * Bevy - [https://github.com/bevyengine/bevy]
 * Bevy_Ecs_Tilemap - [https://github.com/StarArawn/bevy_ecs_tilemap]
