@@ -34,6 +34,13 @@ In no particular order, here are the features required for a true 1.0.0 release.
 - [ ] Game management
 - [ ] Saving/Loading
 
+---
+
+# Getting Started!
+[Basic Getting Started](https://github.com/NoahShomette/bevy_ggf/discussions/1#discussion-4567903)
+
+
+---
 
 # Dependencies
 Bevy_ggf depends on the outstanding community of developers and their excellent crates that have helped to make Bevy_ggf. Some of the bigger crates that this project depends on are listed below. Thank you to everyone who has contributed to these crates!
