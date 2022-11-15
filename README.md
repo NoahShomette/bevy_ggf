@@ -9,11 +9,11 @@ Bevy Grid Game Framework (Bevy_ggf), is a framework for creating grid based tact
 
 
 # Crate Status
+
 This crate is actively developed however it is still very early in development. Any advice, opinions, pull requests, issues, etc would be greatly appreciated!
 
----
 
-# Version Compatibility Table:
+**Version Compatibility Table:**
 |Bevy Version|Crate Version      |
 |------------|-------------------|
 |`0.9`       |`main`             |
