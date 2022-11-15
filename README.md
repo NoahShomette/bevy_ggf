@@ -37,6 +37,7 @@ In no particular order, here are the features required for a true 1.0.0 release.
 - [ ] Win/Lose Conditions
 - [ ] Game management
 - [ ] Saving/Loading
+- [ ] Built in scene/map editor
 
 ---
 
