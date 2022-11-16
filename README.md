@@ -5,7 +5,7 @@
 [![Crates.io](https://img.shields.io/crates/d/bevy_ggf)](https://crates.io/crates/bevy_ggf)
  
 # What is this?
-Bevy Grid Game Framework (Bevy_ggf), is a framework for creating grid based tactics and strategy games in the Bevy game engine. This framework is intended to provide a massive jumpstart to anyone who intends to make a game in the style of Advanced Wars and Final Fantasy initially, and then eventually strategy games like Civilization. 
+Bevy Grid Game Framework (Bevy_ggf), is a framework for creating grid based tactics and strategy games in the Bevy game engine. This framework is intended to provide a massive and modular jumpstart to anyone who intends to make a game in the style of Advanced Wars and Final Fantasy initially, and then eventually strategy games like Civilization. 
 
 
 # Crate Status
@@ -29,7 +29,6 @@ In no particular order, here are the features required for a true 1.0.0 release.
 - [ ] Mapping
 - [ ] Movement
 - [ ] Combat
-- [ ] Networking
 - [ ] Units
 - [ ] Buildings
 - [ ] Camera
@@ -54,4 +53,3 @@ Bevy_ggf depends on the outstanding community of developers and their excellent 
 * Bevy_Ecs_Tilemap - [https://github.com/StarArawn/bevy_ecs_tilemap]
 * Leafwing-Input-Manager - [https://github.com/Leafwing-Studios/leafwing-input-manager]
 * iyes_loopless - [https://github.com/IyesGames/iyes_loopless]
-* Bevy_Spicy_Networking - [https://github.com/CabbitStudios/bevy_spicy_networking]
