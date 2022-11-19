@@ -1,7 +1,7 @@
 pub mod tiles;
 
 use std::borrow::{Borrow, BorrowMut};
-use crate::mapping::tiles::{Grassland, GroundTerrainBase, TerrainBaseTraitBase, TerrainExtensionTrait, TerrainExtensionTraitBase, Tile, TileTerrainInfo};
+use crate::mapping::tiles::{Grassland, GroundTerrainBase, TerrainBaseTraitBase, TerrainExtensionTrait, TerrainExtensionTraitBase, TerrainExtensionType, Tile, TileTerrainInfo};
 use bevy::prelude::*;
 use bevy::prelude::KeyCode::T;
 use bevy_ecs_tilemap::prelude::*;
@@ -23,7 +23,7 @@ impl Map {
         tilemap_type: &TilemapType,
         tilemap_tile_size: &TilemapTileSize,
         map_texture_handle: Handle<Image>,
-        map_terrain_vec: &[Box<dyn TerrainExtensionTraitBase>]
+        map_terrain_vec: &Vec<TerrainExtensionType>
     ) -> Map
     {
         let map_size = *tile_map_size;
@@ -36,19 +36,21 @@ impl Map {
                 let tile_pos = TilePos { x, y };
                 let mut rng = rand::thread_rng();
                 let tile_texture_index = rng.gen_range(0..map_terrain_vec.len());
-                let mut texture_index : &dyn TerrainExtensionTraitBase = map_terrain_vec[tile_texture_index].borrow();
+                //let mut texture_index : &dyn TerrainExtensionTraitBase = map_terrain_vec[tile_texture_index].borrow();+
+                let texture_index = &map_terrain_vec[tile_texture_index];
+
                 let tile_entity = commands
                     .spawn(TileBundle {
                         position: tile_pos,
-                        texture_index: TileTextureIndex(*texture_index.return_texture_id()),
+                        texture_index: TileTextureIndex(texture_index.texture_index),
                         tilemap_id: TilemapId(tilemap_entity),
                         ..Default::default()
                     })
                     .insert(Tile)
                     
-                    //.insert(TileTerrainInfo {
-                    //    terrain_extension_type: Box::new(map_terrain_vec[tile_texture_index].borrow()),
-                    //})
+                    .insert(TileTerrainInfo {
+                        terrain_extension_type: map_terrain_vec[tile_texture_index]
+                    })
                     .id();
                 tile_storage.set(&tile_pos, tile_entity);
             }

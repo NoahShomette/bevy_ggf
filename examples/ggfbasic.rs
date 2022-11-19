@@ -2,8 +2,11 @@ use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::movement;
+use bevy_ggf::mapping::tiles::{
+    Grassland, Hill, Ocean, TerrainExtensionTrait, TerrainExtensionTraitBase, TerrainExtensionType,
+    TERRAIN_EXTENSION_TYPES,
+};
 use bevy_ggf::mapping::Map;
-use bevy_ggf::mapping::tiles::{Grassland, Hill, Ocean, TerrainExtensionTrait, TerrainExtensionTraitBase};
 
 fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2dBundle::default());
@@ -13,16 +16,23 @@ fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     let tilemap_type = TilemapType::Square;
     let texture_handle: Handle<Image> = asset_server.load("tiles.png");
-
-    let map_texture_vec: Vec<Box<dyn TerrainExtensionTraitBase>> = vec![Box::new(Grassland{}), Box::new(Hill{}), Box::new(Ocean{})];
-    
+    let map_texture_vec: Vec<TerrainExtensionType> = vec![
+        TERRAIN_EXTENSION_TYPES[0],
+        TERRAIN_EXTENSION_TYPES[1],
+        TERRAIN_EXTENSION_TYPES[2],
+        TERRAIN_EXTENSION_TYPES[3],
+        TERRAIN_EXTENSION_TYPES[4],
+        TERRAIN_EXTENSION_TYPES[5],
+        TERRAIN_EXTENSION_TYPES[6],
+    ];
+    //let map_texture_vec: Vec<Box<dyn TerrainExtensionTraitBase>> = vec![Box::new(Grassland{}), Box::new(Hill{}), Box::new(Ocean{})];
     let map = Map::generate_random_map(
         &mut commands,
         &tilemap_size,
         &tilemap_type,
         &tilemap_tile_size,
-        texture_handle, 
-        &map_texture_vec
+        texture_handle,
+        &map_texture_vec,
     );
 
     commands.spawn(map);
