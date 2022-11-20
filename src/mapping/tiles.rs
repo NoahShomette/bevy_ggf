@@ -28,37 +28,51 @@
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
 
-use bevy::prelude::{Component, Entity, reflect_trait, Resource};
-use downcast_rs::DowncastSync;
+use bevy::prelude::{Bundle, Component, Entity, reflect_trait, Resource};
+use bevy_ecs_tilemap::prelude::TileBundle;
+
+/// Bundle containing all the basic tile components needed for a tile.
+///
+/// ### Note
+/// Does not contain components from other sections of the crate such as [`TileMovementCosts`], if
+/// you want one of those use one of the super bundles in prelude. If you need to include other 
+/// components in every tile and one of the super bundles wont work it's recommended to create your
+/// own super bundles
+#[derive(Bundle)]
+pub struct GGFTileBundle{
+    /// Bevy_ecs_tilemap tile bundle
+    pub tile_bundle: TileBundle,
+    pub tile : Tile,
+    pub tile_terrain_info: TileTerrainInfo,
+}
 
 /// Marker component on map tiles for ease of query and accessing
 #[derive(Component)]
 pub struct Tile;
 
-/// Marker component on map tiles for ease of query and accessing
-//#[derive(Resource)]
-//pub struct TerrainInfo(HashMap<dyn TerrainExtensionTraitBase, dyn TerrainBaseTraitBase>);
-
 /// Component holding the tile terrain info needed by any built in logic.
 /// Terrain type
 #[derive(Component)]
 pub struct TileTerrainInfo {
-    //pub(crate) terrain_extension_type: Box<dyn TerrainExtensionTraitBase>
     pub terrain_extension_type: TerrainExtensionType
 
 }
 
+/// Defines a new Terrain Base Type representing a category of Terrain types - eg Ground, Water, Etc
 #[derive(Eq, Hash, PartialEq)]
 pub struct TerrainBaseType{
     pub name: &'static str,
 }
 
-#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+// Defines a new Terrain Extension Type that is part of the 
+#[derive(Clone, Copy, Hash, Eq, PartialEq)]
 pub struct TerrainExtensionType{
     pub name: &'static str,
     pub texture_index: u32,
     pub terrain_base_type: &'static TerrainBaseType,
 }
+
+
 
 
 pub const TERRAIN_BASE_TYPES: &'static [TerrainBaseType] = &[
@@ -76,106 +90,3 @@ pub const TERRAIN_EXTENSION_TYPES: &'static [TerrainExtensionType] = &[
     TerrainExtensionType{ name: "CoastWater", texture_index: 5, terrain_base_type: &TERRAIN_BASE_TYPES[1] },
     TerrainExtensionType{ name: "Ocean", texture_index: 6, terrain_base_type: &TERRAIN_BASE_TYPES[1] },
 ];
-
-
-pub trait TerrainBaseTraitBase: DowncastSync {}
-downcast_rs::impl_downcast!(sync TerrainBaseTraitBase);
-
-pub trait TerrainBaseTrait: TerrainBaseTraitBase {
-    /// A unique name to identify your Terrain Base Type, this needs to be unique __across all included crates__
-    ///
-    /// A good combination is crate name + struct name
-    const NAME: &'static str;
-}
-
-/// You will also have to mark it with either [`ServerMessage`] or [`ClientMessage`] (or both)
-/// to signal which direction this message can be sent.
-pub trait TerrainExtensionTraitBase: DowncastSync {
-    
-    fn return_name(&self) -> &str;
-    fn return_texture_id(&self) -> &u32;
-    fn return_terrain_base_trait(&self) -> &dyn TerrainBaseTraitBase;
-    
-}
-downcast_rs::impl_downcast!(sync TerrainExtensionTraitBase);
-
-pub trait TerrainExtensionTrait: TerrainExtensionTraitBase {
-    /// A unique name to identify your Terrain Extension Type, this needs to be unique __across all included crates__
-    ///
-    /// A good combination is crate name + struct name
-    const NAME: &'static str;
-    const TEXTURE_ID: &'static u32;
-    const TERRAIN_BASE: &'static dyn TerrainBaseTraitBase;
-    
-    fn return_name(&self) -> &str{
-        Self::NAME
-    }
-    fn return_texture_id(&self) -> &u32{
-        Self::TEXTURE_ID
-    }
-}
-
-pub struct GroundTerrainBase {}
-
-impl TerrainBaseTraitBase for GroundTerrainBase {}
-impl TerrainBaseTrait for GroundTerrainBase {
-    const NAME: &'static str = "Bevy_ggf_GroundTerrainBase";
-}
-
-pub struct WaterTerrainBase {}
-
-impl TerrainBaseTraitBase for WaterTerrainBase {}
-impl TerrainBaseTrait for WaterTerrainBase {
-    const NAME: &'static str = "Bevy_ggf_WaterTerrainBase";
-}
-
-pub struct Grassland {}
-
-impl TerrainExtensionTraitBase for Grassland {
-    fn return_name(&self) -> &str {
-        "Bevy_ggf_Grassland"    
-    }
-
-    fn return_texture_id(&self) -> &u32 {
-        &0
-    }
-
-    fn return_terrain_base_trait(&self) -> &dyn TerrainBaseTraitBase {
-        &GroundTerrainBase{}
-    }
-}
-
-
-pub struct Hill {}
-
-impl TerrainExtensionTraitBase for Hill {
-    fn return_name(&self) -> &str {
-        "Bevy_ggf_Hill"
-    }
-
-    fn return_texture_id(&self) -> &u32 {
-        &3
-    }
-
-    fn return_terrain_base_trait(&self) -> &dyn TerrainBaseTraitBase {
-        &GroundTerrainBase{}
-    }
-}
-
-
-pub struct Ocean {}
-
-impl TerrainExtensionTraitBase for Ocean {
-    fn return_name(&self) -> &str {
-        "Bevy_ggf_Ocean"
-    }
-
-    fn return_texture_id(&self) -> &u32 {
-        &6
-    }
-
-    fn return_terrain_base_trait(&self) -> &dyn TerrainBaseTraitBase {
-        &WaterTerrainBase{}
-    }
-}
-

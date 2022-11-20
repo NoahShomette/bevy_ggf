@@ -1,15 +1,14 @@
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ggf::camera::movement;
+use bevy_ggf::camera::{GGFCameraPlugin, movement};
 use bevy_ggf::mapping::tiles::{
-    Grassland, Hill, Ocean, TerrainExtensionTrait, TerrainExtensionTraitBase, TerrainExtensionType,
+    TerrainExtensionType,
     TERRAIN_EXTENSION_TYPES,
 };
 use bevy_ggf::mapping::Map;
 
 fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(Camera2dBundle::default());
 
     let tilemap_size = TilemapSize { x: 100, y: 100 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
@@ -64,7 +63,7 @@ fn main() {
             ..default()
         }).set(ImagePlugin::default_nearest()))
         .add_plugin(TilemapPlugin)
-        .add_system(movement)
+        .add_plugin(GGFCameraPlugin)
         .add_startup_system(startup)
         .add_system(despawn_map)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())

@@ -1,13 +1,16 @@
 pub mod tiles;
 
-use std::borrow::{Borrow, BorrowMut};
-use crate::mapping::tiles::{Grassland, GroundTerrainBase, TerrainBaseTraitBase, TerrainExtensionTrait, TerrainExtensionTraitBase, TerrainExtensionType, Tile, TileTerrainInfo};
-use bevy::prelude::*;
+use crate::mapping::tiles::{GGFTileBundle, TerrainExtensionType, Tile, TileTerrainInfo};
+use crate::movement::{MovementType, TileMovementCosts, MOVEMENT_TYPES};
 use bevy::prelude::KeyCode::T;
+use bevy::prelude::*;
+use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
+use std::borrow::{Borrow, BorrowMut};
+use std::process::id;
 
 #[derive(Component)]
 pub struct Map {
@@ -23,9 +26,8 @@ impl Map {
         tilemap_type: &TilemapType,
         tilemap_tile_size: &TilemapTileSize,
         map_texture_handle: Handle<Image>,
-        map_terrain_vec: &Vec<TerrainExtensionType>
-    ) -> Map
-    {
+        map_terrain_vec: &Vec<TerrainExtensionType>,
+    ) -> Map {
         let map_size = *tile_map_size;
         let mut tile_storage = TileStorage::empty(map_size);
         let tilemap_type = *tilemap_type;
@@ -36,22 +38,30 @@ impl Map {
                 let tile_pos = TilePos { x, y };
                 let mut rng = rand::thread_rng();
                 let tile_texture_index = rng.gen_range(0..map_terrain_vec.len());
-                //let mut texture_index : &dyn TerrainExtensionTraitBase = map_terrain_vec[tile_texture_index].borrow();+
                 let texture_index = &map_terrain_vec[tile_texture_index];
 
+                let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
+                tile_movement_cost.insert(&MOVEMENT_TYPES[0], 1);
+                tile_movement_cost.insert(&MOVEMENT_TYPES[1], 1);
+
                 let tile_entity = commands
-                    .spawn(TileBundle {
-                        position: tile_pos,
-                        texture_index: TileTextureIndex(texture_index.texture_index),
-                        tilemap_id: TilemapId(tilemap_entity),
-                        ..Default::default()
+                    .spawn(GGFTileBundle {
+                        tile_bundle: TileBundle {
+                            position: tile_pos,
+                            texture_index: TileTextureIndex(texture_index.texture_index),
+                            tilemap_id: TilemapId(tilemap_entity),
+                            ..Default::default()
+                        },
+                        tile: Tile,
+                        tile_terrain_info: TileTerrainInfo {
+                            terrain_extension_type: map_terrain_vec[tile_texture_index].clone(),
+                        },
                     })
-                    .insert(Tile)
-                    
-                    .insert(TileTerrainInfo {
-                        terrain_extension_type: map_terrain_vec[tile_texture_index]
+                    .insert(TileMovementCosts {
+                        movement_type_cost: tile_movement_cost,
                     })
                     .id();
+
                 tile_storage.set(&tile_pos, tile_entity);
             }
         }
