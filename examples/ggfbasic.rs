@@ -1,7 +1,7 @@
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ggf::camera::{GGFCameraPlugin, movement};
+use bevy_ggf::camera::{GGFCameraPlugin};
 use bevy_ggf::mapping::tiles::{
     TerrainExtensionType,
     TERRAIN_EXTENSION_TYPES,
