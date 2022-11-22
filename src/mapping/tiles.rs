@@ -28,13 +28,13 @@
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
 
-use bevy::prelude::{Bundle, Component, Entity, reflect_trait, Resource};
+use bevy::prelude::{Bundle, Component};
 use bevy_ecs_tilemap::prelude::TileBundle;
 
 /// Bundle containing all the basic tile components needed for a tile.
 ///
 /// ### Note
-/// Does not contain components from other sections of the crate such as [`TileMovementCosts`], if
+/// Does not contain components from other sections of the crate such as [TileMovementCosts](crate::movement::TileMovementCosts), if
 /// you want one of those use one of the super bundles in prelude. If you need to include other 
 /// components in every tile and one of the super bundles wont work it's recommended to create your
 /// own super bundles

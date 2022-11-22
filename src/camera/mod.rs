@@ -1,27 +1,59 @@
+//! # Bev_GGF/camera
+//! Simply add the [`GGFCameraPlugin`] to your app to get a working 2d camera with click to drag
+//! movement and support for left click, right click, and left click hold.
+//!
+//! Alternatively if you don't want to use the built in plugin you are free to create your own
+//! camera however you like. However if you want to use the built in selection manager your plugin
+//! will have to emit the [`ClickEvent`] events and work through that system.
+//!
+
 use bevy::render::camera::RenderTarget;
-use bevy::{input::Input, math::Vec3, prelude::*, render::camera::Camera};
+use bevy::{math::Vec3, prelude::*, render::camera::Camera};
 use leafwing_input_manager::prelude::*;
 use leafwing_input_manager::user_input::InputKind::Mouse;
 
 /// A plugin containing the systems and resources for the Bevy_GGF camera system to function
-pub struct GGFCameraPlugin;
+pub struct BggfCameraPlugin;
 
-impl Plugin for GGFCameraPlugin {
+impl Plugin for BggfCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraAndCursorInformation>()
             .add_event::<ClickEvent>()
             .add_plugin(InputManagerPlugin::<CameraMovementAction>::default())
             .add_startup_system(startup)
             .add_system(camera_logic)
-            .add_system(click_handler)
-            .add_system(handle_camera_movement);
+            .add_system(click_handler.before(camera_logic))
+            .add_system(handle_camera_movement.before(camera_logic));
     }
 }
 
+/* Temp storage. Want to figure out a way to make the camera be customizable - so you can set it to
+    pixel perfect or whatever else is wanted
+pub struct GGFCameraPlugins;
 
+impl PluginGroup for GGFCameraPlugins{
+    fn build(self) -> PluginGroupBuilder {
+        PluginGroupBuilder::na
+    }
 
+    fn set<T: Plugin>(self, plugin: T) -> PluginGroupBuilder {
+
+    }
+}
+
+ */
+
+/// An enum used to represent what kind of Camera to spawn
+pub enum CameraType {
+    Pixel2dCamera,
+    Standard,
+}
+
+/// Camera Bundle that incorporates the base Bevy Camera2D as well as any additional components needed
 #[derive(Bundle)]
-pub struct GGFCameraBundle {}
+struct GGFCamera2dBundle {
+    camera_2d_bundle: Camera2dBundle,
+}
 
 /// How long the left mouse button needs to be held before its registered as a left click hold event
 const CLICK_HOLD_TIME: f32 = 0.5;
@@ -31,7 +63,7 @@ const CLICK_DRAG_MIN_DISTANCE: f32 = 5.0;
 
 /// An enum representing the cameras actions used by Leafwing Input Manager
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug)]
-pub enum CameraMovementAction {
+enum CameraMovementAction {
     Click,
     Zoom,
     RightClick,
@@ -50,11 +82,19 @@ enum CameraState {
 
 /// An event sent when the left clicking, right clicking, or holding left click
 pub enum ClickEvent {
-    Click { world_pos: Vec2 },
-    Hold { world_pos: Vec2 },
-    RightClick { world_pos: Vec2 },
+    Click {
+        world_pos: Vec2,
+        selected_entity: Option<Entity>,
+    },
+    Hold {
+        world_pos: Vec2,
+        selected_entity: Option<Entity>,
+    },
+    RightClick {
+        world_pos: Vec2,
+        selected_entity: Option<Entity>,
+    },
 }
-
 
 /// Holds information needed by the camera logic and handler functions
 #[derive(Resource)]
@@ -76,7 +116,9 @@ impl Default for CameraAndCursorInformation {
 
 fn startup(mut commands: Commands) {
     commands
-        .spawn(Camera2dBundle::default())
+        .spawn(GGFCamera2dBundle {
+            camera_2d_bundle: Camera2dBundle::default(),
+        })
         .insert(InputManagerBundle {
             action_state: ActionState::default(),
             input_map: InputMap::default()
@@ -150,7 +192,9 @@ fn camera_logic(
         // Handles camera movement logic
         else if action_state.pressed(CameraMovementAction::Click) && is_moving_camera {
             camera_cursor_information.camera_state = CameraState::Dragging;
-        } else if action_state.released(CameraMovementAction::Click) {
+        } else if camera_cursor_information.camera_state == CameraState::LeftClickInitial
+            && action_state.just_released(CameraMovementAction::Click)
+        {
             camera_cursor_information.camera_state = CameraState::LeftClick;
         }
 
@@ -161,7 +205,9 @@ fn camera_logic(
             camera_cursor_information.camera_state = CameraState::RightClick;
         }
 
-        if action_state.just_released(CameraMovementAction::Click) {
+        if camera_cursor_information.camera_state != CameraState::LeftClick
+            && action_state.just_released(CameraMovementAction::Click)
+        {
             camera_cursor_information.camera_state = CameraState::None;
         }
 
@@ -192,6 +238,7 @@ fn click_handler(
     if let Some(current_cursor_position) = wnd.cursor_position() {
         match camera_cursor_information.camera_state {
             CameraState::LeftClick => {
+                info!("Left Click");
                 let ray = camera
                     .viewport_to_world(global_transform, current_cursor_position)
                     .unwrap();
@@ -199,10 +246,13 @@ fn click_handler(
 
                 click_event_writer.send(ClickEvent::Click {
                     world_pos: new_position,
+                    selected_entity: None,
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
             CameraState::LeftClickHold => {
+                info!("Left Click Hold");
+
                 let ray = camera
                     .viewport_to_world(global_transform, current_cursor_position)
                     .unwrap();
@@ -210,10 +260,13 @@ fn click_handler(
 
                 click_event_writer.send(ClickEvent::Hold {
                     world_pos: new_position,
+                    selected_entity: None,
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
             CameraState::RightClick => {
+                info!("Right Click");
+
                 let ray = camera
                     .viewport_to_world(global_transform, current_cursor_position)
                     .unwrap();
@@ -221,6 +274,7 @@ fn click_handler(
 
                 click_event_writer.send(ClickEvent::RightClick {
                     world_pos: new_position,
+                    selected_entity: None,
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
@@ -249,6 +303,8 @@ fn handle_camera_movement(
         let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
         match camera_cursor_information.camera_state {
             CameraState::Dragging => {
+                info!("Dragging");
+
                 info!("ccp: {}", current_cursor_position);
                 info!(
                     "lcp: {}",

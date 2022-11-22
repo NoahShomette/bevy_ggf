@@ -1,12 +1,14 @@
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ggf::camera::{GGFCameraPlugin};
+use bevy_ggf::camera::{BggfCameraPlugin};
+use bevy_ggf::{BggfCorePlugin, BggfDefaultPlugins};
 use bevy_ggf::mapping::tiles::{
     TerrainExtensionType,
     TERRAIN_EXTENSION_TYPES,
 };
 use bevy_ggf::mapping::Map;
+use bevy_ggf::selection::BggfSelectionPlugin;
 
 fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
@@ -62,8 +64,8 @@ fn main() {
             },
             ..default()
         }).set(ImagePlugin::default_nearest()))
+        .add_plugins(BggfDefaultPlugins)
         .add_plugin(TilemapPlugin)
-        .add_plugin(GGFCameraPlugin)
         .add_startup_system(startup)
         .add_system(despawn_map)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
