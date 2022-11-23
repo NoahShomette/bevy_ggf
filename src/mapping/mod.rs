@@ -1,16 +1,15 @@
 pub mod tiles;
+pub mod terrain;
 
-use crate::mapping::tiles::{GGFTileBundle, TerrainExtensionType, Tile, TileTerrainInfo};
+use crate::mapping::tiles::{GGFTileBundle, Tile};
 use crate::movement::{MovementType, TileMovementCosts, MOVEMENT_TYPES};
-use bevy::prelude::KeyCode::T;
 use bevy::prelude::*;
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
-use std::borrow::{Borrow, BorrowMut};
-use std::process::id;
+use crate::mapping::terrain::{TerrainExtensionType, TileTerrainInfo};
 
 #[derive(Component)]
 pub struct Map {

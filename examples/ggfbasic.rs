@@ -1,14 +1,10 @@
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ggf::camera::{BggfCameraPlugin};
-use bevy_ggf::{BggfCorePlugin, BggfDefaultPlugins};
-use bevy_ggf::mapping::tiles::{
-    TerrainExtensionType,
-    TERRAIN_EXTENSION_TYPES,
-};
+use bevy_ggf::{BggfDefaultPlugins};
+
 use bevy_ggf::mapping::Map;
-use bevy_ggf::selection::BggfSelectionPlugin;
+use bevy_ggf::mapping::terrain::{TERRAIN_EXTENSION_TYPES, TerrainExtensionType};
 
 fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
