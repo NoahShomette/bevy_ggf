@@ -1,8 +1,9 @@
 pub mod tiles;
 pub mod terrain;
 
+use std::process::id;
 use crate::mapping::tiles::{GGFTileBundle, Tile};
-use crate::movement::{MovementType, TileMovementCosts, MOVEMENT_TYPES};
+use crate::movement::{MovementType, TileMovementCosts, TileMovementRules};
 use bevy::prelude::*;
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::*;
@@ -26,6 +27,7 @@ impl Map {
         tilemap_tile_size: &TilemapTileSize,
         map_texture_handle: Handle<Image>,
         map_terrain_vec: &Vec<TerrainExtensionType>,
+        tile_movement_rules: ResMut<TileMovementRules>
     ) -> Map {
         let map_size = *tile_map_size;
         let mut tile_storage = TileStorage::empty(map_size);
@@ -39,10 +41,8 @@ impl Map {
                 let tile_texture_index = rng.gen_range(0..map_terrain_vec.len());
                 let texture_index = &map_terrain_vec[tile_texture_index];
 
-                let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
-                tile_movement_cost.insert(&MOVEMENT_TYPES[0], 1);
-                tile_movement_cost.insert(&MOVEMENT_TYPES[1], 1);
-
+                let tile_movement_costs = tile_movement_rules.movement_cost_rules.get(&map_terrain_vec[tile_texture_index]).unwrap();
+                
                 let tile_entity = commands
                     .spawn(GGFTileBundle {
                         tile_bundle: TileBundle {
@@ -56,9 +56,7 @@ impl Map {
                             terrain_extension_type: map_terrain_vec[tile_texture_index].clone(),
                         },
                     })
-                    .insert(TileMovementCosts {
-                        movement_type_cost: tile_movement_cost,
-                    })
+                    .insert(tile_movement_costs.clone())
                     .id();
 
                 tile_storage.set(&tile_pos, tile_entity);

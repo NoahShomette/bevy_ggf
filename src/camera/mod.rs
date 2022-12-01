@@ -301,39 +301,36 @@ fn handle_camera_movement(
     //if the cursor is inside the current window then we want to handle any clicks that it might do
     if let Some(current_cursor_position) = wnd.cursor_position() {
         let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
-        match camera_cursor_information.camera_state {
-            CameraState::Dragging => {
-                info!("Dragging");
+        if camera_cursor_information.camera_state == CameraState::Dragging {
+            info!("Dragging");
 
-                info!("ccp: {}", current_cursor_position);
-                info!(
-                    "lcp: {}",
-                    camera_cursor_information.last_frame_cursor_position
-                );
-                let x_dif = camera_cursor_information.last_frame_cursor_position.x
-                    - current_cursor_position.x;
-                let y_dif = camera_cursor_information.last_frame_cursor_position.y
-                    - current_cursor_position.y;
+            info!("ccp: {}", current_cursor_position);
+            info!(
+                "lcp: {}",
+                camera_cursor_information.last_frame_cursor_position
+            );
+            let x_dif =
+                camera_cursor_information.last_frame_cursor_position.x - current_cursor_position.x;
+            let y_dif =
+                camera_cursor_information.last_frame_cursor_position.y - current_cursor_position.y;
 
-                let position_to_get_world_point = Vec2 {
-                    x: window_size.x / 2.0 + x_dif,
-                    y: window_size.y / 2.0 + y_dif,
-                };
+            let position_to_get_world_point = Vec2 {
+                x: window_size.x / 2.0 + x_dif,
+                y: window_size.y / 2.0 + y_dif,
+            };
 
-                let ray = camera
-                    .viewport_to_world(global_transform, position_to_get_world_point)
-                    .unwrap();
-                let new_position = ray.origin.truncate();
+            let ray = camera
+                .viewport_to_world(global_transform, position_to_get_world_point)
+                .unwrap();
+            let new_position = ray.origin.truncate();
 
-                let new_position = Vec3 {
-                    x: new_position.x,
-                    y: new_position.y,
-                    z: transform.translation.z,
-                };
+            let new_position = Vec3 {
+                x: new_position.x,
+                y: new_position.y,
+                z: transform.translation.z,
+            };
 
-                transform.translation = new_position;
-            }
-            _ => {}
+            transform.translation = new_position;
         }
     }
 }

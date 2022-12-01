@@ -1,11 +1,8 @@
 //!
 
-// two types of terrain + Terrain Features. TerrainBaseType, TerrainExtensionType, TerrainFeature -
+// two types of terrain. TerrainBaseType, TerrainExtensionType -
 // TerrainBaseType is a type like Ground, Water,
-// whatever else. TerrainExtensionType is like grass, mountain, ocean, etc, Terrain Feature would
-// represent features that go on top of TerrainExtensionTypes - stuff like forests. In the framework
-// Terrain Features would fall in the realm of terrain types that can go on multiple base types
-// The two types work on a derivative basis. The extension types are derivatives of a base type.
+// whatever else. TerrainExtensionType is like grassland, mountain, forests, hill forest, ocean, etc
 
 // Terrains should work like this - you define the base type, and then you define the extension
 // types of that base type. The extension types are only definable or assignable from the base type
@@ -46,52 +43,3 @@ pub struct TerrainExtensionType {
     pub terrain_base_type: &'static TerrainBaseType,
 }
 
-/// Defines a new TerrainFeature
-#[derive(Clone, Copy, Hash, Eq, PartialEq)]
-pub struct TerrainFeature {
-    pub name: &'static str,
-    pub texture_index: u32,
-}
-
-pub const TERRAIN_BASE_TYPES: &'static [TerrainBaseType] = &[
-    TerrainBaseType { name: "Ground" },
-    TerrainBaseType { name: "Water" },
-];
-
-pub const TERRAIN_EXTENSION_TYPES: &'static [TerrainExtensionType] = &[
-    TerrainExtensionType {
-        name: "Grassland",
-        texture_index: 0,
-        terrain_base_type: &TERRAIN_BASE_TYPES[0],
-    },
-    TerrainExtensionType {
-        name: "Forest",
-        texture_index: 1,
-        terrain_base_type: &TERRAIN_BASE_TYPES[0],
-    },
-    TerrainExtensionType {
-        name: "Mountain",
-        texture_index: 2,
-        terrain_base_type: &TERRAIN_BASE_TYPES[0],
-    },
-    TerrainExtensionType {
-        name: "Hill",
-        texture_index: 3,
-        terrain_base_type: &TERRAIN_BASE_TYPES[0],
-    },
-    TerrainExtensionType {
-        name: "Sand",
-        texture_index: 4,
-        terrain_base_type: &TERRAIN_BASE_TYPES[0],
-    },
-    TerrainExtensionType {
-        name: "CoastWater",
-        texture_index: 5,
-        terrain_base_type: &TERRAIN_BASE_TYPES[1],
-    },
-    TerrainExtensionType {
-        name: "Ocean",
-        texture_index: 6,
-        terrain_base_type: &TERRAIN_BASE_TYPES[1],
-    },
-];

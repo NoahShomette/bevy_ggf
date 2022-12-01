@@ -18,7 +18,7 @@ mod helpers;
 pub mod mapping;
 pub mod movement;
 pub mod selection;
-pub mod unit;
+pub mod object;
 
 pub struct BggfCorePlugin;
 

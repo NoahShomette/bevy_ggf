@@ -1,6 +1,6 @@
 use bevy::app::App;
-use crate::mapping::terrain::{TerrainBaseType, TerrainExtensionType, TERRAIN_BASE_TYPES, TERRAIN_EXTENSION_TYPES, TerrainFeature};
-use bevy::prelude::{Component, Plugin, Resource};
+use crate::mapping::terrain::{TerrainBaseType, TerrainExtensionType};
+use bevy::prelude::{Bundle, Component, Plugin, Resource};
 use bevy::utils::HashMap;
 
 /// Movement System
@@ -17,14 +17,13 @@ impl Plugin for BggfMovementPlugin{
 struct UnitMovementRules {
     terrain_base_rules: HashMap<&'static TerrainBaseType, bool>,
     terrain_extension_rules: HashMap<&'static TerrainExtensionType, bool>,
-    terrain_feature_rules: HashMap<&'static TerrainFeature, bool>,
 }
 
+/*
 fn test() {
     let mut movement_rules = UnitMovementRules {
         terrain_base_rules: HashMap::new(),
         terrain_extension_rules: HashMap::new(),
-        terrain_feature_rules: HashMap::new(),
     };
 
     movement_rules
@@ -34,6 +33,8 @@ fn test() {
         .terrain_extension_rules
         .insert(&TERRAIN_EXTENSION_TYPES[2], false);
 }
+
+ */
 
 /// Component that must be added to a tile in order to define that tiles movement cost.
 ///
@@ -51,20 +52,24 @@ pub struct MovementType {
 }
 
 /// Defines a resource that will hold all [`TileMovementCosts`] - references to a specific TileMovementCosts
-/// are stored in each tile as their current cost. 
-/// 
-/// # Default
-/// Define a TileMovementCosts for __(None, None, None)__. This will be used if no [`TileMovementCosts`]
-/// is specified on a tile
-/// 
-/// # Order
-/// All Three > TerrainBaseType && TerrainExtensionType > TerrainBaseType > All None
+/// are stored in each tile as their current cost.
 #[derive(Resource, Default)]
 pub struct TileMovementRules {
-    pub movement_cost_rules: HashMap<(Option<TerrainBaseType>, Option<TerrainExtensionType>, Option<TerrainFeature>), TileMovementCosts>,
+    pub movement_cost_rules: HashMap<TerrainExtensionType, TileMovementCosts>,
 }
 
-pub const MOVEMENT_TYPES: &'static [MovementType] = &[
-    MovementType { name: "Normal" },
-    MovementType { name: "Tread" },
-];
+
+//UNIT MOVEMENT STUFF
+
+/// Basic Bundle that supplies all needed movement components for a unit
+#[derive(Bundle)]
+pub struct UnitMovementBundle{
+    unit_movement_type: UnitMovementType,
+}
+
+/// Holds a reference to a units [`MovementType`]. A MovementType is used to define what kind of movement
+/// costs that the unit uses during movement
+#[derive(Clone, Copy, Eq, Hash, PartialEq, Component)]
+pub struct UnitMovementType {
+    movement_type: &'static MovementType,
+}
