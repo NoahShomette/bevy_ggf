@@ -1,5 +1,5 @@
 use bevy::app::App;
-use crate::mapping::terrain::{TerrainBaseType, TerrainExtensionType};
+use crate::mapping::terrain::{TerrainClass, TerrainType};
 use bevy::prelude::{Bundle, Component, Plugin, Resource};
 use bevy::utils::HashMap;
 
@@ -15,8 +15,8 @@ impl Plugin for BggfMovementPlugin{
 
 // just quick example of a movement system might work for a unit
 struct UnitMovementRules {
-    terrain_base_rules: HashMap<&'static TerrainBaseType, bool>,
-    terrain_extension_rules: HashMap<&'static TerrainExtensionType, bool>,
+    terrain_base_rules: HashMap<&'static TerrainClass, bool>,
+    terrain_extension_rules: HashMap<&'static TerrainType, bool>,
 }
 
 /*
@@ -55,7 +55,7 @@ pub struct MovementType {
 /// are stored in each tile as their current cost.
 #[derive(Resource, Default)]
 pub struct TileMovementRules {
-    pub movement_cost_rules: HashMap<TerrainExtensionType, TileMovementCosts>,
+    pub movement_cost_rules: HashMap<TerrainType, TileMovementCosts>,
 }
 
 

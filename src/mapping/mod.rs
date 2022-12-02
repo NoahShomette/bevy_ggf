@@ -1,22 +1,61 @@
-pub mod tiles;
+pub mod object;
 pub mod terrain;
+pub mod tiles;
 
-use std::process::id;
-use crate::mapping::tiles::{GGFTileBundle, Tile};
-use crate::movement::{MovementType, TileMovementCosts, TileMovementRules};
+use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
+use crate::mapping::tiles::{
+    GGFTileBundle, GGFTileObjectBundle, Tile, TileObjects, TileStackRules,
+};
+use crate::movement::{TileMovementRules};
+use crate::object::{ObjectGridPosition, ObjectInfo};
 use bevy::prelude::*;
-use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
-use crate::mapping::terrain::{TerrainExtensionType, TileTerrainInfo};
 
+/// Map struct used to keep track of the general structure of the map. Holds a reference to the tilemap_entity
+/// that this map info applies to 
 #[derive(Component)]
 pub struct Map {
     pub tilemap_type: TilemapType,
     pub map_size: TilemapSize,
     pub tilemap_entity: Entity,
+}
+
+impl Map {
+    /// Adds the given object to a tile
+    pub fn add_object_to_tile(
+        &self,
+        object_to_add: Entity,
+        object_query: &mut Query<(&mut ObjectGridPosition, &ObjectInfo)>,
+        tile_storage: &mut TileStorage,
+        tile_query: &mut Query<(&mut TileStackRules, &mut TileObjects)>,
+        tile_pos_to_add: TilePos,
+    ) {
+        let (mut object_grid_position, object_info) = object_query.get_mut(object_to_add).unwrap();
+
+        let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
+        if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
+            if let Some(tile_stack_count_max) = tile_stack_rules
+                .tile_stack_rules
+                .get_mut(&object_info.object_type.object_group.object_class)
+            {
+                
+                if tile_stack_count_max.current_count < tile_stack_count_max.max_count {
+                    
+                    tile_objects.entities_in_tile.push(object_to_add);
+                    tile_stack_count_max.current_count += 1;
+                    object_grid_position.grid_position = IVec2{ x: tile_pos_to_add.x as i32, y: tile_pos_to_add.y as i32 };
+                    
+                    info!("entities in tile: {}", tile_objects.entities_in_tile.len());
+                    info!("tile_stacks_rules_count: {:?}", tile_stack_rules.tile_stack_rules.get(&object_info.object_type.object_group.object_class).unwrap());
+
+                }
+                
+            }
+        }
+    }
 }
 
 impl Map {
@@ -26,8 +65,9 @@ impl Map {
         tilemap_type: &TilemapType,
         tilemap_tile_size: &TilemapTileSize,
         map_texture_handle: Handle<Image>,
-        map_terrain_vec: &Vec<TerrainExtensionType>,
-        tile_movement_rules: ResMut<TileMovementRules>
+        map_terrain_vec: &Vec<TerrainType>,
+        tile_movement_rules: ResMut<TileMovementRules>,
+        tile_stack_rules: TileStackRules,
     ) -> Map {
         let map_size = *tile_map_size;
         let mut tile_storage = TileStorage::empty(map_size);
@@ -41,8 +81,11 @@ impl Map {
                 let tile_texture_index = rng.gen_range(0..map_terrain_vec.len());
                 let texture_index = &map_terrain_vec[tile_texture_index];
 
-                let tile_movement_costs = tile_movement_rules.movement_cost_rules.get(&map_terrain_vec[tile_texture_index]).unwrap();
-                
+                let tile_movement_costs = tile_movement_rules
+                    .movement_cost_rules
+                    .get(&map_terrain_vec[tile_texture_index])
+                    .unwrap();
+
                 let tile_entity = commands
                     .spawn(GGFTileBundle {
                         tile_bundle: TileBundle {
@@ -53,8 +96,12 @@ impl Map {
                         },
                         tile: Tile,
                         tile_terrain_info: TileTerrainInfo {
-                            terrain_extension_type: map_terrain_vec[tile_texture_index].clone(),
+                            terrain_type: map_terrain_vec[tile_texture_index].clone(),
                         },
+                    })
+                    .insert(GGFTileObjectBundle {
+                        tile_stack_rules: tile_stack_rules.clone(),
+                        tile_objects: TileObjects::default(),
                     })
                     .insert(tile_movement_costs.clone())
                     .id();

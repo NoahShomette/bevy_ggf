@@ -1,18 +1,67 @@
+use bevy::math::IVec2;
 use crate::movement::UnitMovementBundle;
 use crate::selection::SelectableEntity;
-use bevy::prelude::{Bundle, Component, Entity, Resource};
+use bevy::prelude::{Bundle, Component, Entity, Resource, SpriteBundle};
+
+
+// Default Components that we should have for objects
+// These are separated simply to ease development and thought process. Any component for any object can
+// go on any object. Theres no fundamental difference between a building and a unit, just controlling what they can
+// do
+
+// Generic Components
+/*
+Health
+Team
+Sprite/Animation
+State?
+ObjectType
+GridPos
+Attackable
+
+EnemyTeamMovementAllowed
+AlliedTeamMovementProhibited
+
+ */
+
+// Unit Components
+/*
+Movement
+UnitStats
+Combat
+
+ */
+
+// Building Components
+/*
+BuildOptions
+AddResourceOnTurn
+ */
+
+
 
 // ObjectClass -> (Ground, Air, Water, Building, etc)
 // ObjectGroup -> (Armor, Capital Ship, Helicopter)
 // ObjectType -> (Light Tank, Battleship, Infantry, Unit Barracks, Wall)
+#[derive(Bundle)]
+pub struct ObjectMinimalBundle{
+    object_info: ObjectInfo,
+    selectable: SelectableEntity,
+    object_grid_position: ObjectGridPosition
+}
+
 
 /// Base bundle that provides all functionality for all subsystems in the crate
 #[derive(Bundle)]
 pub struct ObjectBundle {
-    object_info: ObjectInfo,
-    selectable: SelectableEntity,
-
-    unit_movement_bundle: UnitMovementBundle,
+    // items that are in the minimal bundle items first
+    pub object_info: ObjectInfo,
+    pub selectable: SelectableEntity,
+    pub object_grid_position: ObjectGridPosition,
+    
+    //
+    pub sprite_bundle: SpriteBundle,
+    //unit_movement_bundle: UnitMovementBundle,
 }
 
 /// Defines a new distinct ObjectClass. ObjectClass is used to represent the base class of an Object.
@@ -29,7 +78,7 @@ pub struct ObjectBundle {
 ///     ObjectClass { name: "Building" },
 /// ];
 /// ```
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
 pub struct ObjectClass {
     pub name: &'static str,
 }
@@ -46,7 +95,7 @@ pub struct ObjectClass {
 /// pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup{name: "Infantry", object_class: &OBJECT_CLASS_GROUND};
 ///
 /// ```
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
 pub struct ObjectGroup {
     pub name: &'static str,
     pub object_class: &'static ObjectClass,
@@ -88,7 +137,7 @@ pub struct ObjectGroup {
 /// }
 /// 
 /// ```
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
 pub struct ObjectType {
     pub name: &'static str,
     pub object_group: &'static ObjectGroup,
@@ -97,9 +146,9 @@ pub struct ObjectType {
 /// Holds a reference to a [`ObjectType`]. Is used to explicitly determine what an entity is from other
 /// Objects and enable logic based on a specific object type. Use this with a distinct [`ObjectType`] to
 /// define objects that might have exact same components and stats but you want different
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Component)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, Debug, Component)]
 pub struct ObjectInfo {
-    object_type: &'static ObjectType,
+    pub object_type: &'static ObjectType,
 }
 
 /// Resource holding all [`UnitType`]s that are used in the game
@@ -111,11 +160,6 @@ pub struct GameObjectInfo {
 }
 
 #[derive(Component)]
-pub struct TileObjectStackLimits<T> {
-    stack_limit: u32,
-    object_class_limited: T,
-}
-
-pub struct TileObjectEntities {
-    pub entities_in_tile: Vec<Entity>,
+pub struct ObjectGridPosition{
+    pub grid_position: IVec2
 }

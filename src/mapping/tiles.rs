@@ -10,9 +10,11 @@
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
 
-use bevy::prelude::{Bundle, Component};
+use bevy::prelude::{Bundle, Commands, Component, Entity};
+use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::TileBundle;
 use crate::mapping::terrain::{TileTerrainInfo};
+use crate::object::ObjectClass;
 
 /// Bundle containing all the basic tile components needed for a tile.
 ///
@@ -29,8 +31,33 @@ pub struct GGFTileBundle{
     pub tile_terrain_info: TileTerrainInfo,
 }
 
+#[derive(Bundle)]
+pub struct GGFTileObjectBundle{
+    pub tile_stack_rules: TileStackRules,
+    pub tile_objects: TileObjects,
+}
+
 /// Marker component on map tiles for ease of query and accessing
 #[derive(Component)]
 pub struct Tile;
 
+/// Defines a new TileStackRule based on an [`ObjectClass`]. The count of objects in the tile is kept
+/// using [`TileStackCountMax`].
+#[derive(Clone, Eq, PartialEq, Component)]
+pub struct TileStackRules {
+    pub tile_stack_rules: HashMap<&'static ObjectClass, TileStackCountMax>,
+}
 
+/// Wraps two u32s for use in a [`TileStackRules`] component. Used to keep track of the current_count 
+/// of objects belonging to that [`ObjectClass`] in the tile and the max_count allowed in the tile.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct TileStackCountMax{
+    pub current_count: u32,
+    pub max_count: u32,
+}
+
+/// Simple Vec that holds Entities that are currently in the tile. Is not sorted by [`ObjectClasses`]
+#[derive(Clone, Eq, PartialEq, Default, Component)]
+pub struct TileObjects {
+    pub entities_in_tile: Vec<Entity>,
+}

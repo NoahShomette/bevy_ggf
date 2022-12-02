@@ -7,7 +7,7 @@ pub struct BggfSelectionPlugin;
 
 impl Plugin for BggfSelectionPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PlayerSelected>();
+        app.init_resource::<SelectedObjectsEntity>();
     }
 }
 
@@ -20,6 +20,6 @@ impl Plugin for BggfSelectionPlugin {
 pub struct SelectableEntity;
 
 #[derive(Resource, Default)]
-pub struct PlayerSelected {
+pub struct SelectedObjectsEntity {
     selected_entity: Option<Entity>,
 }
