@@ -1,5 +1,3 @@
-
-
 // What does a tile need to hold?
 
 // Terrain information - movement related stuff and all that like movement costs
@@ -9,30 +7,29 @@
 // Maybe buildings get a marker component or trait, then if you want something to be a building its the same
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
-
+use crate::mapping::terrain::TileTerrainInfo;
+use crate::object::ObjectClass;
 use bevy::prelude::{Bundle, Commands, Component, Entity};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::TileBundle;
-use crate::mapping::terrain::{TileTerrainInfo};
-use crate::object::ObjectClass;
 
 /// Bundle containing all the basic tile components needed for a tile.
 ///
 /// ### Note
 /// Does not contain components from other sections of the crate such as [TileMovementCosts](crate::movement::TileMovementCosts), if
-/// you want one of those use one of the super bundles in prelude. If you need to include other 
+/// you want one of those use one of the super bundles in prelude. If you need to include other
 /// components in every tile and one of the super bundles wont work it's recommended to create your
 /// own super bundles
 #[derive(Bundle)]
-pub struct GGFTileBundle{
+pub struct GGFTileBundle {
     /// Bevy_ecs_tilemap tile bundle
     pub tile_bundle: TileBundle,
-    pub tile : Tile,
+    pub tile: Tile,
     pub tile_terrain_info: TileTerrainInfo,
 }
 
 #[derive(Bundle)]
-pub struct GGFTileObjectBundle{
+pub struct GGFTileObjectBundle {
     pub tile_stack_rules: TileStackRules,
     pub tile_objects: TileObjects,
 }
@@ -48,10 +45,36 @@ pub struct TileStackRules {
     pub tile_stack_rules: HashMap<&'static ObjectClass, TileStackCountMax>,
 }
 
-/// Wraps two u32s for use in a [`TileStackRules`] component. Used to keep track of the current_count 
+impl TileStackRules {
+    pub fn has_space(&mut self, object_class: &ObjectClass) -> bool {
+        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class) {
+            if tile_stack_count_max.current_count < tile_stack_count_max.max_count {
+                return true;
+            }
+        } else {
+            return false;
+        }
+
+        return false;
+    }
+
+    pub fn increment_object_class_count(&mut self, object_class: &ObjectClass) {
+        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class) {
+            tile_stack_count_max.current_count += 1;
+        }
+    }
+
+    pub fn decrement_object_class_count(&mut self, object_class: &ObjectClass) {
+        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class) {
+            tile_stack_count_max.current_count -= 1;
+        }
+    }
+}
+
+/// Wraps two u32s for use in a [`TileStackRules`] component. Used to keep track of the current_count
 /// of objects belonging to that [`ObjectClass`] in the tile and the max_count allowed in the tile.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct TileStackCountMax{
+pub struct TileStackCountMax {
     pub current_count: u32,
     pub max_count: u32,
 }
