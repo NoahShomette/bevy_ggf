@@ -3,9 +3,7 @@ pub mod terrain;
 pub mod tiles;
 
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
-use crate::mapping::tiles::{
-    GGFTileBundle, GGFTileObjectBundle, Tile, TileObjects, TileStackRules,
-};
+use crate::mapping::tiles::{GGFTileBundle, GGFTileObjectBundle, ObjectStackingClass, Tile, TileObjects, TileStackRules};
 use crate::movement::TileMovementRules;
 use crate::object::{ObjectGridPosition, ObjectInfo};
 use bevy::prelude::*;
@@ -28,17 +26,17 @@ impl Map {
     pub fn add_object_to_tile(
         &self,
         object_to_add: Entity,
-        object_query: &mut Query<(&mut ObjectGridPosition, &ObjectInfo)>,
+        object_query: &mut Query<(&mut ObjectGridPosition, &ObjectInfo, &ObjectStackingClass)>,
         tile_storage: &mut TileStorage,
         tile_query: &mut Query<(&mut TileStackRules, &mut TileObjects)>,
         tile_pos_to_add: TilePos,
     ) {
-        let (mut object_grid_position, object_info) = object_query.get_mut(object_to_add).unwrap();
+        let (mut object_grid_position, object_info, object_stack_class) = object_query.get_mut(object_to_add).unwrap();
 
         let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
         if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
             if tile_stack_rules
-                .has_space(&object_info.object_type.object_group.object_class)
+                .has_space(&object_stack_class)
             {
                 tile_objects.entities_in_tile.push(object_to_add);
                 object_grid_position.grid_position = IVec2 {
@@ -46,7 +44,7 @@ impl Map {
                     y: tile_pos_to_add.y as i32,
                 };
                 tile_stack_rules.increment_object_class_count(
-                    &object_info.object_type.object_group.object_class,
+                    &object_stack_class,
                 );
 
                 info!("entities in tile: {}", tile_objects.entities_in_tile.len());
@@ -54,7 +52,7 @@ impl Map {
                     "tile_stacks_rules_count: {:?}",
                     tile_stack_rules
                         .tile_stack_rules
-                        .get(&object_info.object_type.object_group.object_class)
+                        .get(&object_stack_class.stack_class)
                         .unwrap()
                 );
             } else {

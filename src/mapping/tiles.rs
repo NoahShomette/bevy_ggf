@@ -42,12 +42,12 @@ pub struct Tile;
 /// using [`TileStackCountMax`].
 #[derive(Clone, Eq, PartialEq, Component)]
 pub struct TileStackRules {
-    pub tile_stack_rules: HashMap<&'static ObjectClass, TileStackCountMax>,
+    pub tile_stack_rules: HashMap<&'static StackingClass, TileStackCountMax>,
 }
 
 impl TileStackRules {
-    pub fn has_space(&mut self, object_class: &ObjectClass) -> bool {
-        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class) {
+    pub fn has_space(&mut self, object_class: &ObjectStackingClass) -> bool {
+        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class.stack_class) {
             if tile_stack_count_max.current_count < tile_stack_count_max.max_count {
                 return true;
             }
@@ -58,17 +58,28 @@ impl TileStackRules {
         return false;
     }
 
-    pub fn increment_object_class_count(&mut self, object_class: &ObjectClass) {
-        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class) {
+    pub fn increment_object_class_count(&mut self, object_class: &ObjectStackingClass) {
+        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class.stack_class) {
             tile_stack_count_max.current_count += 1;
         }
     }
 
-    pub fn decrement_object_class_count(&mut self, object_class: &ObjectClass) {
-        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class) {
+    pub fn decrement_object_class_count(&mut self, object_class: &ObjectStackingClass) {
+        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class.stack_class) {
             tile_stack_count_max.current_count -= 1;
         }
     }
+}
+
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct StackingClass {
+    pub name: &'static str,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Component)]
+pub struct ObjectStackingClass {
+   pub stack_class: &'static StackingClass,
 }
 
 /// Wraps two u32s for use in a [`TileStackRules`] component. Used to keep track of the current_count

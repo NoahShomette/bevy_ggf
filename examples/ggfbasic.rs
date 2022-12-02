@@ -7,7 +7,7 @@ use bevy_ggf::BggfDefaultPlugins;
 use std::thread::spawn;
 
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
-use bevy_ggf::mapping::tiles::{TileObjects, TileStackCountMax, TileStackRules};
+use bevy_ggf::mapping::tiles::{ObjectStackingClass, StackingClass, TileObjects, TileStackCountMax, TileStackRules};
 use bevy_ggf::mapping::Map;
 use bevy_ggf::movement::{MovementType, TileMovementCosts, TileMovementRules};
 use bevy_ggf::object::{
@@ -26,6 +26,7 @@ pub const OBJECT_TYPE_RIFLEMAN: ObjectType = ObjectType {
     object_group: &OBJECT_GROUP_INFANTRY,
 };
 
+pub const STACKING_CLASS_GROUND: StackingClass = StackingClass{name: "Ground"};
 
 pub const MOVEMENT_TYPES: &'static [MovementType] = &[
     MovementType { name: "Infantry" },
@@ -110,8 +111,8 @@ fn startup(
         );
     }
 
-    let mut tile_stack_hashmap: HashMap<&ObjectClass, TileStackCountMax> = HashMap::new();
-    tile_stack_hashmap.insert(&OBJECT_CLASS_GROUND, TileStackCountMax{ current_count: 0, max_count: 1 });
+    let mut tile_stack_hashmap: HashMap<&StackingClass, TileStackCountMax> = HashMap::new();
+    tile_stack_hashmap.insert(&STACKING_CLASS_GROUND, TileStackCountMax{ current_count: 0, max_count: 1 });
     let tile_stack_rules: TileStackRules = TileStackRules {
         tile_stack_rules: tile_stack_hashmap,
     };
@@ -140,6 +141,7 @@ fn startup(
         object_grid_position: ObjectGridPosition {
             grid_position: Default::default(),
         },
+        object_stacking_class: ObjectStackingClass { stack_class: &STACKING_CLASS_GROUND },
         sprite_bundle: SpriteBundle {
             transform: Transform {
                 translation: Vec3 {
@@ -157,7 +159,7 @@ fn startup(
 
 fn add_object_to_tile(
     mut map_query: Query<(&mut Map)>,
-    mut object_query: Query<(&mut ObjectGridPosition, &ObjectInfo)>,
+    mut object_query: Query<(&mut ObjectGridPosition, &ObjectInfo, &ObjectStackingClass)>,
     mut tile_query: Query<(&mut TileStackRules, &mut TileObjects)>,
     mut object_entity_query: Query<Entity, With<ObjectGridPosition>>,
     mut tile_storage_query: Query<&mut TileStorage>,

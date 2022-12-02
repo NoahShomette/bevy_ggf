@@ -2,6 +2,7 @@ use bevy::math::IVec2;
 use crate::movement::UnitMovementBundle;
 use crate::selection::SelectableEntity;
 use bevy::prelude::{Bundle, Component, Entity, Resource, SpriteBundle};
+use crate::mapping::tiles::ObjectStackingClass;
 
 
 // Default Components that we should have for objects
@@ -45,9 +46,10 @@ AddResourceOnTurn
 // ObjectType -> (Light Tank, Battleship, Infantry, Unit Barracks, Wall)
 #[derive(Bundle)]
 pub struct ObjectMinimalBundle{
-    object_info: ObjectInfo,
-    selectable: SelectableEntity,
-    object_grid_position: ObjectGridPosition
+    pub object_info: ObjectInfo,
+    pub selectable: SelectableEntity,
+    pub object_grid_position: ObjectGridPosition,
+    pub object_stacking_class: ObjectStackingClass,
 }
 
 
@@ -58,7 +60,8 @@ pub struct ObjectBundle {
     pub object_info: ObjectInfo,
     pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
-    
+    pub object_stacking_class: ObjectStackingClass,
+
     //
     pub sprite_bundle: SpriteBundle,
     //unit_movement_bundle: UnitMovementBundle,
