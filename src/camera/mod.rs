@@ -304,11 +304,8 @@ fn handle_camera_movement(
         if camera_cursor_information.camera_state == CameraState::Dragging {
             info!("Dragging");
 
-            info!("ccp: {}", current_cursor_position);
-            info!(
-                "lcp: {}",
-                camera_cursor_information.last_frame_cursor_position
-            );
+            //info!("ccp: {}", current_cursor_position);
+            //info!("lcp: {}",camera_cursor_information.last_frame_cursor_position);
             let x_dif =
                 camera_cursor_information.last_frame_cursor_position.x - current_cursor_position.x;
             let y_dif =

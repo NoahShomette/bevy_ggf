@@ -3,7 +3,9 @@ pub mod terrain;
 pub mod tiles;
 
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
-use crate::mapping::tiles::{GGFTileBundle, GGFTileObjectBundle, ObjectStackingClass, Tile, TileObjects, TileStackRules};
+use crate::mapping::tiles::{
+    GGFTileBundle, GGFTileObjectBundle, ObjectStackingClass, Tile, TileObjects, TileObjectStacks,
+};
 use crate::movement::TileMovementRules;
 use crate::object::{ObjectGridPosition, ObjectInfo};
 use bevy::prelude::*;
@@ -23,41 +25,55 @@ pub struct Map {
 
 impl Map {
     /// Adds the given object to a tile
+    ///
+    /// Will Panic if object_to_add isnt an entity in the given [`TileStorage`]
     pub fn add_object_to_tile(
         &self,
         object_to_add: Entity,
-        object_query: &mut Query<(&mut ObjectGridPosition, &ObjectInfo, &ObjectStackingClass)>,
+        object_grid_position: &mut ObjectGridPosition,
+        object_stack_class: &ObjectStackingClass,
         tile_storage: &mut TileStorage,
-        tile_query: &mut Query<(&mut TileStackRules, &mut TileObjects)>,
+        tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
         tile_pos_to_add: TilePos,
     ) {
-        let (mut object_grid_position, object_info, object_stack_class) = object_query.get_mut(object_to_add).unwrap();
-
         let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
         if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
-            if tile_stack_rules
-                .has_space(&object_stack_class)
-            {
-                tile_objects.entities_in_tile.push(object_to_add);
-                object_grid_position.grid_position = IVec2 {
-                    x: tile_pos_to_add.x as i32,
-                    y: tile_pos_to_add.y as i32,
-                };
-                tile_stack_rules.increment_object_class_count(
-                    &object_stack_class,
-                );
+            tile_objects.add_object(object_to_add);
+            object_grid_position.grid_position = tile_pos_to_add;
+            tile_stack_rules.increment_object_class_count(&object_stack_class);
+            
+            info!("entities in tile: {}", tile_objects.entities_in_tile.len());
+            info!(
+                "tile_stacks_rules_count: {:?}",
+                tile_stack_rules
+                    .tile_object_stacks
+                    .get(&object_stack_class.stack_class)
+                    .unwrap()
+            );
+        }
+    }
 
-                info!("entities in tile: {}", tile_objects.entities_in_tile.len());
-                info!(
-                    "tile_stacks_rules_count: {:?}",
-                    tile_stack_rules
-                        .tile_stack_rules
-                        .get(&object_stack_class.stack_class)
-                        .unwrap()
-                );
-            } else {
-                info!("NO SPACE IN TILE");
-            }
+    pub fn remove_object_from_tile(
+        &self,
+        object_to_remove: Entity,
+        object_stack_class: &ObjectStackingClass,
+        tile_storage: &mut TileStorage,
+        tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
+        tile_pos_to_remove: TilePos,
+    ) {
+        let tile_entity = tile_storage.get(&tile_pos_to_remove).unwrap();
+        if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
+            tile_objects.remove_object(object_to_remove);
+            tile_stack_rules.decrement_object_class_count(&object_stack_class);
+
+            info!("entities in tile: {}", tile_objects.entities_in_tile.len());
+            info!(
+                "tile_stacks_rules_count: {:?}",
+                tile_stack_rules
+                    .tile_object_stacks
+                    .get(&object_stack_class.stack_class)
+                    .unwrap()
+            );
         }
     }
 }
@@ -71,7 +87,7 @@ impl Map {
         map_texture_handle: Handle<Image>,
         map_terrain_vec: &Vec<TerrainType>,
         tile_movement_rules: ResMut<TileMovementRules>,
-        tile_stack_rules: TileStackRules,
+        tile_stack_rules: TileObjectStacks,
     ) -> Map {
         let map_size = *tile_map_size;
         let mut tile_storage = TileStorage::empty(map_size);

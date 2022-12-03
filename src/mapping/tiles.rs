@@ -8,7 +8,6 @@
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::object::ObjectClass;
 use bevy::prelude::{Bundle, Commands, Component, Entity};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::TileBundle;
@@ -30,7 +29,7 @@ pub struct GGFTileBundle {
 
 #[derive(Bundle)]
 pub struct GGFTileObjectBundle {
-    pub tile_stack_rules: TileStackRules,
+    pub tile_stack_rules: TileObjectStacks,
     pub tile_objects: TileObjects,
 }
 
@@ -41,36 +40,41 @@ pub struct Tile;
 /// Defines a new TileStackRule based on an [`ObjectClass`]. The count of objects in the tile is kept
 /// using [`TileStackCountMax`].
 #[derive(Clone, Eq, PartialEq, Component)]
-pub struct TileStackRules {
-    pub tile_stack_rules: HashMap<&'static StackingClass, TileStackCountMax>,
+pub struct TileObjectStacks {
+    pub tile_object_stacks: HashMap<&'static StackingClass, TileStackCountMax>,
 }
 
-impl TileStackRules {
-    pub fn has_space(&mut self, object_class: &ObjectStackingClass) -> bool {
-        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class.stack_class) {
+impl TileObjectStacks {
+    pub fn has_space(&self, object_class: &ObjectStackingClass) -> bool {
+        if let Some(tile_stack_count_max) = self.tile_object_stacks.get(object_class.stack_class)
+        {
             if tile_stack_count_max.current_count < tile_stack_count_max.max_count {
                 return true;
             }
         } else {
             return false;
         }
-
         return false;
     }
 
     pub fn increment_object_class_count(&mut self, object_class: &ObjectStackingClass) {
-        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class.stack_class) {
+        if let Some(tile_stack_count_max) = self.tile_object_stacks.get_mut(object_class.stack_class)
+        {
             tile_stack_count_max.current_count += 1;
         }
     }
 
     pub fn decrement_object_class_count(&mut self, object_class: &ObjectStackingClass) {
-        if let Some(tile_stack_count_max) = self.tile_stack_rules.get_mut(object_class.stack_class) {
-            tile_stack_count_max.current_count -= 1;
+        if let Some(tile_stack_count_max) = self.tile_object_stacks.get_mut(object_class.stack_class)
+        {
+            if tile_stack_count_max.current_count == 0{
+                
+            }else{
+                tile_stack_count_max.current_count -= 1;
+            }
         }
     }
 }
-
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StackingClass {
@@ -79,7 +83,7 @@ pub struct StackingClass {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Component)]
 pub struct ObjectStackingClass {
-   pub stack_class: &'static StackingClass,
+    pub stack_class: &'static StackingClass,
 }
 
 /// Wraps two u32s for use in a [`TileStackRules`] component. Used to keep track of the current_count
@@ -94,4 +98,29 @@ pub struct TileStackCountMax {
 #[derive(Clone, Eq, PartialEq, Default, Component)]
 pub struct TileObjects {
     pub entities_in_tile: Vec<Entity>,
+}
+
+impl TileObjects {
+    
+    pub fn contains_object(&self, entity: Entity) -> bool {
+        return if self.entities_in_tile.contains(&entity) {
+            true
+        } else {
+            false
+        };
+    }
+
+    pub fn add_object(&mut self, entity: Entity){
+        self.entities_in_tile.push(entity);
+    }
+
+    pub fn remove_object(&mut self, entity: Entity) -> bool {
+        let mut iter = self.entities_in_tile.iter();
+        return if let Some(position) = iter.position(|&i| i == entity) {
+            self.entities_in_tile.remove(position);
+            true
+        } else {
+            false
+        };
+    }
 }

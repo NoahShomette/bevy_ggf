@@ -2,6 +2,7 @@ use bevy::math::IVec2;
 use crate::movement::UnitMovementBundle;
 use crate::selection::SelectableEntity;
 use bevy::prelude::{Bundle, Component, Entity, Resource, SpriteBundle};
+use bevy_ecs_tilemap::prelude::TilePos;
 use crate::mapping::tiles::ObjectStackingClass;
 
 
@@ -46,6 +47,7 @@ AddResourceOnTurn
 // ObjectType -> (Light Tank, Battleship, Infantry, Unit Barracks, Wall)
 #[derive(Bundle)]
 pub struct ObjectMinimalBundle{
+    pub object: Object,
     pub object_info: ObjectInfo,
     pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
@@ -57,6 +59,7 @@ pub struct ObjectMinimalBundle{
 #[derive(Bundle)]
 pub struct ObjectBundle {
     // items that are in the minimal bundle items first
+    pub object: Object,
     pub object_info: ObjectInfo,
     pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
@@ -66,6 +69,10 @@ pub struct ObjectBundle {
     pub sprite_bundle: SpriteBundle,
     //unit_movement_bundle: UnitMovementBundle,
 }
+
+///Marker component for an entity signifying it as an Object
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
+pub struct Object;
 
 /// Defines a new distinct ObjectClass. ObjectClass is used to represent the base class of an Object.
 ///
@@ -164,5 +171,5 @@ pub struct GameObjectInfo {
 
 #[derive(Component)]
 pub struct ObjectGridPosition{
-    pub grid_position: IVec2
+    pub grid_position: TilePos
 }
