@@ -7,17 +7,17 @@
 //!
 
 use crate::camera::BggfCameraPlugin;
+use crate::movement::BggfMovementPlugin;
 use crate::selection::BggfSelectionPlugin;
 use bevy::app::{App, Plugin, PluginGroupBuilder};
 use bevy::prelude::PluginGroup;
 use iyes_loopless::prelude::AppLooplessStateExt;
-use crate::movement::BggfMovementPlugin;
 
 pub mod camera;
 pub mod mapping;
 pub mod movement;
-pub mod selection;
 pub mod object;
+pub mod selection;
 
 pub struct BggfCorePlugin;
 

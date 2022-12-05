@@ -74,6 +74,18 @@ pub struct ObjectBundle {
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
 pub struct Object;
 
+impl Object{
+    
+    // texture, tile_pos, stacking type, object type
+    pub fn spawn(){
+        
+        
+    }
+    
+}
+
+
+
 /// Defines a new distinct ObjectClass. ObjectClass is used to represent the base class of an Object.
 ///
 /// ## Example

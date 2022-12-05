@@ -84,15 +84,12 @@ enum CameraState {
 pub enum ClickEvent {
     Click {
         world_pos: Vec2,
-        selected_entity: Option<Entity>,
     },
     Hold {
         world_pos: Vec2,
-        selected_entity: Option<Entity>,
     },
     RightClick {
         world_pos: Vec2,
-        selected_entity: Option<Entity>,
     },
 }
 
@@ -245,8 +242,7 @@ fn click_handler(
                 let new_position = ray.origin.truncate();
 
                 click_event_writer.send(ClickEvent::Click {
-                    world_pos: new_position,
-                    selected_entity: None,
+                    world_pos: new_position
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
@@ -259,8 +255,7 @@ fn click_handler(
                 let new_position = ray.origin.truncate();
 
                 click_event_writer.send(ClickEvent::Hold {
-                    world_pos: new_position,
-                    selected_entity: None,
+                    world_pos: new_position
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
@@ -273,8 +268,7 @@ fn click_handler(
                 let new_position = ray.origin.truncate();
 
                 click_event_writer.send(ClickEvent::RightClick {
-                    world_pos: new_position,
-                    selected_entity: None,
+                    world_pos: new_position
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }

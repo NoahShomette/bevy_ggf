@@ -10,14 +10,18 @@ use std::thread::spawn;
 
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
-    ObjectStackingClass, StackingClass, TileObjects, TileStackCountMax, TileObjectStacks,
+    ObjectStackingClass, StackingClass, TileObjectStacks, TileObjects, TileStackCountMax,
 };
-use bevy_ggf::mapping::Map;
-use bevy_ggf::movement::{MovementType, TileMovementCosts, TileMovementRules};
+use bevy_ggf::mapping::{
+    tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map,
+};
+use bevy_ggf::movement::{
+    MoveCompleteEvent, MoveObjectEvent, MovementType, TileMovementCosts, TileMovementRules,
+};
 use bevy_ggf::object::{
     Object, ObjectBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
 };
-use bevy_ggf::selection::SelectableEntity;
+use bevy_ggf::selection::{SelectObjectEvent, SelectableEntity, SelectedObject};
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -83,8 +87,9 @@ fn startup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut tile_movement_rules: ResMut<TileMovementRules>,
+    mut move_event_writer: EventWriter<MoveObjectEvent>,
 ) {
-    let tilemap_size = TilemapSize { x: 10, y: 10 };
+    let tilemap_size = TilemapSize { x: 200, y: 200 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
 
     let tilemap_type = TilemapType::Square;
@@ -137,8 +142,6 @@ fn startup(
         tile_stack_rules,
     );
 
-    commands.spawn(map);
-
     let infantry_texture_handle: Handle<Image> = asset_server.load("infantry_single_sprite.png");
     let tile_size = tilemap_tile_size;
     let grid_size: TilemapGridSize = tile_size.into();
@@ -163,159 +166,99 @@ fn startup(
                     .extend(5.0),
                 ..default()
             },
-            texture: infantry_texture_handle,
+            texture: infantry_texture_handle.clone(),
             ..default()
         },
     });
+    move_event_writer.send(MoveObjectEvent {
+        object_moving: entity.id(),
+        new_pos: TilePos::new(0, 0),
+    });
 
+    let entity = commands.spawn(ObjectBundle {
+        object: Object,
+        object_info: ObjectInfo {
+            object_type: &OBJECT_TYPE_RIFLEMAN,
+        },
+        selectable: SelectableEntity,
+        object_grid_position: ObjectGridPosition {
+            grid_position: TilePos::new(10, 10),
+        },
+        object_stacking_class: ObjectStackingClass {
+            stack_class: &STACKING_CLASS_GROUND,
+        },
+        sprite_bundle: SpriteBundle {
+            transform: Transform {
+                translation: tile_pos
+                    .center_in_world(&grid_size, &tilemap_type)
+                    .extend(5.0),
+                ..default()
+            },
+            texture: infantry_texture_handle.clone(),
+            ..default()
+        },
+    });
+    move_event_writer.send(MoveObjectEvent {
+        object_moving: entity.id(),
+        new_pos: TilePos::new(10, 10),
+    });
+
+    let entity = commands.spawn(ObjectBundle {
+        object: Object,
+        object_info: ObjectInfo {
+            object_type: &OBJECT_TYPE_RIFLEMAN,
+        },
+        selectable: SelectableEntity,
+        object_grid_position: ObjectGridPosition {
+            grid_position: TilePos::new(5, 5),
+        },
+        object_stacking_class: ObjectStackingClass {
+            stack_class: &STACKING_CLASS_GROUND,
+        },
+        sprite_bundle: SpriteBundle {
+            transform: Transform {
+                translation: tile_pos
+                    .center_in_world(&grid_size, &tilemap_type)
+                    .extend(5.0),
+                ..default()
+            },
+            texture: infantry_texture_handle.clone(),
+            ..default()
+        },
+    });
+    move_event_writer.send(MoveObjectEvent {
+        object_moving: entity.id(),
+        new_pos: TilePos::new(5, 5),
+    });
 }
 
-fn add_object_to_tile(
-    mut map_query: Query<(&mut Map)>,
-    mut object_query: Query<(&mut ObjectGridPosition, &ObjectInfo, &ObjectStackingClass)>,
-    mut tile_query: Query<(&mut TileObjectStacks, &mut TileObjects)>,
-    mut object_entity_query: Query<Entity, With<ObjectGridPosition>>,
-    mut tile_storage_query: Query<&mut TileStorage>,
-    keyboard_input: Res<Input<KeyCode>>,
-) {
-    if keyboard_input.just_pressed(KeyCode::A) {
-        let map = map_query.single_mut();
-        let entity = object_entity_query.single();
-        let (mut object_grid_position, object_info, object_stack_class) =
-            object_query.get_mut(entity).unwrap();
-        let mut tile_storage = tile_storage_query.single_mut();
-        let tile_pos = TilePos { x: 0, y: 0 };
-        map.add_object_to_tile(
-            entity,
-            &mut object_grid_position,
-            object_stack_class,
-            &mut tile_storage,
-            &mut tile_query,
-            tile_pos,
-        );
-    }
-}
-
-fn remove_object_from_tile(
-    mut map_query: Query<(&mut Map)>,
-    mut object_query: Query<(&mut ObjectGridPosition, &ObjectInfo, &ObjectStackingClass)>,
-    mut tile_query: Query<(&mut TileObjectStacks, &mut TileObjects)>,
-    mut object_entity_query: Query<Entity, With<ObjectGridPosition>>,
-    mut tile_storage_query: Query<&mut TileStorage>,
-    keyboard_input: Res<Input<KeyCode>>,
-) {
-    if keyboard_input.just_pressed(KeyCode::D) {
-        let map = map_query.single_mut();
-        let entity = object_entity_query.single();
-        let (mut object_grid_position, object_info, object_stack_class) =
-            object_query.get_mut(entity).unwrap();
-        let mut tile_storage = tile_storage_query.single_mut();
-        let tile_pos = TilePos { x: 0, y: 0 };
-        map.remove_object_from_tile(
-            entity,
-            &object_stack_class,
-            &mut tile_storage,
-            &mut tile_query,
-            tile_pos,
-        );
-    }
-}
-
-fn move_unit_to_tile_clicked(
-    mut map_query: Query<(&mut Map)>,
-    mut object_query: Query<
-        (
-            &mut Transform,
-            &mut ObjectGridPosition,
-            &ObjectInfo,
-            &ObjectStackingClass,
-        ),
-        With<Object>,
-    >,
-    mut tile_query: Query<(&mut TileObjectStacks, &mut TileObjects)>,
-    mut object_entity_query: Query<Entity, With<ObjectGridPosition>>,
-    mut tilemap_q: Query<
-        (
-            &TilemapSize,
-            &TilemapGridSize,
-            &TilemapType,
-            &mut TileStorage,
-            &Transform,
-        ),
-        Without<Object>,
-    >,
-    keyboard_input: Res<Input<KeyCode>>,
+fn select_and_move_unit_to_tile_clicked(
+    selected_entity: Res<SelectedObject>,
+    map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
+    mut move_event_writer: EventWriter<MoveObjectEvent>,
     mut click_event_reader: EventReader<ClickEvent>,
+    mut select_object_event_writer: EventWriter<SelectObjectEvent>,
 ) {
-    let entity = object_entity_query.single();
-
-    let (mut transform, mut object_grid_position, object_info, object_stack_class) =
-        object_query.get_mut(entity).unwrap();
+    let (transform, map_size, grid_size, map_type) = map_transform.single();
 
     for event in click_event_reader.iter() {
         match event {
-            ClickEvent::Click {
-                world_pos,
-                selected_entity,
-            } => {
+            ClickEvent::Click { world_pos } => {
                 info!("World Pos: {}", world_pos);
-                for (map_size, grid_size, map_type, mut tile_storage, map_transform) in
-                    tilemap_q.iter_mut()
-                {
-                    let cursor_in_map_pos: Vec2 = {
-                        // Extend the cursor_pos vec3 by 1.0
-                        let world_pos = world_pos.extend(0.0);
-                        let cursor_pos = Vec4::from((world_pos, 1.0));
-                        let cursor_in_map_pos =
-                            map_transform.compute_matrix().inverse() * cursor_pos;
-                        cursor_in_map_pos.xy()
-                    };
-
+                if let Some(selected_entity) = selected_entity.selected_entity {
                     if let Some(tile_pos) =
-                        TilePos::from_world_pos(&cursor_in_map_pos, map_size, grid_size, map_type)
+                        world_pos_to_tile_pos(&world_pos, transform, map_size, grid_size, map_type)
                     {
-                        let map = map_query.single_mut();
-                        let tile_entity = tile_storage.get(&tile_pos).unwrap();
-                        if let Ok((tile_stack_rules, tile_objects)) =
-                            tile_query.get(tile_entity)
-                        {
-                            if tile_stack_rules.has_space(&object_stack_class) {
-                                map.remove_object_from_tile(
-                                    entity,
-                                    &object_stack_class,
-                                    &mut tile_storage,
-                                    &mut tile_query,
-                                    object_grid_position.grid_position,
-                                );
-
-                                map.add_object_to_tile(
-                                    entity,
-                                    &mut object_grid_position,
-                                    &object_stack_class,
-                                    &mut tile_storage,
-                                    &mut tile_query,
-                                    tile_pos,
-                                );
-
-                                let tile_world_pos =
-                                    tile_pos.center_in_world(grid_size, map_type).extend(0.0);
-
-                                let tile_adjusted_world_position: Vec2 = {
-                                    // Extend the cursor_pos vec3 by 1.0
-
-                                    let cursor_pos = Vec4::from((tile_world_pos, -1.0));
-                                    let cursor_in_map_pos =
-                                        map_transform.compute_matrix().inverse() * cursor_pos;
-                                    cursor_in_map_pos.xy()
-                                };
-                                transform.translation = tile_adjusted_world_position.extend(5.0);
-                            }
-                            else{
-                                info!("TILE FULL");
-                            }
-                        }
-                    } else {
-                        info!("Tile pos from world position didnt find a tile");
+                        move_event_writer.send(MoveObjectEvent {
+                            object_moving: selected_entity,
+                            new_pos: tile_pos,
+                        });
+                    }
+                } else {
+                    if let Some(tile_pos) =
+                        world_pos_to_tile_pos(&world_pos, transform, map_size, grid_size, map_type)
+                    {
+                        select_object_event_writer.send(SelectObjectEvent { tile_pos });
                     }
                 }
             }
@@ -324,15 +267,13 @@ fn move_unit_to_tile_clicked(
     }
 }
 
-fn despawn_map(
-    mut query: Query<(Entity, &Map)>,
-    mut commands: Commands,
-    keyboard_input: Res<Input<KeyCode>>,
+fn handle_move_complete_event(
+    mut selected_object: ResMut<SelectedObject>,
+    mut event_reader: EventReader<MoveCompleteEvent>,
 ) {
-    let (entity, map) = query.single_mut();
-
-    if keyboard_input.just_pressed(KeyCode::A) {
-        commands.entity(entity).despawn_descendants();
+    
+    for event in event_reader.iter(){
+        selected_object.selected_entity = None;
     }
 }
 
@@ -352,8 +293,8 @@ fn main() {
         .add_plugins(BggfDefaultPlugins)
         .add_plugin(TilemapPlugin)
         .add_startup_system(startup)
-        .add_system(add_object_to_tile)
-        .add_system(move_unit_to_tile_clicked)
+        .add_system(select_and_move_unit_to_tile_clicked)
+        .add_system(handle_move_complete_event)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_plugin(LogDiagnosticsPlugin::default())
         .run();
