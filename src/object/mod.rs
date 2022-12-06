@@ -67,9 +67,10 @@ pub struct ObjectBundle {
 
     //
     pub sprite_bundle: SpriteBundle,
-    //unit_movement_bundle: UnitMovementBundle,
+    pub unit_movement_bundle: UnitMovementBundle,
 }
 
+//TODO Figure out if I can do a spawn event or implementation thing
 ///Marker component for an entity signifying it as an Object
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
 pub struct Object;

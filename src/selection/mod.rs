@@ -2,8 +2,10 @@
 
 use crate::mapping::tiles::{TileObjectStacks, TileObjects};
 use bevy::app::App;
-use bevy::prelude::{Component, Entity, EventReader, Plugin, Query, ResMut, Resource};
+use bevy::log::info;
+use bevy::prelude::{Component, Entity, EventReader, EventWriter, Plugin, Query, ResMut, Resource};
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage};
+use crate::movement::MoveEvent;
 
 pub struct BggfSelectionPlugin;
 
@@ -54,24 +56,29 @@ pub(crate) fn handle_select_object_event(
     mut selected_object: ResMut<SelectedObject>,
     mut tile_storage: Query<&mut TileStorage>,
     mut tile_query:  Query<&mut TileObjects>,
+    mut move_event_writer: EventWriter<MoveEvent>,
+
 ) {
     let mut tile_storage = tile_storage.single_mut();
 
     for event in select_object_event.iter(){
-        select_object_at_tile_pos(event.tile_pos, &mut selected_object, &mut tile_storage, &mut tile_query);
+        select_object_at_tile_pos(event.tile_pos, &mut selected_object, &mut tile_storage, &mut tile_query, &mut move_event_writer);
     }
 }
 
 pub fn select_object_at_tile_pos(
     tile_pos: TilePos,
-    mut selected_object: &mut ResMut<SelectedObject>,
+    selected_object: &mut ResMut<SelectedObject>,
     tile_storage: &mut TileStorage,
     tile_query: &mut Query<&mut TileObjects>,
+    move_event_writer: &mut EventWriter<MoveEvent>,
 ) {
     let tile_entity = tile_storage.get(&tile_pos).unwrap();
     if let Ok(tile_objects) = tile_query.get_mut(tile_entity) {
         if let Some(entity_in_tile) = tile_objects.entities_in_tile.get(0) {
+            info!("Object Selected");
             selected_object.selected_entity = Some(*entity_in_tile);
+            move_event_writer.send(MoveEvent::MoveBegin { object_moving: *entity_in_tile })
         }
     }
 }

@@ -20,7 +20,7 @@ pub struct BggfMappingBundle;
 
 impl Plugin for BggfMappingBundle {
     fn build(&self, app: &mut App) {
-        app.add_event::<UpdateMapTileObjectEvent>()
+        app.add_event::<UpdateMapTileObject>()
             .add_system(update_map_tile_object_event);
     }
 }
@@ -32,64 +32,6 @@ pub struct Map {
     pub tilemap_type: TilemapType,
     pub map_size: TilemapSize,
     pub tilemap_entity: Entity,
-}
-
-impl Map {
-    /// Adds the given object to a tile while keeping the TileObjectStacks component of the tile up to date
-    ///
-    /// Will Panic if tile_pos isnt a valid tile position in [`TileStorage`]
-
-    // Look at having this return a result with an error message
-    pub fn add_object_to_tile(
-        &self,
-        object_to_add: Entity,
-        object_grid_position: &mut ObjectGridPosition,
-        object_stack_class: &ObjectStackingClass,
-        tile_storage: &mut TileStorage,
-        tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
-        tile_pos_to_add: TilePos,
-    ) {
-        let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
-        if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
-            tile_objects.add_object(object_to_add);
-            object_grid_position.grid_position = tile_pos_to_add;
-            tile_stack_rules.increment_object_class_count(&object_stack_class);
-
-            info!("entities in tile: {}", tile_objects.entities_in_tile.len());
-            info!(
-                "tile_stacks_rules_count: {:?}",
-                tile_stack_rules
-                    .tile_object_stacks
-                    .get(&object_stack_class.stack_class)
-                    .unwrap()
-            );
-        }
-    }
-
-    /// Will Panic if object_to_add isn't an entity in the given [`TileStorage`]
-    pub fn remove_object_from_tile(
-        &self,
-        object_to_remove: Entity,
-        object_stack_class: &ObjectStackingClass,
-        tile_storage: &mut TileStorage,
-        tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
-        tile_pos_to_remove: TilePos,
-    ) {
-        let tile_entity = tile_storage.get(&tile_pos_to_remove).unwrap();
-        if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
-            tile_objects.remove_object(object_to_remove);
-            tile_stack_rules.decrement_object_class_count(&object_stack_class);
-
-            info!("entities in tile: {}", tile_objects.entities_in_tile.len());
-            info!(
-                "tile_stacks_rules_count: {:?}",
-                tile_stack_rules
-                    .tile_object_stacks
-                    .get(&object_stack_class.stack_class)
-                    .unwrap()
-            );
-        }
-    }
 }
 
 impl Map {
@@ -170,13 +112,74 @@ impl Map {
     }
 }
 
-pub enum UpdateMapTileObjectEvent {
-    Add(Entity, TilePos),
-    Remove(Entity, TilePos),
+/// Adds the given object to a tile while keeping the TileObjectStacks component of the tile up to date
+///
+/// Will Panic if tile_pos isnt a valid tile position in [`TileStorage`]
+
+// Look at having this return a result with an error message
+pub fn add_object_to_tile(
+    object_to_add: Entity,
+    object_grid_position: &mut ObjectGridPosition,
+    object_stack_class: &ObjectStackingClass,
+    tile_storage: &mut TileStorage,
+    tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    tile_pos_to_add: TilePos,
+) {
+    let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
+    if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
+        tile_objects.add_object(object_to_add);
+        object_grid_position.grid_position = tile_pos_to_add;
+        tile_stack_rules.increment_object_class_count(&object_stack_class);
+
+        info!("entities in tile: {}", tile_objects.entities_in_tile.len());
+        info!(
+                "tile_stacks_rules_count: {:?}",
+                tile_stack_rules
+                    .tile_object_stacks
+                    .get(&object_stack_class.stack_class)
+                    .unwrap()
+            );
+    }
+}
+
+/// Will Panic if object_to_add isn't an entity in the given [`TileStorage`]
+pub fn remove_object_from_tile(
+    object_to_remove: Entity,
+    object_stack_class: &ObjectStackingClass,
+    tile_storage: &mut TileStorage,
+    tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    tile_pos_to_remove: TilePos,
+) {
+    let tile_entity = tile_storage.get(&tile_pos_to_remove).unwrap();
+    if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
+        tile_objects.remove_object(object_to_remove);
+        tile_stack_rules.decrement_object_class_count(&object_stack_class);
+
+        info!("entities in tile: {}", tile_objects.entities_in_tile.len());
+        info!(
+                "tile_stacks_rules_count: {:?}",
+                tile_stack_rules
+                    .tile_object_stacks
+                    .get(&object_stack_class.stack_class)
+                    .unwrap()
+            );
+    }
+}
+
+//TODO Decide if this enum is actually needed. Might be helpful sometimes but the move unit function can probably serve the same use mostly. Except it cant just remove a unit from the tile by events
+pub enum UpdateMapTileObject {
+    Add{
+        object_entity: Entity, 
+        tile_pos: TilePos,
+    },
+    Remove{
+        object_entity: Entity,
+        tile_pos: TilePos,
+    },
 }
 
 fn update_map_tile_object_event(
-    mut update_event: EventReader<UpdateMapTileObjectEvent>,
+    mut update_event: EventReader<UpdateMapTileObject>,
     mut object_query: Query<
         (
             &mut ObjectGridPosition,
@@ -195,22 +198,20 @@ fn update_map_tile_object_event(
     >,
 ) {
     for event in update_event.iter() {
-
-
         // gets the map components
         let (map,mut tile_storage, map_transform) = tilemap_q.single_mut();
 
         match event {
-            UpdateMapTileObjectEvent::Add(object, tile_pos) => {
+            UpdateMapTileObject::Add { object_entity, tile_pos } => {
                 // gets the components needed to move the object
                 let (mut object_grid_position, object_stack_class) =
-                    object_query.get_mut(*object).unwrap();
+                    object_query.get_mut(*object_entity).unwrap();
                 // if a tile exists at the selected point
                 if let Some(tile_entity) = tile_storage.get(&tile_pos) {
                     // if the tile has the needed components
                     if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
-                        map.add_object_to_tile(
-                            *object,
+                        add_object_to_tile(
+                            *object_entity,
                             &mut object_grid_position,
                             &object_stack_class,
                             &mut tile_storage,
@@ -220,15 +221,15 @@ fn update_map_tile_object_event(
                     }
                 }
             }
-            UpdateMapTileObjectEvent::Remove(object, tile_pos) => {
+            UpdateMapTileObject::Remove { object_entity, tile_pos } => {
                 let (object_grid_position, object_stack_class) =
-                    object_query.get_mut(*object).unwrap();
+                    object_query.get_mut(*object_entity).unwrap();
                 // if a tile exists at the selected point
                 if let Some(tile_entity) = tile_storage.get(&tile_pos) {
                     // if the tile has the needed components
                     if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
-                        map.remove_object_from_tile(
-                            *object,
+                        remove_object_from_tile(
+                            *object_entity,
                             &object_stack_class,
                             &mut tile_storage,
                             &mut tile_query,

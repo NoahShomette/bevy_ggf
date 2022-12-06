@@ -12,6 +12,7 @@ use crate::selection::BggfSelectionPlugin;
 use bevy::app::{App, Plugin, PluginGroupBuilder};
 use bevy::prelude::PluginGroup;
 use iyes_loopless::prelude::AppLooplessStateExt;
+use crate::mapping::BggfMappingBundle;
 
 pub mod camera;
 pub mod mapping;
@@ -36,6 +37,7 @@ impl PluginGroup for BggfDefaultPlugins {
             .add(BggfCameraPlugin)
             .add(BggfSelectionPlugin)
             .add(BggfMovementPlugin)
+            .add(BggfMappingBundle)
     }
 }
 

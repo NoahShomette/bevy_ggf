@@ -12,11 +12,10 @@ use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStacks, TileObjects, TileStackCountMax,
 };
-use bevy_ggf::mapping::{
-    tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map,
-};
+use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject};
 use bevy_ggf::movement::{
-    MoveCompleteEvent, MoveObjectEvent, MovementType, TileMovementCosts, TileMovementRules,
+    MoveEvent, MovementType, TileMovementCosts, TileMovementRules, UnitMovementBundle,
+    UnitMovementType,
 };
 use bevy_ggf::object::{
     Object, ObjectBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
@@ -87,9 +86,9 @@ fn startup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut tile_movement_rules: ResMut<TileMovementRules>,
-    mut move_event_writer: EventWriter<MoveObjectEvent>,
+    mut move_event_writer: EventWriter<UpdateMapTileObject>,
 ) {
-    let tilemap_size = TilemapSize { x: 200, y: 200 };
+    let tilemap_size = TilemapSize { x: 10, y: 10 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
 
     let tilemap_type = TilemapType::Square;
@@ -169,73 +168,22 @@ fn startup(
             texture: infantry_texture_handle.clone(),
             ..default()
         },
-    });
-    move_event_writer.send(MoveObjectEvent {
-        object_moving: entity.id(),
-        new_pos: TilePos::new(0, 0),
-    });
-
-    let entity = commands.spawn(ObjectBundle {
-        object: Object,
-        object_info: ObjectInfo {
-            object_type: &OBJECT_TYPE_RIFLEMAN,
-        },
-        selectable: SelectableEntity,
-        object_grid_position: ObjectGridPosition {
-            grid_position: TilePos::new(10, 10),
-        },
-        object_stacking_class: ObjectStackingClass {
-            stack_class: &STACKING_CLASS_GROUND,
-        },
-        sprite_bundle: SpriteBundle {
-            transform: Transform {
-                translation: tile_pos
-                    .center_in_world(&grid_size, &tilemap_type)
-                    .extend(5.0),
-                ..default()
+        unit_movement_bundle: UnitMovementBundle {
+            unit_movement_type: UnitMovementType {
+                movement_type: &MOVEMENT_TYPES[0],
             },
-            texture: infantry_texture_handle.clone(),
-            ..default()
         },
     });
-    move_event_writer.send(MoveObjectEvent {
-        object_moving: entity.id(),
-        new_pos: TilePos::new(10, 10),
-    });
-
-    let entity = commands.spawn(ObjectBundle {
-        object: Object,
-        object_info: ObjectInfo {
-            object_type: &OBJECT_TYPE_RIFLEMAN,
-        },
-        selectable: SelectableEntity,
-        object_grid_position: ObjectGridPosition {
-            grid_position: TilePos::new(5, 5),
-        },
-        object_stacking_class: ObjectStackingClass {
-            stack_class: &STACKING_CLASS_GROUND,
-        },
-        sprite_bundle: SpriteBundle {
-            transform: Transform {
-                translation: tile_pos
-                    .center_in_world(&grid_size, &tilemap_type)
-                    .extend(5.0),
-                ..default()
-            },
-            texture: infantry_texture_handle.clone(),
-            ..default()
-        },
-    });
-    move_event_writer.send(MoveObjectEvent {
-        object_moving: entity.id(),
-        new_pos: TilePos::new(5, 5),
+    move_event_writer.send(UpdateMapTileObject::Add{
+        object_entity: entity.id(),
+        tile_pos: TilePos::new(0, 0),
     });
 }
 
 fn select_and_move_unit_to_tile_clicked(
     selected_entity: Res<SelectedObject>,
     map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
-    mut move_event_writer: EventWriter<MoveObjectEvent>,
+    mut move_event_writer: EventWriter<MoveEvent>,
     mut click_event_reader: EventReader<ClickEvent>,
     mut select_object_event_writer: EventWriter<SelectObjectEvent>,
 ) {
@@ -249,7 +197,7 @@ fn select_and_move_unit_to_tile_clicked(
                     if let Some(tile_pos) =
                         world_pos_to_tile_pos(&world_pos, transform, map_size, grid_size, map_type)
                     {
-                        move_event_writer.send(MoveObjectEvent {
+                        move_event_writer.send(MoveEvent::TryMoveObject {
                             object_moving: selected_entity,
                             new_pos: tile_pos,
                         });
@@ -269,11 +217,15 @@ fn select_and_move_unit_to_tile_clicked(
 
 fn handle_move_complete_event(
     mut selected_object: ResMut<SelectedObject>,
-    mut event_reader: EventReader<MoveCompleteEvent>,
+    mut event_reader: EventReader<MoveEvent>,
 ) {
-    
-    for event in event_reader.iter(){
-        selected_object.selected_entity = None;
+    for event in event_reader.iter() {
+        match event {
+            MoveEvent::MoveComplete { .. } => {
+                selected_object.selected_entity = None;
+            }
+            _ => {}
+        }
     }
 }
 
@@ -295,7 +247,7 @@ fn main() {
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)
         .add_system(handle_move_complete_event)
-        .add_plugin(FrameTimeDiagnosticsPlugin::default())
-        .add_plugin(LogDiagnosticsPlugin::default())
+        //.add_plugin(FrameTimeDiagnosticsPlugin::default())
+        //.add_plugin(LogDiagnosticsPlugin::default())
         .run();
 }
