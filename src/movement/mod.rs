@@ -1,13 +1,21 @@
-use std::borrow::BorrowMut;
-use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
-use crate::mapping::{tile_pos_to_centered_map_world_pos, Map, remove_object_from_tile, add_object_to_tile};
+use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
+use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjectStacks, TileObjects};
+use crate::mapping::{
+    add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
+};
 use crate::object::{Object, ObjectGridPosition};
 use bevy::app::{App, CoreStage};
 use bevy::log::info;
-use bevy::prelude::{Bundle, Component, Entity, EventReader, EventWriter, IntoSystemDescriptor, ParamSet, Plugin, Query, ResMut, Resource, RunCriteriaDescriptorCoercion, SystemStage, Transform, With, Without, World};
+use bevy::prelude::{
+    Bundle, Component, Entity, EventReader, EventWriter, IntoSystemDescriptor, ParamSet, Plugin,
+    Query, ResMut, Resource, RunCriteriaDescriptorCoercion, SystemStage, Transform, With, Without,
+    World,
+};
 use bevy::utils::HashMap;
-use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType, SquarePos};
+use bevy_ecs_tilemap::prelude::{
+    SquarePos, TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType,
+};
+use std::borrow::BorrowMut;
 
 /// Movement System
 
@@ -25,15 +33,15 @@ impl Plugin for BggfMovementPlugin {
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Default)]
-pub enum DiagonalMovement{
+pub enum DiagonalMovement {
     Enabled,
     #[default]
-    Disabled
+    Disabled,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Default, Resource)]
 pub struct MovementInformation {
-    available_moves: Vec<TilePos>,
+    pub available_moves: Vec<TilePos>,
     diagonal_movement: DiagonalMovement,
 }
 
@@ -77,108 +85,304 @@ pub enum MoveEvent {
 // MoveObject
 // MoveComplete
 
-
 fn handle_move_begin_events(
-    mut move_events: ParamSet<(
-        EventReader<MoveEvent>,
-        EventWriter<MoveEvent>,
-    )>,
+    mut move_events: ParamSet<(EventReader<MoveEvent>, EventWriter<MoveEvent>)>,
     mut object_query: Query<
-        (
-            &mut ObjectGridPosition,
-            &ObjectStackingClass,
-            &UnitMovementType,
-
-        ),
+        (&ObjectGridPosition, &ObjectStackingClass, &ObjectMovement),
         With<Object>,
     >,
-    mut tile_query: Query<(&mut TileObjectStacks, &TileTerrainInfo)>,
-    mut tilemap_q: Query<
-        (
-            &mut Map,
-            &mut TileStorage,
-            &TilemapSize
-        ),
-        Without<Object>,
-    >,
+    mut tile_query: Query<(&TileObjectStacks, &TileTerrainInfo, &TileMovementCosts)>,
+    mut tilemap_q: Query<(&mut Map, &mut TileStorage, &TilemapSize), Without<Object>>,
     mut movement_information: ResMut<MovementInformation>,
     mut move_error_writer: EventWriter<MoveError>,
 ) {
-    
     for event in move_events.p0().iter() {
         match event {
             MoveEvent::MoveBegin { object_moving } => {
                 calculate_move(
                     object_moving,
-                    &mut object_query,
-                    &mut tile_query,
+                    &object_query,
+                    &tile_query,
                     &mut tilemap_q,
                     &mut movement_information,
                 );
             }
-            _ =>{}
+            _ => {}
         }
     }
 }
 
+pub struct MovementCalculator {
+    pub move_nodes: HashMap<TilePos, MoveNode>,
+}
 
-pub fn begin_move(object_moving: Entity) {}
+impl MovementCalculator {
+    pub fn get_node(&mut self, tile_pos: &TilePos, prior_node: MoveNode) -> &mut MoveNode {
+        // either get the current item in the move nodes or make a new default node and add it to the hashmap and then return that
+        if self.move_nodes.contains_key(&tile_pos) {
+            return self.move_nodes.get_mut(&tile_pos).unwrap();
+        } else {
+            let node = MoveNode {
+                node_pos: *tile_pos,
+                prior_node: prior_node.node_pos,
+                move_cost: None,
+            };
+            self.move_nodes.insert(*tile_pos, node);
+            self.move_nodes.get_mut(&tile_pos).unwrap()
+        }
+    }
+
+    pub fn get_node_neighbors(
+        &self,
+        node_to_get_neighbors: TilePos,
+        movement_information: &mut ResMut<MovementInformation>,
+        tilemap_size: &TilemapSize,
+    ) -> Vec<TilePos> {
+        let mut neighbor_tiles: Vec<TilePos> = vec![];
+        let origin_tile = node_to_get_neighbors;
+        if let Some(north) = TilePos::from_i32_pair(
+            origin_tile.x as i32,
+            origin_tile.y as i32 + 1,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(north);
+        }
+        if let Some(east) = TilePos::from_i32_pair(
+            origin_tile.x as i32 + 1,
+            origin_tile.y as i32,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(east);
+        }
+        if let Some(south) = TilePos::from_i32_pair(
+            origin_tile.x as i32,
+            origin_tile.y as i32 - 1,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(south);
+        }
+        if let Some(west) = TilePos::from_i32_pair(
+            origin_tile.x as i32 - 1,
+            origin_tile.y as i32,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(west);
+        }
+
+        if movement_information.diagonal_movement == DiagonalMovement::Enabled {
+            if let Some(northwest) = TilePos::from_i32_pair(
+                origin_tile.x as i32 - 1,
+                origin_tile.y as i32 + 1,
+                &tilemap_size,
+            ) {
+                neighbor_tiles.push(northwest);
+            }
+            if let Some(northeast) = TilePos::from_i32_pair(
+                origin_tile.x as i32 + 1,
+                origin_tile.y as i32 + 1,
+                &tilemap_size,
+            ) {
+                neighbor_tiles.push(northeast);
+            }
+            if let Some(southeast) = TilePos::from_i32_pair(
+                origin_tile.x as i32 + 1,
+                origin_tile.y as i32 - 1,
+                &tilemap_size,
+            ) {
+                neighbor_tiles.push(southeast);
+            }
+            if let Some(southwest) = TilePos::from_i32_pair(
+                origin_tile.x as i32 - 1,
+                origin_tile.y as i32 - 1,
+                &tilemap_size,
+            ) {
+                neighbor_tiles.push(southwest);
+            }
+        }
+        neighbor_tiles
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct MoveNode {
+    pub node_pos: TilePos,
+    pub prior_node: TilePos,
+    pub move_cost: Option<i32>,
+}
 
 pub fn calculate_move(
     object_moving: &Entity,
-    object_query: &mut Query<
-        (
-            &mut ObjectGridPosition,
-            &ObjectStackingClass,
-            &UnitMovementType,
-
-        ),
+    object_query: &Query<
+        (&ObjectGridPosition, &ObjectStackingClass, &ObjectMovement),
         With<Object>,
     >,
-    mut tile_query: &mut Query<(&mut TileObjectStacks, &TileTerrainInfo)>,
-    tilemap_q: &mut Query<
-        (
-            &mut Map,
-            &mut TileStorage,
-            &TilemapSize
-        ),
-        Without<Object>,
-    >,
+    mut tile_query: &Query<(&TileObjectStacks, &TileTerrainInfo, &TileMovementCosts)>,
+    tilemap_q: &mut Query<(&mut Map, &mut TileStorage, &TilemapSize), Without<Object>>,
     movement_information: &mut ResMut<MovementInformation>,
-)  {
-
-
+) {
     // Get the moving objects stuff
-    let (mut object_grid_position, object_stack_class, object_move_type) =
-        object_query.get_mut(*object_moving).unwrap();
+    let (object_grid_position, object_stack_class, object_movement) =
+        object_query.get(*object_moving).unwrap();
 
     // gets the map components
-    let (map, mut tile_storage, tilemap_size) = tilemap_q.single_mut();
+    let (map, tile_storage, tilemap_size) = tilemap_q.single_mut();
 
+    let mut movement_calculator = MovementCalculator {
+        move_nodes: HashMap::new(),
+    };
 
-    let mut tiles_to_evaluate: Vec<TilePos> = get_neighbors_tile_pos(object_grid_position.grid_position, tilemap_size, movement_information);
+    let mut nodes_to_evaluate: Vec<MoveNode> = vec![MoveNode {
+        node_pos: object_grid_position.grid_position,
+        prior_node: object_grid_position.grid_position,
+        move_cost: Some(0),
+    }];
 
-    while tiles_to_evaluate.len() > 0 {
-    
+    let mut remove_first_node = false;
+
+    while nodes_to_evaluate.len() > 0 {
+        if remove_first_node {
+            nodes_to_evaluate.remove(0);
+        }
+        let Some(current_node) = nodes_to_evaluate.get(0) else {
+            continue;
+            };
+        let neighbors = movement_calculator.get_node_neighbors(
+            current_node.node_pos,
+            movement_information,
+            tilemap_size,
+        );
+
+        let mut neighbors_to_evaluate_next: Vec<MoveNode> = vec![];
+
+        for neighbor in neighbors.iter() {
+            let Some(tile_entity) = tile_storage.get(&neighbor) else {
+                continue;
+
+                };
+            // if the tile has the needed components
+            if let Ok((tile_objects, tile_terrain_info, tile_movement_costs)) =
+                tile_query.get(tile_entity)
+            {
+                if tile_objects.has_space(object_stack_class) != true {
+                    info!("No Space");
+                    remove_first_node = true;
+                    continue;
+                }
+                info!("{:?}", tile_terrain_info.terrain_type);
+
+                if object_movement
+                    .object_terrain_movement_rules
+                    .can_move_on_tile(tile_terrain_info)
+                    != true
+                {
+                    info!("Not allowed on terrain");
+                    remove_first_node = true;
+                    continue;
+                }
+                if calculate_move_node(
+                    current_node,
+                    neighbor,
+                    &mut movement_calculator,
+                    tile_movement_costs,
+                    object_movement,
+                ) {
+                    info!("had enough movement");
+
+                    neighbors_to_evaluate_next
+                        .push(*movement_calculator.get_node(neighbor, *current_node));
+                    movement_information
+                        .available_moves
+                        .push(*neighbor);
+                } else {
+                    info!("Not enough movement");
+                }
+
+                // we have the tile that got the neighbor, the tile we are checking, and that tile has
+                // its cost as well as the current lowest cost tile that reached it
+
+                // We want to send the tile that got the current tile, the current tile, and whatever it
+                // needs to a function and return a bool telling us if we can move there. If we can then
+                // we want to add this new tile to the list of available moves and then add it to the list of
+                // nodes to evaluate. And then we remove the current node after we finished all the neighbors
+
+                // the tile has space. so now we need to decide can we even move to this tile
+                // basically we take the move cost from the prior_move_node, add the move cost from
+                // the new tile, and see if we have enough movement to make it into it
+            }
+        }
+
+        for neighbor in neighbors_to_evaluate_next {
+            nodes_to_evaluate.push(neighbor);
+        }
+
+        nodes_to_evaluate.remove(0);
     }
-
-    movement_information.available_moves.append(&mut tiles_to_evaluate);
-    /*
-    movement_information.available_moves.push(TilePos{ x: object_grid_position.grid_position.x, y: object_grid_position.grid_position.y + 1 });
-    movement_information.available_moves.push(TilePos{ x: object_grid_position.grid_position.x + 1, y: object_grid_position.grid_position.y });
-    movement_information.available_moves.push(TilePos{ x: object_grid_position.grid_position.x, y: object_grid_position.grid_position.y - 1 });
-    movement_information.available_moves.push(TilePos{ x: object_grid_position.grid_position.x - 1, y: object_grid_position.grid_position.y });
-    
-     */
 }
 
+pub fn calculate_move_node(
+    tile_moving_from: &MoveNode,
+    tile_moving_to: &TilePos,
+    movement_calculator: &mut MovementCalculator,
+    tile_movement_costs: &TileMovementCosts,
+    object_movement: &ObjectMovement,
+) -> bool {
+    let mut node = movement_calculator.get_node(tile_moving_to, *tile_moving_from);
 
+    if node.move_cost.is_some() {
+        if (tile_moving_from.move_cost.unwrap()
+            + *tile_movement_costs
+                .movement_type_cost
+                .get(object_movement.movement_type)
+                .unwrap_or_else(|| &1) as i32)
+            < (node.move_cost.unwrap())
+        {
+            node.move_cost = Some(
+                tile_moving_from.move_cost.unwrap()
+                    + *tile_movement_costs
+                        .movement_type_cost
+                        .get(object_movement.movement_type)
+                        .unwrap_or_else(|| &1) as i32,
+            );
+            node.prior_node = tile_moving_from.node_pos;
+            return true;
+        }
+    } else {
+        if (tile_moving_from.move_cost.unwrap()
+            + *tile_movement_costs
+                .movement_type_cost
+                .get(object_movement.movement_type)
+                .unwrap_or_else(|| &1) as i32)
+            <= object_movement.move_points
+        {
+            node.move_cost = Some(
+                tile_moving_from.move_cost.unwrap()
+                    + *tile_movement_costs
+                        .movement_type_cost
+                        .get(object_movement.movement_type)
+                        .unwrap_or_else(|| &1) as i32,
+            );
+            node.prior_node = tile_moving_from.node_pos;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// we have the tile that got the neighbor, the tile we are checking, and that tile has
+// its cost as well as the current lowest cost tile that reached it
+
+// We want to send the tile that got the current tile, the current tile, and whatever it
+// needs to a function and return a bool telling us if we can move there. If we can then
+// we want to add this new tile to the list of available moves and then add it to the list of
+// nodes to evaluate. And then we remove the current node after we finished all the neighbors
+
+// the tile has space. so now we need to decide can we even move to this tile
+// basically we take the move cost from the prior_move_node, add the move cost from
+// the new tile, and see if we have enough movement to make it into it
 
 fn handle_try_move_events(
-    mut move_events: ParamSet<(
-        EventReader<MoveEvent>,
-        EventWriter<MoveEvent>,
-    )>,
+    mut move_events: ParamSet<(EventReader<MoveEvent>, EventWriter<MoveEvent>)>,
     mut object_query: Query<
         (
             &mut Transform,
@@ -201,9 +405,9 @@ fn handle_try_move_events(
     mut movement_information: ResMut<MovementInformation>,
     mut move_error_writer: EventWriter<MoveError>,
 ) {
-    
-    let mut result:Result<MoveEvent, MoveError> = Err(MoveError::NotValidMove(String::from("Try move failed")));
-    
+    let mut result: Result<MoveEvent, MoveError> =
+        Err(MoveError::NotValidMove(String::from("Try move failed")));
+
     for event in move_events.p0().iter() {
         match event {
             MoveEvent::TryMoveObject {
@@ -223,11 +427,12 @@ fn handle_try_move_events(
                     result = Err(MoveError::default());
                 }
             }
-            _ =>{}
+            _ => {}
         }
     }
-    match result{
+    match result {
         Ok(move_event) => {
+            movement_information.available_moves.clear();
             move_events.p1().send(move_event);
         }
         Err(error) => {
@@ -298,22 +503,23 @@ pub fn move_object(
                 tile_pos_to_centered_map_world_pos(&new_pos, map_transform, grid_size, map_type);
 
             transform.translation = tile_world_pos.extend(5.0);
-            
+
             return Ok(MoveEvent::MoveComplete {
                 object_moved: *object_moving,
             });
         } else {
-            return Err(MoveError::NotValidMove(String::from("Tile does not have needed components")));
+            return Err(MoveError::NotValidMove(String::from(
+                "Tile does not have needed components",
+            )));
         }
     } else {
-        return Err(MoveError::NotValidMove(String::from("Move Position not valid")));
+        return Err(MoveError::NotValidMove(String::from(
+            "Move Position not valid",
+        )));
     }
 }
 
-
-
 pub fn move_complete(object_moving: Entity) {}
-
 
 pub fn check_move(
     new_pos: &TilePos,
@@ -326,65 +532,106 @@ pub fn check_move(
     };
 }
 
-/*
-// just quick example of a movement system might work for a unit
-struct UnitMovementRules {
-    terrain_base_rules: HashMap<&'static TerrainClass, bool>,
-    terrain_extension_rules: HashMap<&'static TerrainType, bool>,
-}
+pub fn get_neighbors_tile_pos(
+    origin_tile: TilePos,
+    tilemap_size: &TilemapSize,
+    movement_information: &mut ResMut<MovementInformation>,
+) -> Vec<MoveNode> {
+    let mut neighbor_tiles: Vec<MoveNode> = vec![];
 
-
-fn test() {
-    let mut movement_rules = UnitMovementRules {
-        terrain_base_rules: HashMap::new(),
-        terrain_extension_rules: HashMap::new(),
-    };
-
-    movement_rules
-        .terrain_base_rules
-        .insert(&TERRAIN_BASE_TYPES[0], true);
-    movement_rules
-        .terrain_extension_rules
-        .insert(&TERRAIN_EXTENSION_TYPES[2], false);
-}
-
- */
-
-pub fn get_neighbors_tile_pos(origin_tile: TilePos, tilemap_size: &TilemapSize, movement_information: &mut ResMut<MovementInformation>,
-) -> Vec<TilePos> {
-    let mut neighbor_tiles: Vec<TilePos> = vec![];
-
-    if let Some(north) = TilePos::from_i32_pair(origin_tile.x as i32, origin_tile.y as i32 + 1, &tilemap_size){
-        neighbor_tiles.push(north);
+    if let Some(north) = TilePos::from_i32_pair(
+        origin_tile.x as i32,
+        origin_tile.y as i32 + 1,
+        &tilemap_size,
+    ) {
+        neighbor_tiles.push(MoveNode {
+            node_pos: north,
+            prior_node: origin_tile,
+            move_cost: None,
+        });
     }
-    if let Some(east) = TilePos::from_i32_pair(origin_tile.x as i32 + 1, origin_tile.y as i32, &tilemap_size){
-        neighbor_tiles.push(east);
+    if let Some(east) = TilePos::from_i32_pair(
+        origin_tile.x as i32 + 1,
+        origin_tile.y as i32,
+        &tilemap_size,
+    ) {
+        neighbor_tiles.push(MoveNode {
+            node_pos: east,
+            prior_node: origin_tile,
+            move_cost: None,
+        });
     }
-    if let Some(south) = TilePos::from_i32_pair(origin_tile.x as i32, origin_tile.y as i32 - 1, &tilemap_size){
-        neighbor_tiles.push(south);
+    if let Some(south) = TilePos::from_i32_pair(
+        origin_tile.x as i32,
+        origin_tile.y as i32 - 1,
+        &tilemap_size,
+    ) {
+        neighbor_tiles.push(MoveNode {
+            node_pos: south,
+            prior_node: origin_tile,
+            move_cost: None,
+        });
     }
-    if let Some(west) = TilePos::from_i32_pair(origin_tile.x as i32 - 1, origin_tile.y as i32, &tilemap_size){
-        neighbor_tiles.push(west);
+    if let Some(west) = TilePos::from_i32_pair(
+        origin_tile.x as i32 - 1,
+        origin_tile.y as i32,
+        &tilemap_size,
+    ) {
+        neighbor_tiles.push(MoveNode {
+            node_pos: west,
+            prior_node: origin_tile,
+            move_cost: None,
+        });
     }
-    
-    if movement_information.diagonal_movement == DiagonalMovement::Enabled{
-        if let Some(north) = TilePos::from_i32_pair(origin_tile.x as i32 - 1, origin_tile.y as i32 + 1, &tilemap_size){
-            neighbor_tiles.push(north);
+
+    if movement_information.diagonal_movement == DiagonalMovement::Enabled {
+        if let Some(northwest) = TilePos::from_i32_pair(
+            origin_tile.x as i32 - 1,
+            origin_tile.y as i32 + 1,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(MoveNode {
+                node_pos: northwest,
+                prior_node: origin_tile,
+                move_cost: None,
+            });
         }
-        if let Some(east) = TilePos::from_i32_pair(origin_tile.x as i32 + 1, origin_tile.y as i32 + 1, &tilemap_size){
-            neighbor_tiles.push(east);
+        if let Some(northeast) = TilePos::from_i32_pair(
+            origin_tile.x as i32 + 1,
+            origin_tile.y as i32 + 1,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(MoveNode {
+                node_pos: northeast,
+                prior_node: origin_tile,
+                move_cost: None,
+            });
         }
-        if let Some(south) = TilePos::from_i32_pair(origin_tile.x as i32 + 1, origin_tile.y as i32 - 1, &tilemap_size){
-            neighbor_tiles.push(south);
+        if let Some(southeast) = TilePos::from_i32_pair(
+            origin_tile.x as i32 + 1,
+            origin_tile.y as i32 - 1,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(MoveNode {
+                node_pos: southeast,
+                prior_node: origin_tile,
+                move_cost: None,
+            });
         }
-        if let Some(west) = TilePos::from_i32_pair(origin_tile.x as i32 - 1, origin_tile.y as i32 - 1, &tilemap_size){
-            neighbor_tiles.push(west);
+        if let Some(southwest) = TilePos::from_i32_pair(
+            origin_tile.x as i32 - 1,
+            origin_tile.y as i32 - 1,
+            &tilemap_size,
+        ) {
+            neighbor_tiles.push(MoveNode {
+                node_pos: southwest,
+                prior_node: origin_tile,
+                move_cost: None,
+            });
         }
     }
     neighbor_tiles
 }
-
-
 
 /// Struct used to define a new [`MovementType`]
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -401,6 +648,10 @@ pub struct TileMovementCosts {
     pub movement_type_cost: HashMap<&'static MovementType, u32>,
 }
 
+impl TileMovementCosts {
+    pub fn calculate_unit_move_cost(&self) {}
+}
+
 /// Defines a resource that will hold all [`TileMovementCosts`] - references to a specific TileMovementCosts
 /// are stored in each tile as their current cost.
 #[derive(Resource, Default)]
@@ -413,12 +664,73 @@ pub struct TileMovementRules {
 /// Basic Bundle that supplies all needed movement components for a unit
 #[derive(Bundle)]
 pub struct UnitMovementBundle {
-    pub unit_movement_type: UnitMovementType,
+    pub object_movement: ObjectMovement,
 }
 
-/// Holds a reference to a units [`MovementType`]. A MovementType is used to define what kind of movement
-/// costs that the unit uses during movement
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Component)]
-pub struct UnitMovementType {
+#[derive(Clone, Eq, PartialEq, Component)]
+pub struct ObjectMovement {
+    pub move_points: i32,
     pub movement_type: &'static MovementType,
+    pub object_terrain_movement_rules: ObjectTerrainMovementRules,
 }
+
+/// Defines what type of terrain an object can move onto.
+///
+/// The rules are evaluated in a two step process. terrain_type_rules first, and then terrain_class_rules second
+///
+/// - terrain_type_rules should be considered an exception to terrain_class_rules and only used if you want to
+/// allow or deny specific [`TerrainType`]s. Whatever bool you set that specific [`TerrainType`] controls
+/// whether that tile is a valid move tile or not. Rules in this will be followed over any TerrainClass
+/// rules.
+/// - terrain_class_rules should be the first option used when assigning what terrain an object can
+/// move on and only using terrain_type_rules if you need to make an exception. Every [`TerrainClass`]
+/// added to terrain_class_rules denotes that the object can move onto any TerrainTypes that has a reference
+/// to that TerrainClass.
+///
+#[derive(Clone, Eq, PartialEq)]
+pub struct ObjectTerrainMovementRules {
+    pub terrain_class_rules: Vec<&'static TerrainClass>,
+    pub terrain_type_rules: HashMap<&'static TerrainType, bool>,
+}
+
+impl ObjectTerrainMovementRules {
+    /// Returns true if the object can move onto that tiles terrain. Returns false if it cannot
+    ///
+    /// # Logic
+    /// It checks self.terrain_type_rules for a rule for the tiles [`TerrainType`]. If it finds a rule
+    /// it returns that directly. If it doesn't find a rule it checks if self.terrain_class_rules
+    /// contains a reference to the tiles [`TerrainClass`]. If it does then it returns true. Else
+    /// it returns false.
+    pub fn can_move_on_tile(&self, tile_terrain_info: &TileTerrainInfo) -> bool {
+        return if let Some(terrain_type_rule) =
+            self.terrain_type_rules.get(&tile_terrain_info.terrain_type)
+        {
+            *terrain_type_rule
+        } else {
+            if self
+                .terrain_class_rules
+                .contains(&tile_terrain_info.terrain_type.terrain_class)
+            {
+                true
+            } else {
+                false
+            }
+        };
+    }
+
+    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    pub fn new_terrain_type(
+        rules: Vec<(&'static TerrainType, bool)>,
+    ) -> HashMap<&'static TerrainType, bool> {
+        let mut hashmap: HashMap<&'static TerrainType, bool> = HashMap::new();
+        for rule in rules.iter() {
+            hashmap.insert(rule.0, rule.1);
+        }
+
+        hashmap
+    }
+}
+
+/// Marker component signifying that the unit has moved and cannot move anymore
+#[derive(Clone, Copy, Eq, Hash, PartialEq, Component)]
+pub struct ObjectMoved;

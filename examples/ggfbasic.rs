@@ -1,5 +1,6 @@
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::math::Vec4Swizzles;
+use bevy::prelude::KeyCode::L;
 use bevy::prelude::Keyframes::Translation;
 use bevy::prelude::*;
 use bevy::utils::HashMap;
@@ -12,10 +13,13 @@ use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStacks, TileObjects, TileStackCountMax,
 };
-use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject};
+use bevy_ggf::mapping::{
+    tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map,
+    UpdateMapTileObject,
+};
 use bevy_ggf::movement::{
-    MoveEvent, MovementType, TileMovementCosts, TileMovementRules, UnitMovementBundle,
-    UnitMovementType,
+    MoveEvent, MovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules,
+    TileMovementCosts, TileMovementRules, UnitMovementBundle,
 };
 use bevy_ggf::object::{
     Object, ObjectBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
@@ -39,46 +43,46 @@ pub const MOVEMENT_TYPES: &'static [MovementType] = &[
     MovementType { name: "Tread" },
 ];
 
-pub const TERRAIN_BASE_TYPES: &'static [TerrainClass] = &[
+pub const TERRAIN_CLASSES: &'static [TerrainClass] = &[
     TerrainClass { name: "Ground" },
     TerrainClass { name: "Water" },
 ];
 
-pub const TERRAIN_EXTENSION_TYPES: &'static [TerrainType] = &[
+pub const TERRAIN_TYPES: &'static [TerrainType] = &[
     TerrainType {
         name: "Grassland",
         texture_index: 0,
-        terrain_class: &TERRAIN_BASE_TYPES[0],
+        terrain_class: &TERRAIN_CLASSES[0],
     },
     TerrainType {
         name: "Forest",
         texture_index: 1,
-        terrain_class: &TERRAIN_BASE_TYPES[0],
+        terrain_class: &TERRAIN_CLASSES[0],
     },
     TerrainType {
         name: "Mountain",
         texture_index: 2,
-        terrain_class: &TERRAIN_BASE_TYPES[0],
+        terrain_class: &TERRAIN_CLASSES[0],
     },
     TerrainType {
         name: "Hill",
         texture_index: 3,
-        terrain_class: &TERRAIN_BASE_TYPES[0],
+        terrain_class: &TERRAIN_CLASSES[0],
     },
     TerrainType {
         name: "Sand",
         texture_index: 4,
-        terrain_class: &TERRAIN_BASE_TYPES[0],
+        terrain_class: &TERRAIN_CLASSES[0],
     },
     TerrainType {
         name: "CoastWater",
         texture_index: 5,
-        terrain_class: &TERRAIN_BASE_TYPES[1],
+        terrain_class: &TERRAIN_CLASSES[1],
     },
     TerrainType {
         name: "Ocean",
         texture_index: 6,
-        terrain_class: &TERRAIN_BASE_TYPES[1],
+        terrain_class: &TERRAIN_CLASSES[1],
     },
 ];
 
@@ -95,13 +99,13 @@ fn startup(
     let texture_handle: Handle<Image> = asset_server.load("tiles.png");
 
     let terrain_extension_types: Vec<TerrainType> = vec![
-        TERRAIN_EXTENSION_TYPES[0],
-        TERRAIN_EXTENSION_TYPES[1],
-        TERRAIN_EXTENSION_TYPES[2],
-        TERRAIN_EXTENSION_TYPES[3],
-        TERRAIN_EXTENSION_TYPES[4],
-        TERRAIN_EXTENSION_TYPES[5],
-        TERRAIN_EXTENSION_TYPES[6],
+        TERRAIN_TYPES[0],
+        TERRAIN_TYPES[1],
+        TERRAIN_TYPES[2],
+        TERRAIN_TYPES[3],
+        TERRAIN_TYPES[4],
+        TERRAIN_TYPES[5],
+        TERRAIN_TYPES[6],
     ];
 
     let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
@@ -146,6 +150,14 @@ fn startup(
     let grid_size: TilemapGridSize = tile_size.into();
     let tile_pos = TilePos::new(0, 0);
 
+    let movement_rules = ObjectTerrainMovementRules {
+        terrain_class_rules: vec![&TERRAIN_CLASSES[0]],
+        terrain_type_rules: ObjectTerrainMovementRules::new_terrain_type(vec![(
+            &TERRAIN_TYPES[2],
+            false,
+        )]),
+    };
+
     let entity = commands.spawn(ObjectBundle {
         object: Object,
         object_info: ObjectInfo {
@@ -169,14 +181,52 @@ fn startup(
             ..default()
         },
         unit_movement_bundle: UnitMovementBundle {
-            unit_movement_type: UnitMovementType {
+            object_movement: ObjectMovement {
+                move_points: 3,
                 movement_type: &MOVEMENT_TYPES[0],
+                object_terrain_movement_rules: movement_rules.clone(),
             },
         },
     });
-    move_event_writer.send(UpdateMapTileObject::Add{
+    move_event_writer.send(UpdateMapTileObject::Add {
         object_entity: entity.id(),
         tile_pos: TilePos::new(0, 0),
+    });
+    
+    
+    let entity = commands.spawn(ObjectBundle {
+        object: Object,
+        object_info: ObjectInfo {
+            object_type: &OBJECT_TYPE_RIFLEMAN,
+        },
+        selectable: SelectableEntity,
+        object_grid_position: ObjectGridPosition {
+            grid_position: TilePos::new(1, 1),
+        },
+        object_stacking_class: ObjectStackingClass {
+            stack_class: &STACKING_CLASS_GROUND,
+        },
+        sprite_bundle: SpriteBundle {
+            transform: Transform {
+                translation: tile_pos
+                    .center_in_world(&grid_size, &tilemap_type)
+                    .extend(5.0),
+                ..default()
+            },
+            texture: infantry_texture_handle.clone(),
+            ..default()
+        },
+        unit_movement_bundle: UnitMovementBundle {
+            object_movement: ObjectMovement {
+                move_points: 3,
+                movement_type: &MOVEMENT_TYPES[0],
+                object_terrain_movement_rules: movement_rules.clone(),
+            },
+        },
+    });
+    move_event_writer.send(UpdateMapTileObject::Add {
+        object_entity: entity.id(),
+        tile_pos: TilePos::new(1, 1),
     });
 }
 
@@ -229,6 +279,54 @@ fn handle_move_complete_event(
     }
 }
 
+fn handle_move_sprites(
+    movement_info: Res<MovementInformation>,
+    mut tilemap_q: Query<
+        (
+            &mut Map,
+            &TilemapGridSize,
+            &TilemapType,
+            &mut TileStorage,
+            &Transform,
+        ),
+        Without<Object>,
+    >,
+    mut sprite_entities: Local<Vec<Entity>>,
+    mut sprite_handle: Local<Handle<Image>>,
+    mut sprite_handle_exists: Local<bool>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    let (map, grid_size, map_type, mut tile_storage, map_transform) = tilemap_q.single_mut();
+    if *sprite_handle_exists != true{
+        *sprite_handle = asset_server.load("movement_sprite.png");
+    }
+    if movement_info.available_moves.len() > 0 {
+        for i in movement_info.available_moves.iter() {
+            let sprite = commands.spawn(SpriteBundle {
+                transform: Transform {
+                    translation: tile_pos_to_centered_map_world_pos(
+                        i,
+                        map_transform,
+                        grid_size,
+                        map_type,
+                    )
+                    .extend(4.0),
+                    ..default()
+                },
+                texture: sprite_handle.clone(),
+                ..default()
+            });
+            sprite_entities.push(sprite.id());
+        }
+    } else {
+        for sprite_entity in sprite_entities.iter() {
+            commands.entity(*sprite_entity).despawn();
+        }
+        sprite_entities.clear();
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin{
@@ -247,6 +345,7 @@ fn main() {
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)
         .add_system(handle_move_complete_event)
+        .add_system(handle_move_sprites)
         //.add_plugin(FrameTimeDiagnosticsPlugin::default())
         //.add_plugin(LogDiagnosticsPlugin::default())
         .run();

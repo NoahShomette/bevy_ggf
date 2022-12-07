@@ -28,13 +28,13 @@ pub struct TileTerrainInfo {
 
 /// Defines a new TerrainClass representing a category of [`TerrainType`]s. Used to specify different 
 /// class or categories of terrain. Eg Ground, Water, Etc
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct TerrainClass {
     pub name: &'static str,
 }
 
 /// Defines a new TerrainType that is considered a derivative of the assigned terrain_class
-#[derive(Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
 pub struct TerrainType {
     pub name: &'static str,
     pub texture_index: u32,
