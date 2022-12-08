@@ -686,6 +686,19 @@ pub struct TileMovementCosts {
 }
 
 impl TileMovementCosts {
+    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    pub fn new(
+        rules: Vec<(&'static MovementType, u32)>,
+    ) -> TileMovementCosts {
+        let mut hashmap: HashMap<&'static MovementType, u32> = HashMap::new();
+        for rule in rules.iter() {
+            hashmap.insert(rule.0, rule.1);
+        }
+        TileMovementCosts{
+            movement_type_cost: hashmap,
+        }
+        
+    }
     pub fn calculate_unit_move_cost(&self) {}
 }
 

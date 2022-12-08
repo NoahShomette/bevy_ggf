@@ -108,67 +108,37 @@ fn startup(
         //TERRAIN_TYPES[6],
     ];
 
-    let grass = TERRAIN_TYPES[0];
-    let forest = TERRAIN_TYPES[1];
-    let mountain = TERRAIN_TYPES[2];
-    let hill = TERRAIN_TYPES[3];
-    let sand = TERRAIN_TYPES[4];
-
     for terrain_extension_type in terrain_extension_types.iter() {
         match terrain_extension_type.name {
             "Grassland" => {
-                let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
-                tile_movement_cost.insert(&MOVEMENT_TYPES[0], 1);
-                tile_movement_cost.insert(&MOVEMENT_TYPES[1], 1);
                 tile_movement_rules.movement_cost_rules.insert(
                     *terrain_extension_type,
-                    TileMovementCosts {
-                        movement_type_cost: tile_movement_cost.clone(),
-                    },
+                    TileMovementCosts::new(vec![(&MOVEMENT_TYPES[0], 1), (&MOVEMENT_TYPES[1], 1)]),
                 );
             }
             "Forest" => {
-                let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
-                tile_movement_cost.insert(&MOVEMENT_TYPES[0], 1);
-                tile_movement_cost.insert(&MOVEMENT_TYPES[1], 2);
                 tile_movement_rules.movement_cost_rules.insert(
                     *terrain_extension_type,
-                    TileMovementCosts {
-                        movement_type_cost: tile_movement_cost.clone(),
-                    },
+                    TileMovementCosts::new(vec![(&MOVEMENT_TYPES[0], 1), (&MOVEMENT_TYPES[1], 2)]),
                 );
             }
             "Mountain" => {
-                let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
-                tile_movement_cost.insert(&MOVEMENT_TYPES[0], 3);
-                tile_movement_cost.insert(&MOVEMENT_TYPES[1], 3);
                 tile_movement_rules.movement_cost_rules.insert(
                     *terrain_extension_type,
-                    TileMovementCosts {
-                        movement_type_cost: tile_movement_cost.clone(),
-                    },
+                    TileMovementCosts::new(vec![(&MOVEMENT_TYPES[0], 3), (&MOVEMENT_TYPES[1], 3)]),
                 );
             }
             "Hill" => {
-                let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
-                tile_movement_cost.insert(&MOVEMENT_TYPES[0], 2);
-                tile_movement_cost.insert(&MOVEMENT_TYPES[1], 2);
                 tile_movement_rules.movement_cost_rules.insert(
                     *terrain_extension_type,
-                    TileMovementCosts {
-                        movement_type_cost: tile_movement_cost.clone(),
-                    },
+                    TileMovementCosts::new(vec![(&MOVEMENT_TYPES[0], 2), (&MOVEMENT_TYPES[1], 2)]),
+
                 );
             }
             "Sand" => {
-                let mut tile_movement_cost: HashMap<&MovementType, u32> = HashMap::new();
-                tile_movement_cost.insert(&MOVEMENT_TYPES[0], 1);
-                tile_movement_cost.insert(&MOVEMENT_TYPES[1], 2);
                 tile_movement_rules.movement_cost_rules.insert(
                     *terrain_extension_type,
-                    TileMovementCosts {
-                        movement_type_cost: tile_movement_cost.clone(),
-                    },
+                    TileMovementCosts::new(vec![(&MOVEMENT_TYPES[0], 2), (&MOVEMENT_TYPES[1], 1)]),
                 );
             }
             &_ => {}
@@ -236,7 +206,7 @@ fn startup(
         },
         unit_movement_bundle: UnitMovementBundle {
             object_movement: ObjectMovement {
-                move_points: 20,
+                move_points: 5,
                 movement_type: &MOVEMENT_TYPES[0],
                 object_terrain_movement_rules: movement_rules.clone(),
             },
@@ -271,7 +241,7 @@ fn startup(
         },
         unit_movement_bundle: UnitMovementBundle {
             object_movement: ObjectMovement {
-                move_points: 20,
+                move_points: 5,
                 movement_type: &MOVEMENT_TYPES[0],
                 object_terrain_movement_rules: movement_rules.clone(),
             },
@@ -417,7 +387,7 @@ fn show_move_path(
                         translation: tile_pos_to_centered_map_world_pos(
                             &tile_pos, transform, grid_size, map_type,
                         )
-                        .extend(4.0),
+                        .extend(6.0),
                         ..default()
                     },
                     texture: sprite_handle.clone(),
@@ -436,7 +406,7 @@ fn show_move_path(
                                     grid_size,
                                     map_type,
                                 )
-                                .extend(4.0),
+                                .extend(6.0),
                                 ..default()
                             },
                             texture: sprite_handle.clone(),
