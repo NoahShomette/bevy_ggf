@@ -39,10 +39,11 @@ pub enum DiagonalMovement {
     Disabled,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq, Default, Resource)]
+#[derive(Clone, Eq, PartialEq, Default, Resource)]
 pub struct MovementInformation {
     pub available_moves: Vec<TilePos>,
-    diagonal_movement: DiagonalMovement,
+    pub move_nodes: HashMap<TilePos, MoveNode>,
+    pub diagonal_movement: DiagonalMovement,
 }
 
 pub struct MovementCalculatorTest {
@@ -203,13 +204,37 @@ impl MovementCalculator {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialOrd, PartialEq, Eq)]
 pub struct MoveNode {
     pub node_pos: TilePos,
     pub prior_node: TilePos,
     pub move_cost: Option<i32>,
 }
 
+// djikstras
+// We calculate each neighboring node, whether we can move to them or not and what their movement cost is
+// we keep all the nodes we've built but havent visited in a list sorted by the movement cost
+// we guessed for them. Every node in this list will have a movement speed guess as we only insert after we have guessed it
+// every time we evauluate all of the nodes of a neighbor we mark the node as visited, remove it from the unvisited list
+// then pick the next shortest unvisited node to evaluate its neighbors. We should be able to cross reference
+// the visited list with the nodes neighbors to ensure we dont ever get a node we've already visited before
+/*
+while nodes to evaluate > 0{
+
+get node with shortest guess
+
+get that nodes neighbors
+ if the visited list contains a neighbor we ignore that neighbor
+guess for all the nodes neighbors
+guess for each neighbor
+--- run the can move here functions. if we can move then we guess its movement cost, move it to the unvisited list and then keep going
+after evaluating each neighbor we end that loop and restart again if we have more nodes to visit
+
+
+
+
+}
+*/
 pub fn calculate_move(
     object_moving: &Entity,
     object_query: &Query<
@@ -230,31 +255,46 @@ pub fn calculate_move(
     let mut movement_calculator = MovementCalculator {
         move_nodes: HashMap::new(),
     };
-
-    let mut nodes_to_evaluate: Vec<MoveNode> = vec![MoveNode {
+    movement_calculator.move_nodes.insert(
+        object_grid_position.grid_position,
+        MoveNode {
+            node_pos: object_grid_position.grid_position,
+            prior_node: object_grid_position.grid_position,
+            move_cost: Some(0),
+        },
+    );
+    // unvisited nodes
+    let mut unvisited_nodes: Vec<MoveNode> = vec![MoveNode {
         node_pos: object_grid_position.grid_position,
         prior_node: object_grid_position.grid_position,
         move_cost: Some(0),
     }];
+    let mut visited_nodes: Vec<TilePos> = vec![];
 
-    let mut remove_first_node = false;
+    while unvisited_nodes.len() > 0 {
+        unvisited_nodes.sort_by(|x, y| {
+            x.move_cost
+                .unwrap()
+                .partial_cmp(&y.move_cost.unwrap())
+                .unwrap()
+        });
 
-    while nodes_to_evaluate.len() > 0 {
-        if remove_first_node {
-            nodes_to_evaluate.remove(0);
-        }
-        let Some(current_node) = nodes_to_evaluate.get(0) else {
+        let Some(current_node) = unvisited_nodes.get(0) else {
             continue;
             };
+
         let neighbors = movement_calculator.get_node_neighbors(
             current_node.node_pos,
             movement_information,
             tilemap_size,
         );
 
-        let mut neighbors_to_evaluate_next: Vec<MoveNode> = vec![];
+        let current_node = *current_node;
 
         for neighbor in neighbors.iter() {
+            if visited_nodes.contains(neighbor) {
+                continue;
+            }
             let Some(tile_entity) = tile_storage.get(&neighbor) else {
                 continue;
 
@@ -263,22 +303,25 @@ pub fn calculate_move(
             if let Ok((tile_objects, tile_terrain_info, tile_movement_costs)) =
                 tile_query.get(tile_entity)
             {
+                //info!("{:?}", tile_terrain_info.terrain_type);
+                //info!("{:?}", neighbor);
+
                 if tile_objects.has_space(object_stack_class) != true {
-                    info!("No Space");
-                    remove_first_node = true;
+                    //info!("No Space");
                     continue;
                 }
-                info!("{:?}", tile_terrain_info.terrain_type);
 
                 if object_movement
                     .object_terrain_movement_rules
                     .can_move_on_tile(tile_terrain_info)
                     != true
                 {
-                    info!("Not allowed on terrain");
-                    remove_first_node = true;
+                    //info!("Not allowed on terrain");
+                    visited_nodes.push(*neighbor);
                     continue;
                 }
+
+                //
                 if calculate_move_node(
                     current_node,
                     neighbor,
@@ -286,15 +329,11 @@ pub fn calculate_move(
                     tile_movement_costs,
                     object_movement,
                 ) {
-                    info!("had enough movement");
-
-                    neighbors_to_evaluate_next
-                        .push(*movement_calculator.get_node(neighbor, *current_node));
-                    movement_information
-                        .available_moves
-                        .push(*neighbor);
+                    //info!("had enough movement");
+                    unvisited_nodes.push(*movement_calculator.get_node(neighbor, current_node));
+                    movement_information.available_moves.push(*neighbor);
                 } else {
-                    info!("Not enough movement");
+                    //info!("Not enough movement");
                 }
 
                 // we have the tile that got the neighbor, the tile we are checking, and that tile has
@@ -311,23 +350,21 @@ pub fn calculate_move(
             }
         }
 
-        for neighbor in neighbors_to_evaluate_next {
-            nodes_to_evaluate.push(neighbor);
-        }
-
-        nodes_to_evaluate.remove(0);
+        unvisited_nodes.remove(0);
+        visited_nodes.push(current_node.node_pos);
     }
+
+    movement_information.move_nodes = movement_calculator.move_nodes;
 }
 
 pub fn calculate_move_node(
-    tile_moving_from: &MoveNode,
+    tile_moving_from: MoveNode,
     tile_moving_to: &TilePos,
     movement_calculator: &mut MovementCalculator,
     tile_movement_costs: &TileMovementCosts,
     object_movement: &ObjectMovement,
 ) -> bool {
-    let mut node = movement_calculator.get_node(tile_moving_to, *tile_moving_from);
-
+    let mut node = movement_calculator.get_node(tile_moving_to, tile_moving_from);
     if node.move_cost.is_some() {
         if (tile_moving_from.move_cost.unwrap()
             + *tile_movement_costs
@@ -634,7 +671,7 @@ pub fn get_neighbors_tile_pos(
 }
 
 /// Struct used to define a new [`MovementType`]
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
 pub struct MovementType {
     pub name: &'static str,
 }
@@ -643,7 +680,7 @@ pub struct MovementType {
 ///
 /// Contains a hashmap that holds a reference to a [`MovementType`] as a key and a u32 as the value. The u32 is used
 /// in pathfinding as the cost to move into that tile.
-#[derive(Clone, Eq, PartialEq, Component)]
+#[derive(Clone, Eq, PartialEq, Debug, Component)]
 pub struct TileMovementCosts {
     pub movement_type_cost: HashMap<&'static MovementType, u32>,
 }
@@ -654,7 +691,7 @@ impl TileMovementCosts {
 
 /// Defines a resource that will hold all [`TileMovementCosts`] - references to a specific TileMovementCosts
 /// are stored in each tile as their current cost.
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Debug)]
 pub struct TileMovementRules {
     pub movement_cost_rules: HashMap<TerrainType, TileMovementCosts>,
 }
@@ -667,7 +704,7 @@ pub struct UnitMovementBundle {
     pub object_movement: ObjectMovement,
 }
 
-#[derive(Clone, Eq, PartialEq, Component)]
+#[derive(Clone, Eq, PartialEq, Debug, Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
     pub movement_type: &'static MovementType,
@@ -687,7 +724,7 @@ pub struct ObjectMovement {
 /// added to terrain_class_rules denotes that the object can move onto any TerrainTypes that has a reference
 /// to that TerrainClass.
 ///
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ObjectTerrainMovementRules {
     pub terrain_class_rules: Vec<&'static TerrainClass>,
     pub terrain_type_rules: HashMap<&'static TerrainType, bool>,

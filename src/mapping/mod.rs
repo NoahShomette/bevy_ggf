@@ -49,6 +49,7 @@ impl Map {
         let mut tile_storage = TileStorage::empty(map_size);
         let tilemap_type = *tilemap_type;
         let tilemap_entity = commands.spawn_empty().id();
+        info!("{:?}", tile_movement_rules.movement_cost_rules);
 
         for x in 0..map_size.x {
             for y in 0..map_size.y {
@@ -56,7 +57,6 @@ impl Map {
                 let mut rng = rand::thread_rng();
                 let tile_texture_index = rng.gen_range(0..map_terrain_vec.len());
                 let texture_index = &map_terrain_vec[tile_texture_index];
-
                 let tile_movement_costs = tile_movement_rules
                     .movement_cost_rules
                     .get(&map_terrain_vec[tile_texture_index])

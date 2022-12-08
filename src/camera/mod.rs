@@ -18,12 +18,14 @@ pub struct BggfCameraPlugin;
 impl Plugin for BggfCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraAndCursorInformation>()
+            .init_resource::<CursorWorldPos>()
             .add_event::<ClickEvent>()
             .add_plugin(InputManagerPlugin::<CameraMovementAction>::default())
             .add_startup_system(startup)
             .add_system(camera_logic)
             .add_system(click_handler.before(camera_logic))
-            .add_system(handle_camera_movement.before(camera_logic));
+            .add_system(handle_camera_movement.before(camera_logic))
+            .add_system(update_cursor_world_pos);
     }
 }
 
@@ -80,17 +82,16 @@ enum CameraState {
     RightClick,
 }
 
+#[derive(PartialEq, Clone, Copy, Debug, Default, Resource)]
+pub struct CursorWorldPos {
+    pub cursor_world_pos: Vec2,
+}
+
 /// An event sent when the left clicking, right clicking, or holding left click
 pub enum ClickEvent {
-    Click {
-        world_pos: Vec2,
-    },
-    Hold {
-        world_pos: Vec2,
-    },
-    RightClick {
-        world_pos: Vec2,
-    },
+    Click { world_pos: Vec2 },
+    Hold { world_pos: Vec2 },
+    RightClick { world_pos: Vec2 },
 }
 
 /// Holds information needed by the camera logic and handler functions
@@ -242,7 +243,7 @@ fn click_handler(
                 let new_position = ray.origin.truncate();
 
                 click_event_writer.send(ClickEvent::Click {
-                    world_pos: new_position
+                    world_pos: new_position,
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
@@ -255,7 +256,7 @@ fn click_handler(
                 let new_position = ray.origin.truncate();
 
                 click_event_writer.send(ClickEvent::Hold {
-                    world_pos: new_position
+                    world_pos: new_position,
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
@@ -268,7 +269,7 @@ fn click_handler(
                 let new_position = ray.origin.truncate();
 
                 click_event_writer.send(ClickEvent::RightClick {
-                    world_pos: new_position
+                    world_pos: new_position,
                 });
                 camera_cursor_information.camera_state = CameraState::None;
             }
@@ -323,5 +324,28 @@ fn handle_camera_movement(
 
             transform.translation = new_position;
         }
+    }
+}
+
+fn update_cursor_world_pos(
+    mut query: Query<(&GlobalTransform, &Camera)>,
+    mut cursor_world_pos: ResMut<CursorWorldPos>,
+    windows: Res<Windows>,
+) {
+    let (global_transform, camera) = query.single_mut();
+
+    // get current window - used to get the mouse cursors position for click events and drag movement
+    let wnd = if let RenderTarget::Window(id) = camera.target {
+        windows.get(id).unwrap()
+    } else {
+        windows.get_primary().unwrap()
+    };
+
+    //if the cursor is inside the current window then we want to update the cursor position
+    if let Some(current_cursor_position) = wnd.cursor_position() {
+        let ray = camera
+            .viewport_to_world(global_transform, current_cursor_position)
+            .unwrap();
+        cursor_world_pos.cursor_world_pos = ray.origin.truncate();
     }
 }
