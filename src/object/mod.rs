@@ -184,5 +184,5 @@ pub struct GameObjectInfo {
 
 #[derive(Component)]
 pub struct ObjectGridPosition{
-    pub grid_position: TilePos
+    pub tile_position: TilePos
 }

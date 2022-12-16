@@ -128,7 +128,7 @@ pub fn add_object_to_tile(
     let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
     if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
         tile_objects.add_object(object_to_add);
-        object_grid_position.grid_position = tile_pos_to_add;
+        object_grid_position.tile_position = tile_pos_to_add;
         tile_stack_rules.increment_object_class_count(&object_stack_class);
 
         info!("entities in tile: {}", tile_objects.entities_in_tile.len());
@@ -233,7 +233,7 @@ fn update_map_tile_object_event(
                             &object_stack_class,
                             &mut tile_storage,
                             &mut tile_query,
-                            object_grid_position.grid_position,
+                            object_grid_position.tile_position,
                         );
                     }
                 }

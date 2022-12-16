@@ -18,7 +18,7 @@ use bevy_ggf::mapping::{
     UpdateMapTileObject,
 };
 use bevy_ggf::movement::{
-    MoveEvent, MovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules,
+    MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules,
     TileMovementCosts, TileMovementRules, UnitMovementBundle,
 };
 use bevy_ggf::object::{
@@ -189,7 +189,7 @@ fn startup(
         },
         selectable: SelectableEntity,
         object_grid_position: ObjectGridPosition {
-            grid_position: TilePos::new(0, 0),
+            tile_position: TilePos::new(0, 0),
         },
         object_stacking_class: ObjectStackingClass {
             stack_class: &STACKING_CLASS_GROUND,
@@ -224,7 +224,7 @@ fn startup(
         },
         selectable: SelectableEntity,
         object_grid_position: ObjectGridPosition {
-            grid_position: TilePos::new(1, 1),
+            tile_position: TilePos::new(1, 1),
         },
         object_stacking_class: ObjectStackingClass {
             stack_class: &STACKING_CLASS_GROUND,
@@ -303,7 +303,7 @@ fn handle_move_complete_event(
 }
 
 fn handle_move_sprites(
-    movement_info: Res<MovementInformation>,
+    movement_info: Res<CurrentMovementInformation>,
     mut tilemap_q: Query<
         (
             &mut Map,
@@ -354,7 +354,7 @@ fn handle_move_sprites(
 
 fn show_move_path(
     cursor_world_pos: Res<CursorWorldPos>,
-    movement_information: Res<MovementInformation>,
+    movement_information: Res<CurrentMovementInformation>,
     map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
 
     mut sprite_entities: Local<Vec<Entity>>,
