@@ -13,14 +13,8 @@ use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStacks, TileObjects, TileStackCountMax,
 };
-use bevy_ggf::mapping::{
-    tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map,
-    UpdateMapTileObject,
-};
-use bevy_ggf::movement::{
-    MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules,
-    TileMovementCosts, TileMovementRules, UnitMovementBundle,
-};
+use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject, MapHandler};
+use bevy_ggf::movement::{MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules, UnitMovementBundle, SquareMovementSystem, MovementSystem, MovementCostCheck, DiagonalMovement};
 use bevy_ggf::object::{
     Object, ObjectBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
 };
@@ -88,6 +82,7 @@ pub const TERRAIN_TYPES: &'static [TerrainType] = &[
 
 fn startup(
     mut commands: Commands,
+    map_handler: ResMut<MapHandler>,
     asset_server: Res<AssetServer>,
     mut tile_movement_rules: ResMut<TileMovementRules>,
     mut move_event_writer: EventWriter<UpdateMapTileObject>,
@@ -160,6 +155,7 @@ fn startup(
     //let map_texture_vec: Vec<Box<dyn TerrainExtensionTraitBase>> = vec![Box::new(Grassland{}), Box::new(Hill{}), Box::new(Ocean{})];
     let map = Map::generate_random_map(
         &mut commands,
+        map_handler,
         &tilemap_size,
         &tilemap_type,
         &tilemap_tile_size,
@@ -251,6 +247,7 @@ fn startup(
         object_entity: entity.id(),
         tile_pos: TilePos::new(1, 1),
     });
+    
 }
 
 fn select_and_move_unit_to_tile_clicked(
@@ -286,6 +283,10 @@ fn select_and_move_unit_to_tile_clicked(
             _ => {}
         }
     }
+    
+    
+    
+    
 }
 
 fn handle_move_complete_event(
@@ -359,7 +360,7 @@ fn show_move_path(
 
     mut sprite_entities: Local<Vec<Entity>>,
     mut sprite_handle: Local<Handle<Image>>,
-    mut sprite_handle_exists: Local<bool>,
+    sprite_handle_exists: Local<bool>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
@@ -445,11 +446,17 @@ fn main() {
         }).set(ImagePlugin::default_nearest()))
         .add_plugins(BggfDefaultPlugins)
         .add_plugin(TilemapPlugin)
+        .insert_resource(MovementSystem{
+            movement_calculator: Box::new(SquareMovementSystem{ diagonal_movement: DiagonalMovement::Enabled }),
+            map_type: TilemapType::Square,
+            tile_move_checks: vec![Box::new(MovementCostCheck)],
+        })
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)
         .add_system(handle_move_complete_event)
         .add_system(handle_move_sprites)
         .add_system(show_move_path)
+
         //.add_plugin(FrameTimeDiagnosticsPlugin::default())
         //.add_plugin(LogDiagnosticsPlugin::default())
         .run();

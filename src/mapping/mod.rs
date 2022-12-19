@@ -10,18 +10,41 @@ use crate::movement::TileMovementRules;
 use crate::object::{Object, ObjectGridPosition};
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
+use bevy::prelude::KeyCode::Return;
+use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
 
 /// Bundle for Mapping
-pub struct BggfMappingBundle;
+pub struct BggfMappingPlugin;
 
-impl Plugin for BggfMappingBundle {
+impl Plugin for BggfMappingPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<UpdateMapTileObject>()
-            .add_system(update_map_tile_object_event);
+            .add_system(update_map_tile_object_event)
+            .init_resource::<MapHandler>();
+    }
+}
+
+/// Master resource that holds the entities related to any maps
+#[derive(Default, Resource)]
+pub struct MapHandler{
+    map_entities: HashMap<IVec2, Entity>
+}
+
+impl MapHandler {
+    
+    pub fn register_map_entity(&mut self, position: IVec2, entity: Entity){
+        self.map_entities.insert(position, entity);
+    }
+    
+    pub fn get_map_entity(&self, position: IVec2) -> Option<Entity>{
+        let Some(map_entity) = self.map_entities.get(&position) else{
+            return None;
+        };
+        return Some(*map_entity);
     }
 }
 
@@ -37,6 +60,7 @@ pub struct Map {
 impl Map {
     pub fn generate_random_map(
         mut commands: &mut Commands,
+        mut map_handler: ResMut<MapHandler>,
         tile_map_size: &TilemapSize,
         tilemap_type: &TilemapType,
         tilemap_tile_size: &TilemapTileSize,
@@ -89,7 +113,9 @@ impl Map {
         let tile_size = *tilemap_tile_size;
         let grid_size: TilemapGridSize = tile_size.into();
         let map_type = TilemapType::default();
-
+        
+        map_handler.register_map_entity(IVec2{ x: 0, y: 0 }, tilemap_entity);
+        
         commands
             .entity(tilemap_entity)
             .insert(TilemapBundle {

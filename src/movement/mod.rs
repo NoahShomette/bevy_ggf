@@ -2,13 +2,18 @@ use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjectStacks, TileObjects};
 use crate::mapping::{
     add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
+    MapHandler,
 };
 use crate::object::{Object, ObjectGridPosition};
 use bevy::app::{App, CoreStage};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
-use bevy::prelude::{Bundle, Component, Entity, EventReader, EventWriter, IntoSystemDescriptor, ParamSet, Plugin, Query, QueryState, Res, ResMut, Resource, RunCriteriaDescriptorCoercion, SystemStage, Transform, With, Without, World};
-use bevy::utils::tracing::event;
+use bevy::math::IVec2;
+use bevy::prelude::{
+    Bundle, Component, Entity, EventReader, EventWriter, IntoSystemDescriptor, Mut, ParamSet,
+    Plugin, Query, QueryState, Res, ResMut, Resource, RunCriteriaDescriptorCoercion, SystemStage,
+    Transform, With, Without, World,
+};
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType};
 
@@ -22,7 +27,7 @@ impl Plugin for BggfMovementPlugin {
             .init_resource::<CurrentMovementInformation>()
             .add_event::<MoveEvent>()
             .add_event::<MoveError>()
-            .add_system(handle_move_begin_events)
+            .add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end())
             .add_system(handle_try_move_events);
     }
 }
@@ -56,15 +61,15 @@ pub trait AppMovementSystem {
 pub trait MovementCalculator: 'static + Send + Sync {
     fn calculate_move(
         &self,
-        movement_system: &ResMut<MovementSystem>,
+        movement_system: &Res<MovementSystem>,
         object_moving: &Entity,
-        world: &mut World,
+        world: &World,
     ) -> Vec<TilePos>;
 }
 
 #[derive(Resource)]
 pub struct MovementSystem {
-    movement_calculator: Box<dyn MovementCalculator>,
+    pub movement_calculator: Box<dyn MovementCalculator>,
     pub map_type: TilemapType,
     pub tile_move_checks: Vec<Box<dyn TileMoveCheck + Send + Sync>>,
 }
@@ -93,6 +98,7 @@ impl MovementSystem {
     }
 }
 
+#[derive(Clone)]
 pub struct SquareMovementSystem {
     pub diagonal_movement: DiagonalMovement,
 }
@@ -100,14 +106,13 @@ pub struct SquareMovementSystem {
 impl MovementCalculator for SquareMovementSystem {
     fn calculate_move(
         &self,
-        movement_system: &ResMut<MovementSystem>,
+        movement_system: &Res<MovementSystem>,
         object_moving: &Entity,
-        mut world: &mut World,
-
+        world: &World,
     ) -> Vec<TilePos> {
-
         // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
         // as if you were writing an ordinary system.
+        /*
         let mut system_state: SystemState<(
             Query<(&ObjectGridPosition, &ObjectStackingClass, &ObjectMovement), With<Object>>,
             Query<(&mut Map, &mut TileStorage, &TilemapSize), Without<Object>>,
@@ -116,18 +121,25 @@ impl MovementCalculator for SquareMovementSystem {
 
         // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
         // system_state.get(&world) provides read-only versions of your system parameters instead.
-        let (
-            object_query,
-            mut tilemap_q,
-            mut movement_information,
-        ) = system_state.get_mut(&mut world);
-        
-        // Get the moving objects stuff
-        let (object_grid_position, object_stack_class, object_movement) =
-            object_query.get(*object_moving).unwrap();
+        let (object_query, mut tilemap_q, mut movement_information) =
+            system_state.get_mut(&mut world);
 
-        // gets the map components
-        let (map, tile_storage, tilemap_size) = tilemap_q.single_mut();
+         */
+
+        let Some(object_grid_position) = world.get::<ObjectGridPosition>(*object_moving) else {
+            return vec![];
+        };
+
+        let Some(map_handler) = world.get_resource::<MapHandler>() else {
+            return vec![];
+        };
+
+        let Some(tile_storage) = world.get::<TileStorage>(map_handler.get_map_entity(IVec2{x: 0, y: 0}).unwrap()) else {
+            return vec![];
+        };
+        let Some(tilemap_size) = world.get::<TilemapSize>(map_handler.get_map_entity(IVec2{x: 0, y: 0}).unwrap()) else {
+            return vec![];
+        };
 
         let mut move_info = MovementNodes {
             move_nodes: HashMap::new(),
@@ -173,7 +185,7 @@ impl MovementCalculator for SquareMovementSystem {
 
             let current_node = *current_node;
 
-            for neighbor in neighbors.iter() {
+            'neighbors: for neighbor in neighbors.iter() {
                 if visited_nodes.contains(neighbor) {
                     continue;
                 }
@@ -181,6 +193,7 @@ impl MovementCalculator for SquareMovementSystem {
                     continue;
 
                 };
+
                 move_info.add_node(neighbor, current_node);
 
                 // checks the tile against each of the move rules added if its false kill this loop
@@ -195,7 +208,7 @@ impl MovementCalculator for SquareMovementSystem {
                         world,
                     ) {
                     } else {
-                        continue;
+                        continue 'neighbors;
                     }
                 }
 
@@ -208,7 +221,7 @@ impl MovementCalculator for SquareMovementSystem {
             unvisited_nodes.remove(0);
             visited_nodes.push(current_node.node_pos);
         }
-        movement_information.move_nodes = move_info.move_nodes;
+        move_info.move_nodes = move_info.move_nodes;
         available_moves
     }
 }
@@ -243,10 +256,11 @@ impl TileMoveCheck for MovementCostCheck {
         let Some(tile_movement_costs) = world.get::<TileMovementCosts>(tile_entity) else {
             return false;
         };
-        
+
         let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else{
             return false;
         };
+
         if tile_node.move_cost.is_some() {
             if (move_from_tile_node.move_cost.unwrap()
                 + *tile_movement_costs
@@ -264,6 +278,8 @@ impl TileMoveCheck for MovementCostCheck {
                 );
                 tile_node.prior_node = move_from_tile_node.node_pos;
                 return true;
+            } else {
+                return false;
             }
         } else {
             if (move_from_tile_node.move_cost.unwrap()
@@ -282,9 +298,10 @@ impl TileMoveCheck for MovementCostCheck {
                 );
                 tile_node.prior_node = move_from_tile_node.node_pos;
                 return true;
+            } else {
+                return false;
             }
         };
-        return false;
     }
 }
 
@@ -346,35 +363,57 @@ pub enum MoveEvent {
 // MoveComplete
 
 fn handle_move_begin_events(mut world: &mut World) {
+    let mut move_events_vec: Vec<MoveEvent> = vec![];
+
     // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
     // as if you were writing an ordinary system.
-    let mut system_state: SystemState<(
-        ParamSet<(EventReader<MoveEvent>, EventWriter<MoveEvent>)>,
-        ResMut<MovementSystem>,
-    )> = SystemState::new(&mut world);
+    let mut system_state: SystemState<EventReader<MoveEvent>> = SystemState::new(&mut world);
 
     // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
     // system_state.get(&world) provides read-only versions of your system parameters instead.
-    let (
-        mut move_events,
-        movement_system,
-    ) = system_state.get_mut(&mut world);
-    
-    let mut move_events = move_events.p0();
-    let events: Vec<&MoveEvent> = move_events.iter().collect();
-    for event in events {
+    let (mut move_events) = system_state.get_mut(&mut world);
+
+    for event in move_events.iter() {
         match event {
             MoveEvent::MoveBegin { object_moving } => {
-                movement_system.movement_calculator.calculate_move(
+                move_events_vec.push(MoveEvent::MoveBegin {
+                    object_moving: *object_moving,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
+    // as if you were writing an ordinary system.
+    let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(&mut world);
+
+    // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
+    // system_state.get(&world) provides read-only versions of your system parameters instead.
+    let movement_system = system_state.get(&world);
+
+    let mut available_moves: Vec<TilePos> = vec![];
+    
+    for event in move_events_vec {
+        match event {
+            MoveEvent::MoveBegin { object_moving } => {
+                available_moves = movement_system.movement_calculator.calculate_move(
                     &movement_system,
                     &object_moving,
-                    &mut world,
+                    &world,
                 );
             }
             _ => {}
         }
     }
-    move_events.clear();
+
+    if available_moves.len() > 0{
+        world.resource_scope(|world, mut a: Mut<CurrentMovementInformation>| {
+            a.available_moves = available_moves;
+        });
+    }
+
+    
 }
 
 pub struct MovementNodes {
@@ -492,7 +531,7 @@ impl MovementNodes {
     }
 }
 
-#[derive(Clone, Copy, PartialOrd, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
 pub struct MoveNode {
     pub node_pos: TilePos,
     pub prior_node: TilePos,
