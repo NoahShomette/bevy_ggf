@@ -14,7 +14,7 @@ use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStacks, TileObjects, TileStackCountMax,
 };
 use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject, MapHandler};
-use bevy_ggf::movement::{MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules, UnitMovementBundle, SquareMovementSystem, MovementSystem, MovementCostCheck, DiagonalMovement};
+use bevy_ggf::movement::{MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules, UnitMovementBundle, SquareMovementSystem, MovementSystem, MoveCheckSpace, DiagonalMovement, MoveCheckTerrain};
 use bevy_ggf::object::{
     Object, ObjectBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
 };
@@ -96,7 +96,7 @@ fn startup(
     let terrain_extension_types: Vec<TerrainType> = vec![
         TERRAIN_TYPES[0],
         TERRAIN_TYPES[1],
-        //TERRAIN_TYPES[2],
+        TERRAIN_TYPES[2],
         //TERRAIN_TYPES[3],
         TERRAIN_TYPES[4],
         //TERRAIN_TYPES[5],
@@ -237,7 +237,7 @@ fn startup(
         },
         unit_movement_bundle: UnitMovementBundle {
             object_movement: ObjectMovement {
-                move_points: 5,
+                move_points: 15,
                 movement_type: &MOVEMENT_TYPES[0],
                 object_terrain_movement_rules: movement_rules.clone(),
             },
@@ -447,9 +447,9 @@ fn main() {
         .add_plugins(BggfDefaultPlugins)
         .add_plugin(TilemapPlugin)
         .insert_resource(MovementSystem{
-            movement_calculator: Box::new(SquareMovementSystem{ diagonal_movement: DiagonalMovement::Enabled }),
+            movement_calculator: Box::new(SquareMovementSystem{ diagonal_movement: DiagonalMovement::Disabled }),
             map_type: TilemapType::Square,
-            tile_move_checks: vec![Box::new(MovementCostCheck)],
+            tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckTerrain)],
         })
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)

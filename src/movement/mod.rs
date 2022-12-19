@@ -64,7 +64,7 @@ pub trait MovementCalculator: 'static + Send + Sync {
         movement_system: &Res<MovementSystem>,
         object_moving: &Entity,
         world: &World,
-    ) -> Vec<TilePos>;
+    ) -> (Vec<TilePos>, MovementNodes);
 }
 
 #[derive(Resource)]
@@ -109,37 +109,26 @@ impl MovementCalculator for SquareMovementSystem {
         movement_system: &Res<MovementSystem>,
         object_moving: &Entity,
         world: &World,
-    ) -> Vec<TilePos> {
-        // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
-        // as if you were writing an ordinary system.
-        /*
-        let mut system_state: SystemState<(
-            Query<(&ObjectGridPosition, &ObjectStackingClass, &ObjectMovement), With<Object>>,
-            Query<(&mut Map, &mut TileStorage, &TilemapSize), Without<Object>>,
-            ResMut<CurrentMovementInformation>,
-        )> = SystemState::new(&mut world);
-
-        // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
-        // system_state.get(&world) provides read-only versions of your system parameters instead.
-        let (object_query, mut tilemap_q, mut movement_information) =
-            system_state.get_mut(&mut world);
-
-         */
-
+    ) -> (Vec<TilePos>, MovementNodes) {
         let Some(object_grid_position) = world.get::<ObjectGridPosition>(*object_moving) else {
-            return vec![];
+            return (vec![], MovementNodes {
+                move_nodes: HashMap::new(),
+            });
         };
 
         let Some(map_handler) = world.get_resource::<MapHandler>() else {
-            return vec![];
-        };
+            return (vec![], MovementNodes {
+                move_nodes: HashMap::new(),
+            });        };
 
         let Some(tile_storage) = world.get::<TileStorage>(map_handler.get_map_entity(IVec2{x: 0, y: 0}).unwrap()) else {
-            return vec![];
-        };
+            return (vec![], MovementNodes {
+                move_nodes: HashMap::new(),
+            });        };
         let Some(tilemap_size) = world.get::<TilemapSize>(map_handler.get_map_entity(IVec2{x: 0, y: 0}).unwrap()) else {
-            return vec![];
-        };
+            return (vec![], MovementNodes {
+                move_nodes: HashMap::new(),
+            });        };
 
         let mut move_info = MovementNodes {
             move_nodes: HashMap::new(),
@@ -195,7 +184,17 @@ impl MovementCalculator for SquareMovementSystem {
                 };
 
                 move_info.add_node(neighbor, current_node);
-
+                if tile_movement_cost_check(
+                    *object_moving,
+                    tile_entity,
+                    neighbor,
+                    &current_node.node_pos,
+                    &mut move_info,
+                    world,
+                ) {
+                } else {
+                    continue 'neighbors;
+                }
                 // checks the tile against each of the move rules added if its false kill this loop
                 for i in 0..movement_system.tile_move_checks.len() {
                     let check = movement_system.tile_move_checks[i].as_ref();
@@ -204,7 +203,6 @@ impl MovementCalculator for SquareMovementSystem {
                         tile_entity,
                         neighbor,
                         &current_node.node_pos,
-                        &mut move_info,
                         world,
                     ) {
                     } else {
@@ -221,8 +219,8 @@ impl MovementCalculator for SquareMovementSystem {
             unvisited_nodes.remove(0);
             visited_nodes.push(current_node.node_pos);
         }
-        move_info.move_nodes = move_info.move_nodes;
-        available_moves
+        //move_info.move_nodes = move_info.move_nodes;
+        return (available_moves, move_info);
     }
 }
 
@@ -232,76 +230,122 @@ pub trait TileMoveCheck {
         entity_moving: Entity,
         tile_entity: Entity,
         tile_pos: &TilePos,
-        move_from_tile_pos: &TilePos,
-        movement_nodes: &mut MovementNodes,
+        last_tile_pos: &TilePos,
         world: &World,
     ) -> bool;
 }
 
-pub struct MovementCostCheck;
+pub fn tile_movement_cost_check(
+    entity_moving: Entity,
+    tile_entity: Entity,
+    tile_pos: &TilePos,
+    move_from_tile_pos: &TilePos,
+    movement_nodes: &mut MovementNodes,
+    world: &World,
+) -> bool {
+    let Some(object_movement) = world.get::<ObjectMovement>(entity_moving) else {
+        return false;
+    };
+    let Some(tile_movement_costs) = world.get::<TileMovementCosts>(tile_entity) else {
+        return false;
+    };
 
-impl TileMoveCheck for MovementCostCheck {
+    let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else{
+        return false;
+    };
+
+    if tile_node.move_cost.is_some() {
+        if (move_from_tile_node.move_cost.unwrap()
+            + *tile_movement_costs
+                .movement_type_cost
+                .get(object_movement.movement_type)
+                .unwrap_or_else(|| &1) as i32)
+            < (tile_node.move_cost.unwrap())
+        {
+            tile_node.move_cost = Some(
+                move_from_tile_node.move_cost.unwrap()
+                    + *tile_movement_costs
+                        .movement_type_cost
+                        .get(object_movement.movement_type)
+                        .unwrap_or_else(|| &1) as i32,
+            );
+            tile_node.prior_node = move_from_tile_node.node_pos;
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        if (move_from_tile_node.move_cost.unwrap()
+            + *tile_movement_costs
+                .movement_type_cost
+                .get(object_movement.movement_type)
+                .unwrap_or_else(|| &1) as i32)
+            <= object_movement.move_points
+        {
+            tile_node.move_cost = Some(
+                move_from_tile_node.move_cost.unwrap()
+                    + *tile_movement_costs
+                        .movement_type_cost
+                        .get(object_movement.movement_type)
+                        .unwrap_or_else(|| &1) as i32,
+            );
+            tile_node.prior_node = move_from_tile_node.node_pos;
+            return true;
+        } else {
+            return false;
+        }
+    };
+}
+
+pub struct MoveCheckSpace;
+
+impl TileMoveCheck for MoveCheckSpace {
     fn is_valid_move(
         &self,
         entity_moving: Entity,
         tile_entity: Entity,
         tile_pos: &TilePos,
-        move_from_tile_pos: &TilePos,
-        movement_nodes: &mut MovementNodes,
+        last_tile_pos: &TilePos,
+        world: &World,
+    ) -> bool {
+        let Some(object_stack_class) = world.get::<ObjectStackingClass>(entity_moving) else {
+            return false;
+        };
+        let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
+            return false;
+        };
+        if tile_objects.has_space(object_stack_class) == true {
+            return true;
+        }
+        return false;
+    }
+}
+
+pub struct MoveCheckTerrain;
+
+impl TileMoveCheck for MoveCheckTerrain {
+    fn is_valid_move(
+        &self,
+        entity_moving: Entity,
+        tile_entity: Entity,
+        tile_pos: &TilePos,
+        last_tile_pos: &TilePos,
         world: &World,
     ) -> bool {
         let Some(object_movement) = world.get::<ObjectMovement>(entity_moving) else {
             return false;
         };
-        let Some(tile_movement_costs) = world.get::<TileMovementCosts>(tile_entity) else {
+        let Some(tile_terrain_info) = world.get::<TileTerrainInfo>(tile_entity) else {
             return false;
         };
-
-        let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else{
-            return false;
-        };
-
-        if tile_node.move_cost.is_some() {
-            if (move_from_tile_node.move_cost.unwrap()
-                + *tile_movement_costs
-                    .movement_type_cost
-                    .get(object_movement.movement_type)
-                    .unwrap_or_else(|| &1) as i32)
-                < (tile_node.move_cost.unwrap())
-            {
-                tile_node.move_cost = Some(
-                    move_from_tile_node.move_cost.unwrap()
-                        + *tile_movement_costs
-                            .movement_type_cost
-                            .get(object_movement.movement_type)
-                            .unwrap_or_else(|| &1) as i32,
-                );
-                tile_node.prior_node = move_from_tile_node.node_pos;
-                return true;
-            } else {
-                return false;
-            }
-        } else {
-            if (move_from_tile_node.move_cost.unwrap()
-                + *tile_movement_costs
-                    .movement_type_cost
-                    .get(object_movement.movement_type)
-                    .unwrap_or_else(|| &1) as i32)
-                <= object_movement.move_points
-            {
-                tile_node.move_cost = Some(
-                    move_from_tile_node.move_cost.unwrap()
-                        + *tile_movement_costs
-                            .movement_type_cost
-                            .get(object_movement.movement_type)
-                            .unwrap_or_else(|| &1) as i32,
-                );
-                tile_node.prior_node = move_from_tile_node.node_pos;
-                return true;
-            } else {
-                return false;
-            }
-        };
+        if object_movement
+            .object_terrain_movement_rules
+            .can_move_on_tile(tile_terrain_info)
+            == true
+        {
+            return true;
+        }
+        return false;
     }
 }
 
@@ -392,12 +436,17 @@ fn handle_move_begin_events(mut world: &mut World) {
     // system_state.get(&world) provides read-only versions of your system parameters instead.
     let movement_system = system_state.get(&world);
 
-    let mut available_moves: Vec<TilePos> = vec![];
-    
+    let mut move_info: (Vec<TilePos>, MovementNodes) = (
+        vec![],
+        MovementNodes {
+            move_nodes: HashMap::new(),
+        },
+    );
+
     for event in move_events_vec {
         match event {
             MoveEvent::MoveBegin { object_moving } => {
-                available_moves = movement_system.movement_calculator.calculate_move(
+                move_info = movement_system.movement_calculator.calculate_move(
                     &movement_system,
                     &object_moving,
                     &world,
@@ -407,13 +456,12 @@ fn handle_move_begin_events(mut world: &mut World) {
         }
     }
 
-    if available_moves.len() > 0{
+    if move_info.0.len() > 0 {
         world.resource_scope(|world, mut a: Mut<CurrentMovementInformation>| {
-            a.available_moves = available_moves;
+            a.available_moves = move_info.0;
+            a.move_nodes = move_info.1.move_nodes;
         });
     }
-
-    
 }
 
 pub struct MovementNodes {

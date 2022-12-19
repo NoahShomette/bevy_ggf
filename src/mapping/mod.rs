@@ -140,7 +140,7 @@ impl Map {
 
 /// Adds the given object to a tile while keeping the TileObjectStacks component of the tile up to date
 ///
-/// Will Panic if tile_pos isnt a valid tile position in [`TileStorage`]
+/// Will Panic if tile_pos isn't a valid tile position in [`TileStorage`]
 
 // Look at having this return a result with an error message
 pub fn add_object_to_tile(
