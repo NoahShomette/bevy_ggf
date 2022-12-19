@@ -15,10 +15,8 @@ use bevy_ggf::mapping::tiles::{
 };
 use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject, MapHandler};
 use bevy_ggf::movement::{MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules, UnitMovementBundle, SquareMovementSystem, MovementSystem, MoveCheckSpace, DiagonalMovement, MoveCheckTerrain};
-use bevy_ggf::object::{
-    Object, ObjectBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
-};
-use bevy_ggf::selection::{SelectObjectEvent, SelectableEntity, SelectedObject};
+use bevy_ggf::object::{Object, ObjectCoreBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle};
+use bevy_ggf::selection::{SelectObjectEvent, SelectableEntity, SelectedObject, ClearSelectedObject};
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -178,7 +176,7 @@ fn startup(
         )]),
     };
 
-    let entity = commands.spawn(ObjectBundle {
+    let entity = commands.spawn(UnitBundle {
         object: Object,
         object_info: ObjectInfo {
             object_type: &OBJECT_TYPE_RIFLEMAN,
@@ -213,7 +211,7 @@ fn startup(
         tile_pos: TilePos::new(0, 0),
     });
 
-    let entity = commands.spawn(ObjectBundle {
+    let entity = commands.spawn(ObjectCoreBundle {
         object: Object,
         object_info: ObjectInfo {
             object_type: &OBJECT_TYPE_RIFLEMAN,
@@ -235,19 +233,29 @@ fn startup(
             texture: infantry_texture_handle.clone(),
             ..default()
         },
-        unit_movement_bundle: UnitMovementBundle {
-            object_movement: ObjectMovement {
-                move_points: 15,
-                movement_type: &MOVEMENT_TYPES[0],
-                object_terrain_movement_rules: movement_rules.clone(),
-            },
-        },
     });
     move_event_writer.send(UpdateMapTileObject::Add {
         object_entity: entity.id(),
         tile_pos: TilePos::new(1, 1),
     });
     
+}
+
+fn handle_right_click(
+    map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
+    mut click_event_reader: EventReader<ClickEvent>,
+    mut clear_select_object_event_writer: EventWriter<ClearSelectedObject>,
+) {
+    let (transform, map_size, grid_size, map_type) = map_transform.single();
+
+    for event in click_event_reader.iter() {
+        match event {
+            ClickEvent::RightClick { world_pos } => {
+                clear_select_object_event_writer.send(ClearSelectedObject)
+            }
+            _ => {}
+        }
+    }
 }
 
 fn select_and_move_unit_to_tile_clicked(
@@ -354,6 +362,7 @@ fn handle_move_sprites(
 }
 
 fn show_move_path(
+
     cursor_world_pos: Res<CursorWorldPos>,
     movement_information: Res<CurrentMovementInformation>,
     map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
@@ -364,6 +373,7 @@ fn show_move_path(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
+    
     if *sprite_handle_exists != true {
         *sprite_handle = asset_server.load("dot.png");
     }
@@ -456,6 +466,7 @@ fn main() {
         .add_system(handle_move_complete_event)
         .add_system(handle_move_sprites)
         .add_system(show_move_path)
+        .add_system(handle_right_click)
 
         //.add_plugin(FrameTimeDiagnosticsPlugin::default())
         //.add_plugin(LogDiagnosticsPlugin::default())

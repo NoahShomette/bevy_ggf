@@ -57,7 +57,22 @@ pub struct ObjectMinimalBundle{
 
 /// Base bundle that provides all functionality for all subsystems in the crate
 #[derive(Bundle)]
-pub struct ObjectBundle {
+pub struct ObjectCoreBundle {
+    // items that are in the minimal bundle items first
+    pub object: Object,
+    pub object_info: ObjectInfo,
+    pub selectable: SelectableEntity,
+    pub object_grid_position: ObjectGridPosition,
+    pub object_stacking_class: ObjectStackingClass,
+
+    //
+    pub sprite_bundle: SpriteBundle,
+    //pub unit_movement_bundle: UnitMovementBundle,
+}
+
+/// Base bundle that provides all functionality for all subsystems in the crate
+#[derive(Bundle)]
+pub struct UnitBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
     pub object_info: ObjectInfo,

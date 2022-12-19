@@ -5,7 +5,7 @@ use bevy::app::App;
 use bevy::log::info;
 use bevy::prelude::{Component, Entity, EventReader, EventWriter, Plugin, Query, ResMut, Resource};
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage};
-use crate::movement::MoveEvent;
+use crate::movement::{CurrentMovementInformation, MoveEvent};
 
 pub struct BggfSelectionPlugin;
 
@@ -32,18 +32,30 @@ pub struct SelectedObject {
     pub selected_entity: Option<Entity>,
 }
 
+impl SelectedObject{
+    pub fn select_object(){
+        
+    }
+    pub fn deselect_object(){
+        
+    }
+}
+
 pub fn select_object(object_to_select: Entity, mut select_object: ResMut<SelectedObject>) {
     select_object.selected_entity = Some(object_to_select);
 }
 
 pub struct ClearSelectedObject;
 
+//TODO move the current movement information clearing out of here
 fn clear_selected_object(
     mut clear_selected_object_reader: EventReader<ClearSelectedObject>,
     mut selected_object: ResMut<SelectedObject>,
+    mut current_movement_information: ResMut<CurrentMovementInformation>
 ) {
     for _event in clear_selected_object_reader.iter() {
         selected_object.selected_entity = None;
+        current_movement_information.clear_information();
     }
 }
 

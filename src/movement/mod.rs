@@ -17,8 +17,9 @@ use bevy::prelude::{
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType};
 
-/// Movement System
-
+/// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
+/// Does not contain a MovementSystem. You have to insert that yourself
+///
 pub struct BggfMovementPlugin;
 
 impl Plugin for BggfMovementPlugin {
@@ -32,33 +33,15 @@ impl Plugin for BggfMovementPlugin {
     }
 }
 
-// movement system arch
-
-// movement calculator trait
-//-- any movement system resource implements this and then internal movement stuff just needs to call trait functions
-// -- stuff like, calculate move, etc
-
-// MovementSystem - a resource which holds the relevant information for that movement system. maybe this is built by the dev? and then it implements the movement calculator
-
-// make a resource, that holds dyn structs that implement the TileMoveCheck trait. This trait will get called to ensure a move is valid
-// so when we register the resource we should throw in the move systems
-
-pub trait AppMovementSystem {
-    fn new(
-        map_type: TilemapType,
-        diagonal_movement: DiagonalMovement,
-        tile_move_checks: Vec<Box<dyn TileMoveCheck + Send + Sync>>,
-    ) -> SquareMovementSystem;
-
-    fn register_movement_system(
-        app: &mut App,
-        map_type: TilemapType,
-        diagonal_movement: DiagonalMovement,
-        tile_move_checks: Vec<Box<dyn TileMoveCheck + Send + Sync>>,
-    );
-}
-
+/// A trait defining a new MovementCalculator - define the [`calculate_move`] fn in order to control
+/// exactly how the movement works. Add this to a [`MovementSystem`] and insert that as a resource
+/// to define your movement system
+/// 
+/// Bevy_GGF contains a MovementCalculator for Square based maps called [`SquareMovementSystem`]
 pub trait MovementCalculator: 'static + Send + Sync {
+    /// The main function of a [`MovementCalculator`]. This is called when a [`MoveEvent`] is received
+    /// and the result is pushed into the [`CurrentMovementInformation`] Resource automatically. Use
+    /// this function to define your own movement algorithm.
     fn calculate_move(
         &self,
         movement_system: &Res<MovementSystem>,
@@ -67,6 +50,8 @@ pub trait MovementCalculator: 'static + Send + Sync {
     ) -> (Vec<TilePos>, MovementNodes);
 }
 
+/// Defines a MovementSystem. This resource is used to calculate movement, define the list of checks 
+/// for the [`MovementCalculator`], and holds the [`TilemapType`]
 #[derive(Resource)]
 pub struct MovementSystem {
     pub movement_calculator: Box<dyn MovementCalculator>,
@@ -98,6 +83,10 @@ impl MovementSystem {
     }
 }
 
+/// Built in struct with an implementation for a [`MovementCalculator`] for a simple square based map.
+/// The pathfinding algorithm is an implementation of Djikstras.
+/// Contains a field for a [`DiagonalMovement`] enum. The pathfinding algorithm will include diagonal
+/// tiles based on this enum.
 #[derive(Clone)]
 pub struct SquareMovementSystem {
     pub diagonal_movement: DiagonalMovement,
@@ -166,7 +155,7 @@ impl MovementCalculator for SquareMovementSystem {
                 continue;
             };
 
-            let neighbors = move_info.get_node_neighbors(
+            let neighbors = move_info.get_neighbors_tilepos(
                 current_node.node_pos,
                 self.diagonal_movement.is_diagonal(),
                 tilemap_size,
@@ -224,6 +213,51 @@ impl MovementCalculator for SquareMovementSystem {
     }
 }
 
+/// A trait used to define a new check for a tile in a [`MovementCalculator`]s pathfinding algorithm.
+/// Implement one of these traits for each separate logical check you want the MovementCalculator to 
+/// do to determine if a tile is a valid move or not.
+/// 
+/// # Example
+/// Here is an example of a simple TileMoveCheck implementation. This impl provides a check for whether
+/// or not a tile has space in the tile for the relevant objects stacking class
+/// ```rust
+/// use bevy::prelude::{Entity, World};
+/// use bevy_ecs_tilemap::prelude::TilePos;
+/// use bevy_ggf::mapping::tiles::{ObjectStackingClass, TileObjectStacks};
+/// use bevy_ggf::movement::TileMoveCheck;
+///
+/// // Create a new struct for our TileMoveCheck
+/// pub struct MoveCheckSpace;
+///
+/// // Implement the TileMoveCheck Trait for our struct
+/// impl TileMoveCheck for MoveCheckSpace {
+///     fn is_valid_move(
+///         &self,
+///         entity_moving: Entity,
+///         tile_entity: Entity,
+///         tile_pos: &TilePos,
+///         last_tile_pos: &TilePos,
+///         world: &World,
+///     ) -> bool {
+/// // Get the ObjectStackingClass component of our object that is trying to move
+///         let Some(object_stack_class) = world.get::<ObjectStackingClass>(entity_moving) else {
+/// // If the object doesnt have a stack class then we want to return false as this object should not be able to move
+///             return false;
+///         };
+/// // Get the TileObjectStacks component of the tile that we are checking
+///         let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
+///             return false;
+///         };
+/// // Use the built in function on a TileObjectStacks struct to check if the tile has space for this objects stacking class
+///         if tile_objects.has_space(object_stack_class) == true {
+/// // If there is space then this object can move into the tile and we return true
+///             return true;
+///         }
+/// // Else there is no space and we return false instead
+///         return false;
+///     }
+/// }
+/// ```
 pub trait TileMoveCheck {
     fn is_valid_move(
         &self,
@@ -235,6 +269,9 @@ pub trait TileMoveCheck {
     ) -> bool;
 }
 
+/// Provided function that can be used in a [`MovementCalculator`] to keep track of the nodes in a pathfinding node,
+/// their associated movement costs, and which is the node that has the shortest path to that specific 
+/// node. Will automatically compute all of the above. 
 pub fn tile_movement_cost_check(
     entity_moving: Entity,
     tile_entity: Entity,
@@ -297,58 +334,7 @@ pub fn tile_movement_cost_check(
     };
 }
 
-pub struct MoveCheckSpace;
-
-impl TileMoveCheck for MoveCheckSpace {
-    fn is_valid_move(
-        &self,
-        entity_moving: Entity,
-        tile_entity: Entity,
-        tile_pos: &TilePos,
-        last_tile_pos: &TilePos,
-        world: &World,
-    ) -> bool {
-        let Some(object_stack_class) = world.get::<ObjectStackingClass>(entity_moving) else {
-            return false;
-        };
-        let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
-            return false;
-        };
-        if tile_objects.has_space(object_stack_class) == true {
-            return true;
-        }
-        return false;
-    }
-}
-
-pub struct MoveCheckTerrain;
-
-impl TileMoveCheck for MoveCheckTerrain {
-    fn is_valid_move(
-        &self,
-        entity_moving: Entity,
-        tile_entity: Entity,
-        tile_pos: &TilePos,
-        last_tile_pos: &TilePos,
-        world: &World,
-    ) -> bool {
-        let Some(object_movement) = world.get::<ObjectMovement>(entity_moving) else {
-            return false;
-        };
-        let Some(tile_terrain_info) = world.get::<TileTerrainInfo>(tile_entity) else {
-            return false;
-        };
-        if object_movement
-            .object_terrain_movement_rules
-            .can_move_on_tile(tile_terrain_info)
-            == true
-        {
-            return true;
-        }
-        return false;
-    }
-}
-
+/// Simple enum to represent whether Diagonal Movement is enabled or disabled
 #[derive(Clone, Eq, Hash, PartialEq, Default)]
 pub enum DiagonalMovement {
     Enabled,
@@ -357,6 +343,7 @@ pub enum DiagonalMovement {
 }
 
 impl DiagonalMovement {
+    /// Returns true or false depending on whether Diagonal Movement is enabled or disabled
     pub fn is_diagonal(&self) -> bool {
         return match self {
             DiagonalMovement::Enabled => true,
@@ -365,110 +352,40 @@ impl DiagonalMovement {
     }
 }
 
+/// Resource that holds the TilePos of any available moves and the move nodes of whatever the [`calculate_move`]
+/// function created
 #[derive(Clone, Eq, PartialEq, Default, Resource)]
 pub struct CurrentMovementInformation {
     pub available_moves: Vec<TilePos>,
     pub move_nodes: HashMap<TilePos, MoveNode>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub enum MoveError {
-    NotValidMove(String),
-}
-
-impl Default for MoveError {
-    fn default() -> Self {
-        MoveError::NotValidMove(String::from("Invalid Move"))
+impl CurrentMovementInformation {
+    /// Returns true or false if CurrentMovementInformation contains a move at the assigned TilePos
+    pub fn contains_move(&self, new_pos: &TilePos) -> bool {
+        return if self.available_moves.contains(new_pos) {
+            true
+        } else {
+            false
+        };
+    }
+    
+    pub fn clear_information(&mut self){
+        self.available_moves.clear();
+        self.move_nodes.clear();
     }
 }
 
-///
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub enum MoveEvent {
-    MoveBegin {
-        object_moving: Entity,
-    },
-    MoveCalculated {
-        available_moves: Vec<TilePos>,
-    },
-    TryMoveObject {
-        object_moving: Entity,
-        new_pos: TilePos,
-    },
-    MoveComplete {
-        object_moved: Entity,
-    },
-}
-
-// main events
-// MoveBegin
-// MoveCalculated (Vec<TilePos>)
-// MoveObject
-// MoveComplete
-
-fn handle_move_begin_events(mut world: &mut World) {
-    let mut move_events_vec: Vec<MoveEvent> = vec![];
-
-    // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
-    // as if you were writing an ordinary system.
-    let mut system_state: SystemState<EventReader<MoveEvent>> = SystemState::new(&mut world);
-
-    // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
-    // system_state.get(&world) provides read-only versions of your system parameters instead.
-    let (mut move_events) = system_state.get_mut(&mut world);
-
-    for event in move_events.iter() {
-        match event {
-            MoveEvent::MoveBegin { object_moving } => {
-                move_events_vec.push(MoveEvent::MoveBegin {
-                    object_moving: *object_moving,
-                });
-            }
-            _ => {}
-        }
-    }
-
-    // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
-    // as if you were writing an ordinary system.
-    let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(&mut world);
-
-    // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
-    // system_state.get(&world) provides read-only versions of your system parameters instead.
-    let movement_system = system_state.get(&world);
-
-    let mut move_info: (Vec<TilePos>, MovementNodes) = (
-        vec![],
-        MovementNodes {
-            move_nodes: HashMap::new(),
-        },
-    );
-
-    for event in move_events_vec {
-        match event {
-            MoveEvent::MoveBegin { object_moving } => {
-                move_info = movement_system.movement_calculator.calculate_move(
-                    &movement_system,
-                    &object_moving,
-                    &world,
-                );
-            }
-            _ => {}
-        }
-    }
-
-    if move_info.0.len() > 0 {
-        world.resource_scope(|world, mut a: Mut<CurrentMovementInformation>| {
-            a.available_moves = move_info.0;
-            a.move_nodes = move_info.1.move_nodes;
-        });
-    }
-}
-
+/// Struct used in a [`MovementCalculator`] to hold the list of [`MoveNode`]
 pub struct MovementNodes {
     pub move_nodes: HashMap<TilePos, MoveNode>,
 }
 
 impl MovementNodes {
+    /// Adds a Node to the MovementNodes Hashmap. If the Hashmap already contains a node for the designated
+    /// TilePos then it does nothing.
+    /// 
+    /// The instantiated node contains a None value for the move_cost.
     pub fn add_node(&mut self, tile_pos: &TilePos, prior_node: MoveNode) {
         // either get the current item in the move nodes or make a new default node and add it to the hashmap and then return that
         if self.move_nodes.contains_key(&tile_pos) {
@@ -481,12 +398,14 @@ impl MovementNodes {
             self.move_nodes.insert(*tile_pos, node);
         }
     }
-
+    
+    /// Gets the node at the specified TilePos and returns a mutable reference to it
     pub fn get_node_mut(&mut self, tile_pos: &TilePos) -> Option<&mut MoveNode> {
         // either get the current item in the move nodes or make a new default node and add it to the hashmap and then return that
         self.move_nodes.get_mut(&tile_pos)
     }
 
+    /// Returns a mutable reference for both nodes specified and returns them in the same order
     pub fn get_two_node_mut(
         &mut self,
         node_one: &TilePos,
@@ -508,7 +427,9 @@ impl MovementNodes {
         };
     }
 
-    pub fn get_node_neighbors(
+    /// Returns the TilePos for all the nodes neighbors. Will correctly work on edges where a TilePos
+    /// is not valid. Will return diagonal nodes based on the diagonal_movement bool.
+    pub fn get_neighbors_tilepos(
         &self,
         node_to_get_neighbors: TilePos,
         diagonal_movement: bool,
@@ -579,6 +500,7 @@ impl MovementNodes {
     }
 }
 
+/// Represents a tile in a MovementNodes struct. Used to hold information relevant to movement calculation
 #[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
 pub struct MoveNode {
     pub node_pos: TilePos,
@@ -586,217 +508,104 @@ pub struct MoveNode {
     pub move_cost: Option<i32>,
 }
 
-// djikstras
-// We calculate each neighboring node, whether we can move to them or not and what their movement cost is
-// we keep all the nodes we've built but havent visited in a list sorted by the movement cost
-// we guessed for them. Every node in this list will have a movement speed guess as we only insert after we have guessed it
-// every time we evauluate all of the nodes of a neighbor we mark the node as visited, remove it from the unvisited list
-// then pick the next shortest unvisited node to evaluate its neighbors. We should be able to cross reference
-// the visited list with the nodes neighbors to ensure we dont ever get a node we've already visited before
-/*
-while nodes to evaluate > 0{
-
-get node with shortest guess
-
-get that nodes neighbors
- if the visited list contains a neighbor we ignore that neighbor
-guess for all the nodes neighbors
-guess for each neighbor
---- run the can move here functions. if we can move then we guess its movement cost, move it to the unvisited list and then keep going
-after evaluating each neighbor we end that loop and restart again if we have more nodes to visit
-
-
-
-
+/// An error that represents any MoveErrors
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
+pub enum MoveError {
+    NotValidMove(String),
 }
-*/
-/*
-pub fn calculate_move(
-    object_moving: &Entity,
-    object_query: &Query<
-        (&ObjectGridPosition, &ObjectStackingClass, &ObjectMovement),
-        With<Object>,
-    >,
-    mut tile_query: &Query<(&TileObjectStacks, &TileTerrainInfo, &TileMovementCosts)>,
-    tilemap_q: &mut Query<(&mut Map, &mut TileStorage, &TilemapSize), Without<Object>>,
-    movement_information: &mut ResMut<CurrentMovementInformation>,
-) {
-    // Get the moving objects stuff
-    let (object_grid_position, object_stack_class, object_movement) =
-        object_query.get(*object_moving).unwrap();
 
-    // gets the map components
-    let (map, tile_storage, tilemap_size) = tilemap_q.single_mut();
+impl Default for MoveError {
+    fn default() -> Self {
+        MoveError::NotValidMove(String::from("Invalid Move"))
+    }
+}
 
-    let mut movement_calculator = MovementNodes {
-        move_nodes: HashMap::new(),
-    };
-    movement_calculator.move_nodes.insert(
-        object_grid_position.tile_position,
-        MoveNode {
-            node_pos: object_grid_position.tile_position,
-            prior_node: object_grid_position.tile_position,
-            move_cost: Some(0),
+/// A move event. Used to conduct actions related to object movement
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub enum MoveEvent {
+    MoveBegin {
+        object_moving: Entity,
+    },
+    MoveCalculated {
+        available_moves: Vec<TilePos>,
+    },
+    TryMoveObject {
+        object_moving: Entity,
+        new_pos: TilePos,
+    },
+    MoveComplete {
+        object_moved: Entity,
+    },
+}
+
+// main events
+// MoveBegin
+// MoveCalculated (Vec<TilePos>)
+// MoveObject
+// MoveComplete
+
+/// Handles all MoveBegin events. Uses the MovementSystem resource to calculate the move and update
+/// the CurrentMoveInformation resource
+fn handle_move_begin_events(mut world: &mut World) {
+    let mut move_events_vec: Vec<MoveEvent> = vec![];
+
+    // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
+    // as if you were writing an ordinary system.
+    let mut system_state: SystemState<EventReader<MoveEvent>> = SystemState::new(&mut world);
+
+    // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
+    // system_state.get(&world) provides read-only versions of your system parameters instead.
+    let (mut move_events) = system_state.get_mut(&mut world);
+
+    for event in move_events.iter() {
+        match event {
+            MoveEvent::MoveBegin { object_moving } => {
+                move_events_vec.push(MoveEvent::MoveBegin {
+                    object_moving: *object_moving,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    // Construct a `SystemState` struct, passing in a tuple of `SystemParam`
+    // as if you were writing an ordinary system.
+    let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(&mut world);
+
+    // Use system_state.get_mut(&mut world) and unpack your system parameters into variables!
+    // system_state.get(&world) provides read-only versions of your system parameters instead.
+    let movement_system = system_state.get(&world);
+
+    let mut move_info: (Vec<TilePos>, MovementNodes) = (
+        vec![],
+        MovementNodes {
+            move_nodes: HashMap::new(),
         },
     );
 
-    // unvisited nodes
-    let mut unvisited_nodes: Vec<MoveNode> = vec![MoveNode {
-        node_pos: object_grid_position.tile_position,
-        prior_node: object_grid_position.tile_position,
-        move_cost: Some(0),
-    }];
-    let mut visited_nodes: Vec<TilePos> = vec![];
+    for event in move_events_vec {
+        match event {
+            MoveEvent::MoveBegin { object_moving } => {
+                move_info = movement_system.movement_calculator.calculate_move(
+                    &movement_system,
+                    &object_moving,
+                    &world,
+                );
+            }
+            _ => {}
+        }
+    }
 
-    while unvisited_nodes.len() > 0 {
-        unvisited_nodes.sort_by(|x, y| {
-            x.move_cost
-                .unwrap()
-                .partial_cmp(&y.move_cost.unwrap())
-                .unwrap()
+    if move_info.0.len() > 0 {
+        world.resource_scope(|world, mut a: Mut<CurrentMovementInformation>| {
+            a.available_moves = move_info.0;
+            a.move_nodes = move_info.1.move_nodes;
         });
-
-        let Some(current_node) = unvisited_nodes.get(0) else {
-            continue;
-            };
-
-        let neighbors = movement_calculator.get_node_neighbors(
-            current_node.node_pos,
-            movement_information,
-            tilemap_size,
-        );
-
-        let current_node = *current_node;
-
-        for neighbor in neighbors.iter() {
-            if visited_nodes.contains(neighbor) {
-                continue;
-            }
-            let Some(tile_entity) = tile_storage.get(&neighbor) else {
-                continue;
-
-                };
-            // if the tile has the needed components
-            if let Ok((tile_objects, tile_terrain_info, tile_movement_costs)) =
-                tile_query.get(tile_entity)
-            {
-                //info!("{:?}", tile_terrain_info.terrain_type);
-                //info!("{:?}", neighbor);
-
-                if tile_objects.has_space(object_stack_class) != true {
-                    //info!("No Space");
-                    continue;
-                }
-
-                if object_movement
-                    .object_terrain_movement_rules
-                    .can_move_on_tile(tile_terrain_info)
-                    != true
-                {
-                    //info!("Not allowed on terrain");
-                    visited_nodes.push(*neighbor);
-                    continue;
-                }
-
-                //
-                if calculate_move_node(
-                    current_node,
-                    neighbor,
-                    &mut movement_calculator,
-                    tile_movement_costs,
-                    object_movement,
-                ) {
-                    //info!("had enough movement");
-                    unvisited_nodes.push(*movement_calculator.get_node(neighbor, current_node));
-                    movement_information.available_moves.push(*neighbor);
-                } else {
-                    //info!("Not enough movement");
-                }
-
-                // we have the tile that got the neighbor, the tile we are checking, and that tile has
-                // its cost as well as the current lowest cost tile that reached it
-
-                // We want to send the tile that got the current tile, the current tile, and whatever it
-                // needs to a function and return a bool telling us if we can move there. If we can then
-                // we want to add this new tile to the list of available moves and then add it to the list of
-                // nodes to evaluate. And then we remove the current node after we finished all the neighbors
-
-                // the tile has space. so now we need to decide can we even move to this tile
-                // basically we take the move cost from the prior_move_node, add the move cost from
-                // the new tile, and see if we have enough movement to make it into it
-            }
-        }
-
-        unvisited_nodes.remove(0);
-        visited_nodes.push(current_node.node_pos);
     }
-
-    movement_information.move_nodes = movement_calculator.move_nodes;
 }
 
-pub fn calculate_move_node(
-    tile_moving_from: MoveNode,
-    tile_moving_to: &TilePos,
-    movement_calculator: &mut MovementNodes,
-    tile_movement_costs: &TileMovementCosts,
-    object_movement: &ObjectMovement,
-) -> bool {
-    let mut node = movement_calculator.get_node(tile_moving_to, tile_moving_from);
-    if node.move_cost.is_some() {
-        if (tile_moving_from.move_cost.unwrap()
-            + *tile_movement_costs
-                .movement_type_cost
-                .get(object_movement.movement_type)
-                .unwrap_or_else(|| &1) as i32)
-            < (node.move_cost.unwrap())
-        {
-            node.move_cost = Some(
-                tile_moving_from.move_cost.unwrap()
-                    + *tile_movement_costs
-                        .movement_type_cost
-                        .get(object_movement.movement_type)
-                        .unwrap_or_else(|| &1) as i32,
-            );
-            node.prior_node = tile_moving_from.node_pos;
-            return true;
-        }
-    } else {
-        if (tile_moving_from.move_cost.unwrap()
-            + *tile_movement_costs
-                .movement_type_cost
-                .get(object_movement.movement_type)
-                .unwrap_or_else(|| &1) as i32)
-            <= object_movement.move_points
-        {
-            node.move_cost = Some(
-                tile_moving_from.move_cost.unwrap()
-                    + *tile_movement_costs
-                        .movement_type_cost
-                        .get(object_movement.movement_type)
-                        .unwrap_or_else(|| &1) as i32,
-            );
-            node.prior_node = tile_moving_from.node_pos;
-            return true;
-        }
-    }
-
-    return false;
-}
-
- */
-
-// we have the tile that got the neighbor, the tile we are checking, and that tile has
-// its cost as well as the current lowest cost tile that reached it
-
-// We want to send the tile that got the current tile, the current tile, and whatever it
-// needs to a function and return a bool telling us if we can move there. If we can then
-// we want to add this new tile to the list of available moves and then add it to the list of
-// nodes to evaluate. And then we remove the current node after we finished all the neighbors
-
-// the tile has space. so now we need to decide can we even move to this tile
-// basically we take the move cost from the prior_move_node, add the move cost from
-// the new tile, and see if we have enough movement to make it into it
-
+/// Handles the TryMove events. Will check if the given TilePos is inside the CurrentMovementInformation
+/// resource and will move the unit if so.
 fn handle_try_move_events(
     mut move_events: ParamSet<(EventReader<MoveEvent>, EventWriter<MoveEvent>)>,
     mut object_query: Query<
@@ -830,7 +639,7 @@ fn handle_try_move_events(
                 object_moving,
                 new_pos,
             } => {
-                if check_move(new_pos, &mut movement_information) {
+                if movement_information.contains_move(new_pos) {
                     info!("check move worked");
                     result = move_object(
                         object_moving,
@@ -863,7 +672,7 @@ fn handle_try_move_events(
 /// it does not provide any sort of valid movement
 ///
 /// currently only works for one map entity. If there are more than one it will panic
-
+//TODO update this to use the MapHandler resource
 pub fn move_object(
     object_moving: &Entity,
     new_pos: &TilePos,
@@ -937,121 +746,64 @@ pub fn move_object(
 
 pub fn move_complete(object_moving: Entity) {}
 
-pub fn check_move(
-    new_pos: &TilePos,
-    movement_information: &mut ResMut<CurrentMovementInformation>,
-) -> bool {
-    return if movement_information.available_moves.contains(new_pos) {
-        true
-    } else {
-        false
-    };
-}
-/*
-pub fn get_neighbors_tile_pos(
-    origin_tile: TilePos,
-    tilemap_size: &TilemapSize,
-    movement_information: &mut ResMut<CurrentMovementInformation>,
-) -> Vec<MoveNode> {
-    let mut neighbor_tiles: Vec<MoveNode> = vec![];
+/// implements TileMoveCheck. Provides a check for whether a tile has space for the object thats moving's
+/// object stacking class
+pub struct MoveCheckSpace;
 
-    if let Some(north) = TilePos::from_i32_pair(
-        origin_tile.x as i32,
-        origin_tile.y as i32 + 1,
-        &tilemap_size,
-    ) {
-        neighbor_tiles.push(MoveNode {
-            node_pos: north,
-            prior_node: origin_tile,
-            move_cost: None,
-        });
-    }
-    if let Some(east) = TilePos::from_i32_pair(
-        origin_tile.x as i32 + 1,
-        origin_tile.y as i32,
-        &tilemap_size,
-    ) {
-        neighbor_tiles.push(MoveNode {
-            node_pos: east,
-            prior_node: origin_tile,
-            move_cost: None,
-        });
-    }
-    if let Some(south) = TilePos::from_i32_pair(
-        origin_tile.x as i32,
-        origin_tile.y as i32 - 1,
-        &tilemap_size,
-    ) {
-        neighbor_tiles.push(MoveNode {
-            node_pos: south,
-            prior_node: origin_tile,
-            move_cost: None,
-        });
-    }
-    if let Some(west) = TilePos::from_i32_pair(
-        origin_tile.x as i32 - 1,
-        origin_tile.y as i32,
-        &tilemap_size,
-    ) {
-        neighbor_tiles.push(MoveNode {
-            node_pos: west,
-            prior_node: origin_tile,
-            move_cost: None,
-        });
-    }
-
-    if movement_information.diagonal_movement == DiagonalMovement::Enabled {
-        if let Some(northwest) = TilePos::from_i32_pair(
-            origin_tile.x as i32 - 1,
-            origin_tile.y as i32 + 1,
-            &tilemap_size,
-        ) {
-            neighbor_tiles.push(MoveNode {
-                node_pos: northwest,
-                prior_node: origin_tile,
-                move_cost: None,
-            });
+impl TileMoveCheck for MoveCheckSpace {
+    fn is_valid_move(
+        &self,
+        entity_moving: Entity,
+        tile_entity: Entity,
+        tile_pos: &TilePos,
+        last_tile_pos: &TilePos,
+        world: &World,
+    ) -> bool {
+        let Some(object_stack_class) = world.get::<ObjectStackingClass>(entity_moving) else {
+            return false;
+        };
+        let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
+            return false;
+        };
+        if tile_objects.has_space(object_stack_class) == true {
+            return true;
         }
-        if let Some(northeast) = TilePos::from_i32_pair(
-            origin_tile.x as i32 + 1,
-            origin_tile.y as i32 + 1,
-            &tilemap_size,
-        ) {
-            neighbor_tiles.push(MoveNode {
-                node_pos: northeast,
-                prior_node: origin_tile,
-                move_cost: None,
-            });
-        }
-        if let Some(southeast) = TilePos::from_i32_pair(
-            origin_tile.x as i32 + 1,
-            origin_tile.y as i32 - 1,
-            &tilemap_size,
-        ) {
-            neighbor_tiles.push(MoveNode {
-                node_pos: southeast,
-                prior_node: origin_tile,
-                move_cost: None,
-            });
-        }
-        if let Some(southwest) = TilePos::from_i32_pair(
-            origin_tile.x as i32 - 1,
-            origin_tile.y as i32 - 1,
-            &tilemap_size,
-        ) {
-            neighbor_tiles.push(MoveNode {
-                node_pos: southwest,
-                prior_node: origin_tile,
-                move_cost: None,
-            });
-        }
+        return false;
     }
-    neighbor_tiles
 }
 
- */
+/// implements TileMoveCheck. Provides a check for whether an object is able to move in the given tiles
+/// terrain or not
+pub struct MoveCheckTerrain;
 
-/// Struct used to define a new [`MovementType`]
+impl TileMoveCheck for MoveCheckTerrain {
+    fn is_valid_move(
+        &self,
+        entity_moving: Entity,
+        tile_entity: Entity,
+        tile_pos: &TilePos,
+        last_tile_pos: &TilePos,
+        world: &World,
+    ) -> bool {
+        let Some(object_movement) = world.get::<ObjectMovement>(entity_moving) else {
+            return false;
+        };
+        let Some(tile_terrain_info) = world.get::<TileTerrainInfo>(tile_entity) else {
+            return false;
+        };
+        if object_movement
+            .object_terrain_movement_rules
+            .can_move_on_tile(tile_terrain_info)
+            == true
+        {
+            return true;
+        }
+        return false;
+    }
+}
+
+/// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
+/// for movement costs chiefly
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
 pub struct MovementType {
     pub name: &'static str,
@@ -1087,7 +839,7 @@ pub struct TileMovementRules {
     pub movement_cost_rules: HashMap<TerrainType, TileMovementCosts>,
 }
 
-//UNIT MOVEMENT STUFF
+// UNIT MOVEMENT STUFF
 
 /// Basic Bundle that supplies all needed movement components for a unit
 #[derive(Bundle)]
@@ -1095,6 +847,7 @@ pub struct UnitMovementBundle {
     pub object_movement: ObjectMovement,
 }
 
+/// Required for an Object to move. Without this an object is unable to move.
 #[derive(Clone, Eq, PartialEq, Debug, Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
@@ -1107,7 +860,7 @@ pub struct ObjectMovement {
 /// The rules are evaluated in a two step process. terrain_type_rules first, and then terrain_class_rules second
 ///
 /// - terrain_type_rules should be considered an exception to terrain_class_rules and only used if you want to
-/// allow or deny specific [`TerrainType`]s. Whatever bool you set that specific [`TerrainType`] controls
+/// allow or deny specific [`TerrainType`]s. Whatever bool you set for that specific [`TerrainType`] controls
 /// whether that tile is a valid move tile or not. Rules in this will be followed over any TerrainClass
 /// rules.
 /// - terrain_class_rules should be the first option used when assigning what terrain an object can
