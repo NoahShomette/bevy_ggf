@@ -1,17 +1,27 @@
 use bevy::prelude::*;
-use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::BggfDefaultPlugins;
 
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
-    ObjectStackingClass, StackingClass, TileObjectStacks, TileStackCountMax,
+    ObjectStackingClass, ObjectStacksCount, StackingClass, TileObjectStacks,
 };
-use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject, MapHandler};
-use bevy_ggf::movement::{MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules, UnitMovementBundle, SquareMovementSystem, MovementSystem, MoveCheckSpace, DiagonalMovement, MoveCheckTerrain};
-use bevy_ggf::object::{Object, ObjectCoreBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle};
-use bevy_ggf::selection::{SelectObjectEvent, SelectableEntity, SelectedObject, ClearSelectedObject};
+use bevy_ggf::mapping::{
+    tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, MapHandler, UpdateMapTileObject,
+};
+use bevy_ggf::movement::{
+    CurrentMovementInformation, DiagonalMovement, MoveCheckSpace, MoveCheckTerrain, MoveEvent,
+    MovementSystem, MovementType, ObjectMovement, ObjectTerrainMovementRules, SquareMovementSystem,
+    TileMovementCosts, TileMovementRules, UnitMovementBundle,
+};
+use bevy_ggf::object::{
+    Object, ObjectClass, ObjectCoreBundle, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
+    UnitBundle,
+};
+use bevy_ggf::selection::{
+    ClearSelectedObject, SelectObjectEvent, SelectableEntity, SelectedObject,
+};
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -120,7 +130,6 @@ fn startup(
                 tile_movement_rules.movement_cost_rules.insert(
                     *terrain_extension_type,
                     TileMovementCosts::new(vec![(&MOVEMENT_TYPES[0], 2), (&MOVEMENT_TYPES[1], 2)]),
-
                 );
             }
             "Sand" => {
@@ -133,17 +142,13 @@ fn startup(
         }
     }
 
-    let mut tile_stack_hashmap: HashMap<&StackingClass, TileStackCountMax> = HashMap::new();
-    tile_stack_hashmap.insert(
+    let tile_stack_rules = TileObjectStacks::new(vec![(
         &STACKING_CLASS_GROUND,
-        TileStackCountMax {
+        ObjectStacksCount {
             current_count: 0,
             max_count: 1,
         },
-    );
-    let tile_stack_rules: TileObjectStacks = TileObjectStacks {
-        tile_object_stacks: tile_stack_hashmap,
-    };
+    )]);
 
     //let map_texture_vec: Vec<Box<dyn TerrainExtensionTraitBase>> = vec![Box::new(Grassland{}), Box::new(Hill{}), Box::new(Ocean{})];
     Map::generate_random_map(
@@ -163,13 +168,10 @@ fn startup(
     let grid_size: TilemapGridSize = tile_size.into();
     let tile_pos = TilePos::new(0, 0);
 
-    let movement_rules = ObjectTerrainMovementRules {
-        terrain_class_rules: vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
-        terrain_type_rules: ObjectTerrainMovementRules::new_terrain_type(vec![(
-            &TERRAIN_TYPES[2],
-            false,
-        )]),
-    };
+    let movement_rules = ObjectTerrainMovementRules::new(
+        vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
+        vec![(&TERRAIN_TYPES[2], false)],
+    );
 
     let entity = commands.spawn(UnitBundle {
         object: Object,
@@ -233,14 +235,12 @@ fn startup(
         object_entity: entity.id(),
         tile_pos: TilePos::new(1, 1),
     });
-    
 }
 
 fn handle_right_click(
     mut click_event_reader: EventReader<ClickEvent>,
     mut clear_select_object_event_writer: EventWriter<ClearSelectedObject>,
 ) {
-
     for event in click_event_reader.iter() {
         match event {
             ClickEvent::RightClick { world_pos: _ } => {
@@ -284,10 +284,6 @@ fn select_and_move_unit_to_tile_clicked(
             _ => {}
         }
     }
-    
-    
-    
-    
 }
 
 fn handle_move_complete_event(
@@ -355,7 +351,6 @@ fn handle_move_sprites(
 }
 
 fn show_move_path(
-
     cursor_world_pos: Res<CursorWorldPos>,
     movement_information: Res<CurrentMovementInformation>,
     map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
@@ -366,7 +361,6 @@ fn show_move_path(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    
     if *sprite_handle_exists != true {
         *sprite_handle = asset_server.load("dot.png");
     }

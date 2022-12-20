@@ -7,7 +7,7 @@
 // Maybe buildings get a marker component or trait, then if you want something to be a building its the same
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
-use crate::mapping::terrain::TileTerrainInfo;
+use crate::mapping::terrain::{TileTerrainInfo};
 use bevy::prelude::{Bundle, Component, Entity};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::TileBundle;
@@ -38,13 +38,31 @@ pub struct GGFTileObjectBundle {
 pub struct Tile;
 
 /// Defines a new TileStackRule based on an [`ObjectClass`]. The count of objects in the tile is kept
-/// using [`TileStackCountMax`].
+/// using [`ObjectStacksCount`].
 #[derive(Clone, Eq, PartialEq, Component)]
 pub struct TileObjectStacks {
-    pub tile_object_stacks: HashMap<&'static StackingClass, TileStackCountMax>,
+    pub tile_object_stacks: HashMap<&'static StackingClass, ObjectStacksCount>,
 }
 
 impl TileObjectStacks {
+    
+    pub fn new(stack_rules : Vec<(&'static StackingClass, ObjectStacksCount)>) -> TileObjectStacks{
+        TileObjectStacks{
+            tile_object_stacks: TileObjectStacks::new_terrain_type_rules(stack_rules),
+        }
+    }
+
+    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    pub fn new_terrain_type_rules(
+        stack_rules: Vec<(&'static StackingClass, ObjectStacksCount)>,
+    ) -> HashMap<&'static StackingClass, ObjectStacksCount> {
+        let mut hashmap: HashMap<&'static StackingClass, ObjectStacksCount> = HashMap::new();
+        for rule in stack_rules.iter(){
+            hashmap.insert(rule.0, rule.1);
+        }
+        hashmap
+    }
+    
     pub fn has_space(&self, object_class: &ObjectStackingClass) -> bool {
         return if let Some(tile_stack_count_max) =
             self.tile_object_stacks.get(object_class.stack_class)
@@ -87,19 +105,20 @@ pub struct ObjectStackingClass {
 
 /// Wraps two u32s for use in a [`TileStackRules`] component. Used to keep track of the current_count
 /// of objects belonging to that [`ObjectClass`] in the tile and the max_count allowed in the tile.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct TileStackCountMax {
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+pub struct ObjectStacksCount {
     pub current_count: u32,
     pub max_count: u32,
 }
 
-/// Simple Vec that holds Entities that are currently in the tile. Is not sorted by [`ObjectClasses`]
+/// Simple Vec that holds Entities that are currently in the tile.
 #[derive(Clone, Eq, PartialEq, Default, Component)]
 pub struct TileObjects {
     pub entities_in_tile: Vec<Entity>,
 }
 
 impl TileObjects {
+    /// Checks if the entity is currently in this tile
     pub fn contains_object(&self, entity: Entity) -> bool {
         self.entities_in_tile.contains(&entity)
     }
