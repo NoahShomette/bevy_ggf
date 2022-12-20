@@ -1,6 +1,6 @@
 //!
 
-use crate::mapping::tiles::{TileObjectStacks, TileObjects};
+use crate::mapping::tiles::{TileObjects};
 use bevy::app::App;
 use bevy::log::info;
 use bevy::prelude::{Component, Entity, EventReader, EventWriter, Plugin, Query, ResMut, Resource};

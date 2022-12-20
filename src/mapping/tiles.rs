@@ -8,7 +8,7 @@
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
 use crate::mapping::terrain::TileTerrainInfo;
-use bevy::prelude::{Bundle, Commands, Component, Entity};
+use bevy::prelude::{Bundle, Component, Entity};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::TileBundle;
 
@@ -46,30 +46,29 @@ pub struct TileObjectStacks {
 
 impl TileObjectStacks {
     pub fn has_space(&self, object_class: &ObjectStackingClass) -> bool {
-        if let Some(tile_stack_count_max) = self.tile_object_stacks.get(object_class.stack_class)
+        return if let Some(tile_stack_count_max) =
+            self.tile_object_stacks.get(object_class.stack_class)
         {
-            if tile_stack_count_max.current_count < tile_stack_count_max.max_count {
-                return true;
-            }
+            tile_stack_count_max.current_count < tile_stack_count_max.max_count
         } else {
-            return false;
-        }
-        return false;
+            false
+        };
     }
 
     pub fn increment_object_class_count(&mut self, object_class: &ObjectStackingClass) {
-        if let Some(tile_stack_count_max) = self.tile_object_stacks.get_mut(object_class.stack_class)
+        if let Some(tile_stack_count_max) =
+            self.tile_object_stacks.get_mut(object_class.stack_class)
         {
             tile_stack_count_max.current_count += 1;
         }
     }
 
     pub fn decrement_object_class_count(&mut self, object_class: &ObjectStackingClass) {
-        if let Some(tile_stack_count_max) = self.tile_object_stacks.get_mut(object_class.stack_class)
+        if let Some(tile_stack_count_max) =
+            self.tile_object_stacks.get_mut(object_class.stack_class)
         {
-            if tile_stack_count_max.current_count == 0{
-                
-            }else{
+            if tile_stack_count_max.current_count == 0 {
+            } else {
                 tile_stack_count_max.current_count -= 1;
             }
         }
@@ -101,26 +100,21 @@ pub struct TileObjects {
 }
 
 impl TileObjects {
-    
     pub fn contains_object(&self, entity: Entity) -> bool {
-        return if self.entities_in_tile.contains(&entity) {
-            true
-        } else {
-            false
-        };
+        self.entities_in_tile.contains(&entity)
     }
 
-    pub fn add_object(&mut self, entity: Entity){
+    pub fn add_object(&mut self, entity: Entity) {
         self.entities_in_tile.push(entity);
     }
 
     pub fn remove_object(&mut self, entity: Entity) -> bool {
         let mut iter = self.entities_in_tile.iter();
-        return if let Some(position) = iter.position(|&i| i == entity) {
+        if let Some(position) = iter.position(|&i| i == entity) {
             self.entities_in_tile.remove(position);
             true
         } else {
             false
-        };
+        }
     }
 }

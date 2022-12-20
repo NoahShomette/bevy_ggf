@@ -1,19 +1,14 @@
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
-use bevy::math::Vec4Swizzles;
-use bevy::prelude::KeyCode::L;
-use bevy::prelude::Keyframes::Translation;
 use bevy::prelude::*;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::BggfDefaultPlugins;
-use std::thread::spawn;
 
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
-    ObjectStackingClass, StackingClass, TileObjectStacks, TileObjects, TileStackCountMax,
+    ObjectStackingClass, StackingClass, TileObjectStacks, TileStackCountMax,
 };
-use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_map_transform_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject, MapHandler};
+use bevy_ggf::mapping::{tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, UpdateMapTileObject, MapHandler};
 use bevy_ggf::movement::{MoveEvent, CurrentMovementInformation, MovementType, ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules, UnitMovementBundle, SquareMovementSystem, MovementSystem, MoveCheckSpace, DiagonalMovement, MoveCheckTerrain};
 use bevy_ggf::object::{Object, ObjectCoreBundle, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle};
 use bevy_ggf::selection::{SelectObjectEvent, SelectableEntity, SelectedObject, ClearSelectedObject};
@@ -151,7 +146,7 @@ fn startup(
     };
 
     //let map_texture_vec: Vec<Box<dyn TerrainExtensionTraitBase>> = vec![Box::new(Grassland{}), Box::new(Hill{}), Box::new(Ocean{})];
-    let map = Map::generate_random_map(
+    Map::generate_random_map(
         &mut commands,
         map_handler,
         &tilemap_size,
@@ -242,15 +237,13 @@ fn startup(
 }
 
 fn handle_right_click(
-    map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
     mut click_event_reader: EventReader<ClickEvent>,
     mut clear_select_object_event_writer: EventWriter<ClearSelectedObject>,
 ) {
-    let (transform, map_size, grid_size, map_type) = map_transform.single();
 
     for event in click_event_reader.iter() {
         match event {
-            ClickEvent::RightClick { world_pos } => {
+            ClickEvent::RightClick { world_pos: _ } => {
                 clear_select_object_event_writer.send(ClearSelectedObject)
             }
             _ => {}
@@ -325,11 +318,11 @@ fn handle_move_sprites(
     >,
     mut sprite_entities: Local<Vec<Entity>>,
     mut sprite_handle: Local<Handle<Image>>,
-    mut sprite_handle_exists: Local<bool>,
+    sprite_handle_exists: Local<bool>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    let (map, grid_size, map_type, mut tile_storage, map_transform) = tilemap_q.single_mut();
+    let (_map, grid_size, map_type, _tile_storage, map_transform) = tilemap_q.single_mut();
     if *sprite_handle_exists != true {
         *sprite_handle = asset_server.load("movement_sprite.png");
     }

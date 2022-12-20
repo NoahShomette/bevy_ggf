@@ -164,7 +164,6 @@ fn camera_logic(
         let y_dif =
             camera_cursor_information.last_click_cursor_position.y - current_cursor_position.y;
 
-        let mut left_click_hold_duration = 0.0;
         let mut did_left_click_hold = false;
         let mut is_moving_camera = false;
 
@@ -176,7 +175,7 @@ fn camera_logic(
                 || x_dif < -CLICK_DRAG_MIN_DISTANCE
                 || y_dif < -CLICK_DRAG_MIN_DISTANCE;
 
-            left_click_hold_duration = action_state
+            let left_click_hold_duration = action_state
                 .current_duration(CameraMovementAction::Click)
                 .as_secs_f32();
 

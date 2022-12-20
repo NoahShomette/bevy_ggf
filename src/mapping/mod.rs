@@ -10,7 +10,6 @@ use crate::movement::TileMovementRules;
 use crate::object::{Object, ObjectGridPosition};
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
-use bevy::prelude::KeyCode::Return;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
@@ -30,21 +29,20 @@ impl Plugin for BggfMappingPlugin {
 
 /// Master resource that holds the entities related to any maps
 #[derive(Default, Resource)]
-pub struct MapHandler{
-    map_entities: HashMap<IVec2, Entity>
+pub struct MapHandler {
+    map_entities: HashMap<IVec2, Entity>,
 }
 
 impl MapHandler {
-    
-    pub fn register_map_entity(&mut self, position: IVec2, entity: Entity){
+    pub fn register_map_entity(&mut self, position: IVec2, entity: Entity) {
         self.map_entities.insert(position, entity);
     }
-    
-    pub fn get_map_entity(&self, position: IVec2) -> Option<Entity>{
+
+    pub fn get_map_entity(&self, position: IVec2) -> Option<Entity> {
         let Some(map_entity) = self.map_entities.get(&position) else{
             return None;
         };
-        return Some(*map_entity);
+        Some(*map_entity)
     }
 }
 
@@ -59,7 +57,7 @@ pub struct Map {
 
 impl Map {
     pub fn generate_random_map(
-        mut commands: &mut Commands,
+        commands: &mut Commands,
         mut map_handler: ResMut<MapHandler>,
         tile_map_size: &TilemapSize,
         tilemap_type: &TilemapType,
@@ -96,7 +94,7 @@ impl Map {
                         },
                         tile: Tile,
                         tile_terrain_info: TileTerrainInfo {
-                            terrain_type: map_terrain_vec[tile_texture_index].clone(),
+                            terrain_type: map_terrain_vec[tile_texture_index],
                         },
                     })
                     .insert(GGFTileObjectBundle {
@@ -113,9 +111,9 @@ impl Map {
         let tile_size = *tilemap_tile_size;
         let grid_size: TilemapGridSize = tile_size.into();
         let map_type = TilemapType::default();
-        
-        map_handler.register_map_entity(IVec2{ x: 0, y: 0 }, tilemap_entity);
-        
+
+        map_handler.register_map_entity(IVec2 { x: 0, y: 0 }, tilemap_entity);
+
         commands
             .entity(tilemap_entity)
             .insert(TilemapBundle {
@@ -155,16 +153,16 @@ pub fn add_object_to_tile(
     if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
         tile_objects.add_object(object_to_add);
         object_grid_position.tile_position = tile_pos_to_add;
-        tile_stack_rules.increment_object_class_count(&object_stack_class);
+        tile_stack_rules.increment_object_class_count(object_stack_class);
 
         info!("entities in tile: {}", tile_objects.entities_in_tile.len());
         info!(
-                "tile_stacks_rules_count: {:?}",
-                tile_stack_rules
-                    .tile_object_stacks
-                    .get(&object_stack_class.stack_class)
-                    .unwrap()
-            );
+            "tile_stacks_rules_count: {:?}",
+            tile_stack_rules
+                .tile_object_stacks
+                .get(&object_stack_class.stack_class)
+                .unwrap()
+        );
     }
 }
 
@@ -179,26 +177,26 @@ pub fn remove_object_from_tile(
     let tile_entity = tile_storage.get(&tile_pos_to_remove).unwrap();
     if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
         tile_objects.remove_object(object_to_remove);
-        tile_stack_rules.decrement_object_class_count(&object_stack_class);
+        tile_stack_rules.decrement_object_class_count(object_stack_class);
 
         info!("entities in tile: {}", tile_objects.entities_in_tile.len());
         info!(
-                "tile_stacks_rules_count: {:?}",
-                tile_stack_rules
-                    .tile_object_stacks
-                    .get(&object_stack_class.stack_class)
-                    .unwrap()
-            );
+            "tile_stacks_rules_count: {:?}",
+            tile_stack_rules
+                .tile_object_stacks
+                .get(&object_stack_class.stack_class)
+                .unwrap()
+        );
     }
 }
 
 //TODO Decide if this enum is actually needed. Might be helpful sometimes but the move unit function can probably serve the same use mostly. Except it cant just remove a unit from the tile by events
 pub enum UpdateMapTileObject {
-    Add{
-        object_entity: Entity, 
+    Add {
+        object_entity: Entity,
         tile_pos: TilePos,
     },
-    Remove{
+    Remove {
         object_entity: Entity,
         tile_pos: TilePos,
     },
@@ -206,40 +204,30 @@ pub enum UpdateMapTileObject {
 
 fn update_map_tile_object_event(
     mut update_event: EventReader<UpdateMapTileObject>,
-    mut object_query: Query<
-        (
-            &mut ObjectGridPosition,
-            &ObjectStackingClass,
-        ),
-        With<Object>,
-    >,
+    mut object_query: Query<(&mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
     mut tile_query: Query<(&mut TileObjectStacks, &mut TileObjects)>,
-    mut tilemap_q: Query<
-        (
-            &mut Map,
-            &mut TileStorage,
-            &Transform,
-        ),
-        Without<Object>,
-    >,
+    mut tilemap_q: Query<&mut TileStorage, Without<Object>>,
 ) {
     for event in update_event.iter() {
         // gets the map components
-        let (map,mut tile_storage, map_transform) = tilemap_q.single_mut();
+        let mut tile_storage = tilemap_q.single_mut();
 
         match event {
-            UpdateMapTileObject::Add { object_entity, tile_pos } => {
+            UpdateMapTileObject::Add {
+                object_entity,
+                tile_pos,
+            } => {
                 // gets the components needed to move the object
                 let (mut object_grid_position, object_stack_class) =
                     object_query.get_mut(*object_entity).unwrap();
                 // if a tile exists at the selected point
-                if let Some(tile_entity) = tile_storage.get(&tile_pos) {
+                if let Some(tile_entity) = tile_storage.get(tile_pos) {
                     // if the tile has the needed components
                     if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
                         add_object_to_tile(
                             *object_entity,
                             &mut object_grid_position,
-                            &object_stack_class,
+                            object_stack_class,
                             &mut tile_storage,
                             &mut tile_query,
                             *tile_pos,
@@ -247,16 +235,19 @@ fn update_map_tile_object_event(
                     }
                 }
             }
-            UpdateMapTileObject::Remove { object_entity, tile_pos } => {
+            UpdateMapTileObject::Remove {
+                object_entity,
+                tile_pos,
+            } => {
                 let (object_grid_position, object_stack_class) =
                     object_query.get_mut(*object_entity).unwrap();
                 // if a tile exists at the selected point
-                if let Some(tile_entity) = tile_storage.get(&tile_pos) {
+                if let Some(tile_entity) = tile_storage.get(tile_pos) {
                     // if the tile has the needed components
                     if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
                         remove_object_from_tile(
                             *object_entity,
-                            &object_stack_class,
+                            object_stack_class,
                             &mut tile_storage,
                             &mut tile_query,
                             object_grid_position.tile_position,
@@ -296,11 +287,7 @@ pub fn world_pos_to_tile_pos(
         transformed_pos.xy()
     };
 
-    let tile_pos_result = TilePos::from_world_pos(&transformed_pos, map_size, grid_size, map_type);
-    match tile_pos_result {
-        None => None,
-        Some(tile_pos) => Some(tile_pos),
-    }
+    TilePos::from_world_pos(&transformed_pos, map_size, grid_size, map_type)
 }
 
 pub fn tile_pos_to_centered_map_world_pos(

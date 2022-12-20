@@ -1,7 +1,6 @@
-use bevy::math::IVec2;
 use crate::movement::UnitMovementBundle;
 use crate::selection::SelectableEntity;
-use bevy::prelude::{Bundle, Component, Entity, Resource, SpriteBundle};
+use bevy::prelude::{Bundle, Component, Resource, SpriteBundle};
 use bevy_ecs_tilemap::prelude::TilePos;
 use crate::mapping::tiles::ObjectStackingClass;
 
