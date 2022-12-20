@@ -6,7 +6,6 @@ use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
     GGFTileBundle, GGFTileObjectBundle, ObjectStackingClass, Tile, TileObjectStacks, TileObjects,
 };
-use crate::movement::TileMovementRules;
 use crate::object::{Object, ObjectGridPosition};
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
@@ -15,6 +14,7 @@ use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
+use crate::movement::TileMovementRules;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;

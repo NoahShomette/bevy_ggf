@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
-use bevy_ggf::BggfDefaultPlugins;
-
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, ObjectStacksCount, StackingClass, TileObjectStacks,
@@ -10,10 +8,11 @@ use bevy_ggf::mapping::tiles::{
 use bevy_ggf::mapping::{
     tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, MapHandler, UpdateMapTileObject,
 };
+use bevy_ggf::movement::packages::{MoveCheckSpace, MoveCheckTerrain, SquareMovementCalculator};
 use bevy_ggf::movement::{
-    CurrentMovementInformation, DiagonalMovement, MoveCheckSpace, MoveCheckTerrain, MoveEvent,
-    MovementSystem, MovementType, ObjectMovement, ObjectTerrainMovementRules, SquareMovementSystem,
-    TileMovementCosts, TileMovementRules, UnitMovementBundle,
+    CurrentMovementInformation, DiagonalMovement, MoveEvent, MovementSystem, MovementType,
+    ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules,
+    UnitMovementBundle,
 };
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectCoreBundle, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
@@ -22,6 +21,7 @@ use bevy_ggf::object::{
 use bevy_ggf::selection::{
     ClearSelectedObject, SelectObjectEvent, SelectableEntity, SelectedObject,
 };
+use bevy_ggf::BggfDefaultPlugins;
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -197,7 +197,7 @@ fn startup(
         },
         unit_movement_bundle: UnitMovementBundle {
             object_movement: ObjectMovement {
-                move_points: 5,
+                move_points: 10,
                 movement_type: &MOVEMENT_TYPES[0],
                 object_terrain_movement_rules: movement_rules.clone(),
             },
@@ -208,7 +208,7 @@ fn startup(
         tile_pos: TilePos::new(0, 0),
     });
 
-    let entity = commands.spawn(ObjectCoreBundle {
+    let entity = commands.spawn(UnitBundle {
         object: Object,
         object_info: ObjectInfo {
             object_type: &OBJECT_TYPE_RIFLEMAN,
@@ -229,6 +229,13 @@ fn startup(
             },
             texture: infantry_texture_handle.clone(),
             ..default()
+        },
+        unit_movement_bundle: UnitMovementBundle {
+            object_movement: ObjectMovement {
+                move_points: 20,
+                movement_type: &MOVEMENT_TYPES[0],
+                object_terrain_movement_rules: movement_rules.clone(),
+            },
         },
     });
     move_event_writer.send(UpdateMapTileObject::Add {
@@ -444,7 +451,7 @@ fn main() {
         .add_plugins(BggfDefaultPlugins)
         .add_plugin(TilemapPlugin)
         .insert_resource(MovementSystem{
-            movement_calculator: Box::new(SquareMovementSystem{ diagonal_movement: DiagonalMovement::Disabled }),
+            movement_calculator: Box::new(SquareMovementCalculator { diagonal_movement: DiagonalMovement::Disabled }),
             map_type: TilemapType::Square,
             tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckTerrain)],
         })
