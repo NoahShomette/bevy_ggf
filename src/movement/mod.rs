@@ -1,8 +1,8 @@
-pub mod core;
-pub mod packages;
+pub mod backend;
+pub mod defaults;
 
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
-use crate::movement::core::{
+use crate::movement::backend::{
     handle_move_begin_events, handle_try_move_events, MoveNode, MovementNodes,
 };
 use bevy::prelude::{
@@ -132,22 +132,28 @@ pub trait TileMoveCheck {
 
 /// Resource that holds the TilePos of any available moves and the move nodes of whatever the [`calculate_move`]
 /// function created
-#[derive(Clone, Eq, PartialEq, Default, Resource)]
+#[derive(Clone, Eq, PartialEq, Default, Debug, Resource)]
 pub struct CurrentMovementInformation {
-    pub available_moves: Vec<TilePos>,
-    pub move_nodes: HashMap<TilePos, MoveNode>,
+    pub available_moves: HashMap<TilePos, AvailableMove>,
 }
 
 impl CurrentMovementInformation {
     /// Returns true or false if CurrentMovementInformation contains a move at the assigned TilePos
     pub fn contains_move(&self, new_pos: &TilePos) -> bool {
-        self.available_moves.contains(new_pos)
+        self.available_moves.contains_key(new_pos)
     }
 
     pub fn clear_information(&mut self) {
         self.available_moves.clear();
-        self.move_nodes.clear();
     }
+}
+
+#[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
+pub struct AvailableMove{
+    pub tile_pos: TilePos,
+    pub prior_tile_pos: TilePos,
+    pub move_cost: i32,
+
 }
 
 /// A move event. Used to conduct actions related to object movement
@@ -197,6 +203,7 @@ impl DiagonalMovement {
         }
     }
 }
+
 
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly

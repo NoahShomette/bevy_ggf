@@ -5,7 +5,7 @@ use crate::mapping::MapHandler;
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks};
 use crate::movement::{DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, TileMoveCheck};
-use crate::movement::core::{MovementNodes, MoveNode, tile_movement_cost_check};
+use crate::movement::backend::{MovementNodes, MoveNode, tile_movement_cost_check};
 use crate::object::ObjectGridPosition;
 
 // BUILT IN IMPLEMENTATIONS

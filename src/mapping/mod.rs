@@ -4,7 +4,7 @@ pub mod tiles;
 
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
-    GGFTileBundle, GGFTileObjectBundle, ObjectStackingClass, Tile, TileObjectStacks, TileObjects,
+    BggfTileBundle, BggfTileObjectBundle, ObjectStackingClass, Tile, TileObjectStacks, TileObjects,
 };
 use crate::object::{Object, ObjectGridPosition};
 use bevy::math::Vec4Swizzles;
@@ -85,7 +85,7 @@ impl Map {
                     .unwrap();
 
                 let tile_entity = commands
-                    .spawn(GGFTileBundle {
+                    .spawn(BggfTileBundle {
                         tile_bundle: TileBundle {
                             position: tile_pos,
                             texture_index: TileTextureIndex(texture_index.texture_index),
@@ -97,7 +97,7 @@ impl Map {
                             terrain_type: map_terrain_vec[tile_texture_index],
                         },
                     })
-                    .insert(GGFTileObjectBundle {
+                    .insert(BggfTileObjectBundle {
                         tile_stack_rules: tile_stack_rules.clone(),
                         tile_objects: TileObjects::default(),
                     })

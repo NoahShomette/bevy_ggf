@@ -2,10 +2,7 @@ use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::mapping::{
     add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
 };
-use crate::movement::{
-    CurrentMovementInformation, MoveError, MoveEvent, MovementSystem, ObjectMovement,
-    TileMovementCosts,
-};
+use crate::movement::{AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem, ObjectMovement, TileMovementCosts};
 use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
@@ -246,8 +243,15 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
 
     if !move_info.0.is_empty() {
         world.resource_scope(|_world, mut a: Mut<CurrentMovementInformation>| {
-            a.available_moves = move_info.0;
-            a.move_nodes = move_info.1.move_nodes;
+            for (tile_pos, move_node) in move_info.1.move_nodes.iter(){
+                if move_node.move_cost.is_some() {
+                    a.available_moves.insert(*tile_pos, AvailableMove{
+                        tile_pos: move_node.node_pos,
+                        prior_tile_pos: move_node.prior_node,
+                        move_cost: move_node.move_cost.expect("All valid moves should have a move cost"),
+                    });
+                }
+            }
         });
     }
 }

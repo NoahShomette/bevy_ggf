@@ -7,7 +7,7 @@
 // Maybe buildings get a marker component or trait, then if you want something to be a building its the same
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
-use crate::mapping::terrain::{TileTerrainInfo};
+use crate::mapping::terrain::TileTerrainInfo;
 use bevy::prelude::{Bundle, Component, Entity};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::TileBundle;
@@ -20,7 +20,7 @@ use bevy_ecs_tilemap::prelude::TileBundle;
 /// components in every tile and one of the super bundles wont work it's recommended to create your
 /// own super bundles
 #[derive(Bundle)]
-pub struct GGFTileBundle {
+pub struct BggfTileBundle {
     /// Bevy_ecs_tilemap tile bundle
     pub tile_bundle: TileBundle,
     pub tile: Tile,
@@ -28,7 +28,7 @@ pub struct GGFTileBundle {
 }
 
 #[derive(Bundle)]
-pub struct GGFTileObjectBundle {
+pub struct BggfTileObjectBundle {
     pub tile_stack_rules: TileObjectStacks,
     pub tile_objects: TileObjects,
 }
@@ -37,17 +37,16 @@ pub struct GGFTileObjectBundle {
 #[derive(Component)]
 pub struct Tile;
 
-/// Defines a new TileStackRule based on an [`ObjectClass`]. The count of objects in the tile is kept
-/// using [`ObjectStacksCount`].
+/// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
+/// using an [`ObjectStacksCount`] struct.
 #[derive(Clone, Eq, PartialEq, Component)]
 pub struct TileObjectStacks {
     pub tile_object_stacks: HashMap<&'static StackingClass, ObjectStacksCount>,
 }
 
 impl TileObjectStacks {
-    
-    pub fn new(stack_rules : Vec<(&'static StackingClass, ObjectStacksCount)>) -> TileObjectStacks{
-        TileObjectStacks{
+    pub fn new(stack_rules: Vec<(&'static StackingClass, ObjectStacksCount)>) -> TileObjectStacks {
+        TileObjectStacks {
             tile_object_stacks: TileObjectStacks::new_terrain_type_rules(stack_rules),
         }
     }
@@ -57,12 +56,12 @@ impl TileObjectStacks {
         stack_rules: Vec<(&'static StackingClass, ObjectStacksCount)>,
     ) -> HashMap<&'static StackingClass, ObjectStacksCount> {
         let mut hashmap: HashMap<&'static StackingClass, ObjectStacksCount> = HashMap::new();
-        for rule in stack_rules.iter(){
+        for rule in stack_rules.iter() {
             hashmap.insert(rule.0, rule.1);
         }
         hashmap
     }
-    
+
     pub fn has_space(&self, object_class: &ObjectStackingClass) -> bool {
         return if let Some(tile_stack_count_max) =
             self.tile_object_stacks.get(object_class.stack_class)
@@ -93,11 +92,31 @@ impl TileObjectStacks {
     }
 }
 
+#[test] // This is kinda a useless test but whatever. new year new tests
+fn test_tile_object_stacks() {
+    const STACKING_CLASS_GROUND: StackingClass = StackingClass { name: "Ground" };
+
+    let tile_object_stacks = TileObjectStacks::new(vec![(
+        &STACKING_CLASS_GROUND,
+        ObjectStacksCount {
+            current_count: 0,
+            max_count: 1,
+        },
+    )]);
+
+    assert!(tile_object_stacks.has_space(&ObjectStackingClass {
+        stack_class: &STACKING_CLASS_GROUND,
+    },))
+}
+
+/// A StackingClass represents what kind of stack an object belongs to in a tile. This is used internally
+/// in [`TileObjectStacks`]
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StackingClass {
     pub name: &'static str,
 }
 
+/// A component to hold a [`StackingClass`]. 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Component)]
 pub struct ObjectStackingClass {
     pub stack_class: &'static StackingClass,

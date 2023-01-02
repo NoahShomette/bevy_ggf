@@ -8,7 +8,7 @@ use bevy_ggf::mapping::tiles::{
 use bevy_ggf::mapping::{
     tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, MapHandler, UpdateMapTileObject,
 };
-use bevy_ggf::movement::packages::{MoveCheckSpace, MoveCheckTerrain, SquareMovementCalculator};
+use bevy_ggf::movement::defaults::{MoveCheckSpace, MoveCheckTerrain, SquareMovementCalculator};
 use bevy_ggf::movement::{
     CurrentMovementInformation, DiagonalMovement, MoveEvent, MovementSystem, MovementType,
     ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules,
@@ -335,7 +335,7 @@ fn handle_move_sprites(
                 let sprite = commands.spawn(SpriteBundle {
                     transform: Transform {
                         translation: tile_pos_to_centered_map_world_pos(
-                            i,
+                            i.0,
                             map_transform,
                             grid_size,
                             map_type,
@@ -383,9 +383,10 @@ fn show_move_path(
             commands.entity(*sprite_entity).despawn();
         }
         sprite_entities.clear();
-        if movement_information.available_moves.contains(&tile_pos) {
-            // get move node from movmeent information for this tile. follow the line back
-            if let Some(node) = movement_information.move_nodes.get(&tile_pos) {
+        let movement_info = movement_information.into_inner();
+        if movement_info.contains_move(&tile_pos) {
+            // get move node from movement information for this tile. follow the line back
+            if let Some(node) = movement_info.available_moves.get(&tile_pos) {
                 let mut reached_player = false;
                 let sprite = commands.spawn(SpriteBundle {
                     transform: Transform {
@@ -401,8 +402,8 @@ fn show_move_path(
                 sprite_entities.push(sprite.id());
                 let mut current_node = *node;
                 while reached_player == false {
-                    let new_node_pos = current_node.prior_node;
-                    if let Some(new_node) = movement_information.move_nodes.get(&new_node_pos) {
+                    let new_node_pos = current_node.prior_tile_pos;
+                    if let Some(new_node) = movement_info.available_moves.get(&new_node_pos) {
                         let sprite = commands.spawn(SpriteBundle {
                             transform: Transform {
                                 translation: tile_pos_to_centered_map_world_pos(
@@ -420,7 +421,7 @@ fn show_move_path(
                         sprite_entities.push(sprite.id());
                         current_node = *new_node;
 
-                        if new_node.move_cost.unwrap() == 0 {
+                        if new_node.move_cost == 0 {
                             reached_player = true;
                         }
                     }
