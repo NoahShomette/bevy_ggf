@@ -2,7 +2,10 @@ use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::mapping::{
     add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
 };
-use crate::movement::{AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem, ObjectMovement, TileMovementCosts};
+use crate::movement::{
+    AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem,
+    ObjectMovement, TileMovementCosts,
+};
 use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
@@ -243,13 +246,30 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
 
     if !move_info.0.is_empty() {
         world.resource_scope(|_world, mut a: Mut<CurrentMovementInformation>| {
-            for (tile_pos, move_node) in move_info.1.move_nodes.iter(){
-                if move_node.move_cost.is_some() {
-                    a.available_moves.insert(*tile_pos, AvailableMove{
-                        tile_pos: move_node.node_pos,
-                        prior_tile_pos: move_node.prior_node,
-                        move_cost: move_node.move_cost.expect("All valid moves should have a move cost"),
-                    });
+            for (tile_pos, move_node) in move_info.1.move_nodes.iter() {
+                if move_info.0.contains(&move_node.node_pos) {
+                    a.available_moves.insert(
+                        *tile_pos,
+                        AvailableMove {
+                            tile_pos: move_node.node_pos,
+                            prior_tile_pos: move_node.prior_node,
+                            move_cost: move_node
+                                .move_cost
+                                .expect("All valid moves should have a move cost"),
+                        },
+                    );
+                }
+                // if the move node is the starting node we want to add it to the available moves.
+                if move_node.move_cost == Some(0){
+                    a.available_moves.insert(
+                        *tile_pos,
+                        AvailableMove {
+                            tile_pos: move_node.node_pos,
+                            prior_tile_pos: move_node.node_pos,
+                            move_cost: 0,
+                        },
+                    );
+
                 }
             }
         });
