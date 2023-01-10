@@ -327,6 +327,42 @@ impl ObjectTerrainMovementRules {
         self.terrain_class_rules.push(rule);
     }
 }
+#[test]
+fn test_terrain_rules(){
+
+    const TERRAIN_CLASSES: &'static [TerrainClass] = &[
+        TerrainClass { name: "Ground" },
+        TerrainClass { name: "Water" },
+    ];
+
+    const TERRAIN_TYPES: &'static [TerrainType] = &[
+        TerrainType {
+            name: "Grassland",
+            texture_index: 0,
+            terrain_class: &TERRAIN_CLASSES[0],
+        },
+        TerrainType {
+            name: "Forest",
+            texture_index: 1,
+            terrain_class: &TERRAIN_CLASSES[0],
+        },
+        TerrainType {
+            name: "Mountain",
+            texture_index: 2,
+            terrain_class: &TERRAIN_CLASSES[0],
+        },];
+    let movement_rules = ObjectTerrainMovementRules::new(
+        vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
+        vec![(&TERRAIN_TYPES[2], false)],
+    );
+    
+    let tile_terrain_info = TileTerrainInfo{
+        terrain_type: TERRAIN_TYPES[2],
+    };
+    
+    // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2] is set to false
+    assert_eq!(movement_rules.can_move_on_tile(&tile_terrain_info), false);
+}
 
 /// Marker component signifying that the unit has moved and cannot move anymore
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Component)]

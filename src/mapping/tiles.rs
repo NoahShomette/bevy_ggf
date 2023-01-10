@@ -137,15 +137,17 @@ pub struct TileObjects {
 }
 
 impl TileObjects {
-    /// Checks if the entity is currently in this tile
+    /// Checks if the given entity is currently in this tile
     pub fn contains_object(&self, entity: Entity) -> bool {
         self.entities_in_tile.contains(&entity)
     }
-
+    
+    /// Adds the given entity
     pub fn add_object(&mut self, entity: Entity) {
         self.entities_in_tile.push(entity);
     }
 
+    /// Removes the given entity
     pub fn remove_object(&mut self, entity: Entity) -> bool {
         let mut iter = self.entities_in_tile.iter();
         if let Some(position) = iter.position(|&i| i == entity) {

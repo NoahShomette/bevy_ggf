@@ -1,12 +1,14 @@
-use bevy::prelude::{Entity, IVec2, Res, World};
-use bevy::utils::hashbrown::HashMap;
-use bevy_ecs_tilemap::prelude::{TilemapSize, TilePos, TileStorage};
-use crate::mapping::MapHandler;
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks};
-use crate::movement::{DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, TileMoveCheck};
-use crate::movement::backend::{MovementNodes, MoveNode, tile_movement_cost_check};
+use crate::mapping::MapHandler;
+use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
+use crate::movement::{
+    DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, TileMoveCheck,
+};
 use crate::object::ObjectGridPosition;
+use bevy::prelude::{Entity, IVec2, Res, World};
+use bevy::utils::hashbrown::HashMap;
+use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapSize};
 
 // BUILT IN IMPLEMENTATIONS
 
@@ -100,6 +102,7 @@ impl MovementCalculator for SquareMovementCalculator {
                 };
 
                 move_info.add_node(neighbor, current_node);
+
                 if tile_movement_cost_check(
                     *object_moving,
                     tile_entity,
@@ -114,21 +117,22 @@ impl MovementCalculator for SquareMovementCalculator {
                 // checks the tile against each of the move rules added if its false kill this loop
                 for i in 0..movement_system.tile_move_checks.len() {
                     let check = movement_system.tile_move_checks[i].as_ref();
-                    if check.is_valid_move(
+                    if !check.is_valid_move(
                         *object_moving,
                         tile_entity,
                         neighbor,
                         &current_node.node_pos,
                         world,
                     ) {
-                    } else {
                         continue 'neighbors;
                     }
                 }
 
                 // if none of them return false and cancel the loop then we can infer that we are able to move into that neighbor
                 // we add the neighbor to the list of unvisited nodes and then push the neighbor to the available moves list
-                unvisited_nodes.push(*move_info.get_node_mut(neighbor).unwrap()); //unwrap is safe because we know we add the node in at the beginning of this loop
+                unvisited_nodes.push(*move_info.get_node_mut(neighbor).expect(
+                    "Is safe because we know we add the node in at the beginning of this loop",
+                )); //
                 available_moves.push(*neighbor);
             }
 

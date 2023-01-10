@@ -15,11 +15,11 @@ use bevy_ggf::movement::{
     UnitMovementBundle,
 };
 use bevy_ggf::object::{
-    Object, ObjectClass, ObjectCoreBundle, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
+    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
     UnitBundle,
 };
 use bevy_ggf::selection::{
-    ClearSelectedObject, SelectObjectEvent, SelectableEntity, SelectedObject,
+    ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
 };
 use bevy_ggf::BggfDefaultPlugins;
 
@@ -146,7 +146,7 @@ fn startup(
         &STACKING_CLASS_GROUND,
         ObjectStacksCount {
             current_count: 0,
-            max_count: 1,
+            max_count: 2,
         },
     )]);
 
@@ -259,11 +259,13 @@ fn handle_right_click(
 }
 
 fn select_and_move_unit_to_tile_clicked(
-    selected_entity: Res<SelectedObject>,
+    selected_entity: Res<CurrentSelectedObject>,
     map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
+    moving_object: Query<&ObjectGridPosition>,
     mut move_event_writer: EventWriter<MoveEvent>,
     mut click_event_reader: EventReader<ClickEvent>,
-    mut select_object_event_writer: EventWriter<SelectObjectEvent>,
+    mut select_object_event_writer: EventWriter<TrySelectEvents>,
+
 ) {
     let (transform, map_size, grid_size, map_type) = map_transform.single();
 
@@ -271,20 +273,26 @@ fn select_and_move_unit_to_tile_clicked(
         match event {
             ClickEvent::Click { world_pos } => {
                 info!("World Pos: {}", world_pos);
-                if let Some(selected_entity) = selected_entity.selected_entity {
-                    if let Some(tile_pos) =
-                        world_pos_to_tile_pos(&world_pos, transform, map_size, grid_size, map_type)
-                    {
-                        move_event_writer.send(MoveEvent::TryMoveObject {
-                            object_moving: selected_entity,
-                            new_pos: tile_pos,
-                        });
+                if let Some(selected_entity) = selected_entity.object_entity {
+                    if let Ok(object_tile_pos) = moving_object.get(selected_entity) {
+                        if let Some(tile_pos) = world_pos_to_tile_pos(
+                            &world_pos, transform, map_size, grid_size, map_type,
+                        ) {
+                            if object_tile_pos.tile_position != tile_pos {
+                                move_event_writer.send(MoveEvent::TryMoveObject {
+                                    object_moving: selected_entity,
+                                    new_pos: tile_pos,
+                                });
+                            } else{
+                                select_object_event_writer.send(TrySelectEvents::TilePos(tile_pos));
+                            }
+                        }
                     }
                 } else {
                     if let Some(tile_pos) =
                         world_pos_to_tile_pos(&world_pos, transform, map_size, grid_size, map_type)
                     {
-                        select_object_event_writer.send(SelectObjectEvent { tile_pos });
+                        select_object_event_writer.send(TrySelectEvents::TilePos(tile_pos));
                     }
                 }
             }
@@ -294,13 +302,13 @@ fn select_and_move_unit_to_tile_clicked(
 }
 
 fn handle_move_complete_event(
-    mut selected_object: ResMut<SelectedObject>,
+    mut selected_object: ResMut<CurrentSelectedObject>,
     mut event_reader: EventReader<MoveEvent>,
 ) {
     for event in event_reader.iter() {
         match event {
             MoveEvent::MoveComplete { .. } => {
-                selected_object.selected_entity = None;
+                selected_object.object_entity = None;
             }
             _ => {}
         }
