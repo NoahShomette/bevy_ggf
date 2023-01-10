@@ -196,6 +196,7 @@ pub struct GameObjectInfo {
     object_types: Vec<ObjectType>,
 }
 
+/// The position of the Object on the Tilemap. 
 #[derive(Component)]
 pub struct ObjectGridPosition{
     pub tile_position: TilePos
