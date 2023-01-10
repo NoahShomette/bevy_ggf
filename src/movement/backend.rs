@@ -260,7 +260,7 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
                     );
                 }
                 // if the move node is the starting node we want to add it to the available moves.
-                if move_node.move_cost == Some(0){
+                if move_node.move_cost == Some(0) {
                     a.available_moves.insert(
                         *tile_pos,
                         AvailableMove {
@@ -269,7 +269,6 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
                             move_cost: 0,
                         },
                     );
-
                 }
             }
         });

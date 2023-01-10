@@ -149,11 +149,10 @@ impl CurrentMovementInformation {
 }
 
 #[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
-pub struct AvailableMove{
+pub struct AvailableMove {
     pub tile_pos: TilePos,
     pub prior_tile_pos: TilePos,
     pub move_cost: i32,
-
 }
 
 /// A move event. Used to conduct actions related to object movement
@@ -203,7 +202,6 @@ impl DiagonalMovement {
         }
     }
 }
-
 
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly
@@ -327,9 +325,9 @@ impl ObjectTerrainMovementRules {
         self.terrain_class_rules.push(rule);
     }
 }
-#[test]
-fn test_terrain_rules(){
 
+#[test]
+fn test_terrain_rules() {
     const TERRAIN_CLASSES: &'static [TerrainClass] = &[
         TerrainClass { name: "Ground" },
         TerrainClass { name: "Water" },
@@ -350,16 +348,17 @@ fn test_terrain_rules(){
             name: "Mountain",
             texture_index: 2,
             terrain_class: &TERRAIN_CLASSES[0],
-        },];
+        },
+    ];
     let movement_rules = ObjectTerrainMovementRules::new(
         vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
         vec![(&TERRAIN_TYPES[2], false)],
     );
-    
-    let tile_terrain_info = TileTerrainInfo{
+
+    let tile_terrain_info = TileTerrainInfo {
         terrain_type: TERRAIN_TYPES[2],
     };
-    
+
     // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2] is set to false
     assert_eq!(movement_rules.can_move_on_tile(&tile_terrain_info), false);
 }

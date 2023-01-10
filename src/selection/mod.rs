@@ -78,23 +78,20 @@ pub struct LastSelectedTileInfo {
 pub(crate) fn handle_select_object_event(
     mut try_select_events: EventReader<TrySelectEvents>,
     mut selection_events: EventWriter<SelectionEvents>,
-    
     mut selected_object: ResMut<CurrentSelectedObject>,
     mut current_movement_information: ResMut<CurrentMovementInformation>,
 
     mut tile_storage: Query<&mut TileStorage>,
     mut tile_query: Query<&mut TileObjects>,
     mut tile_selected_info: Local<LastSelectedTileInfo>,
-    
 ) {
     let mut tile_storage = tile_storage.single_mut();
     for event in try_select_events.iter() {
         match event {
             TrySelectEvents::TilePos(tile_pos) => {
-                
                 selected_object.object_entity = None;
                 current_movement_information.clear_information();
-                
+
                 select_object_at_tile_pos(
                     tile_pos,
                     &mut selected_object,

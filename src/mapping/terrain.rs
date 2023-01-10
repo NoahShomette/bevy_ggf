@@ -26,7 +26,7 @@ pub struct TileTerrainInfo {
     pub terrain_type: TerrainType,
 }
 
-/// Defines a new TerrainClass representing a category of [`TerrainType`]s. Used to specify different 
+/// Defines a new TerrainClass representing a category of [`TerrainType`]s. Used to specify different
 /// class or categories of terrain. Eg Ground, Water, Etc
 #[derive(Eq, Hash, PartialEq, Debug)]
 pub struct TerrainClass {
@@ -40,4 +40,3 @@ pub struct TerrainType {
     pub texture_index: u32,
     pub terrain_class: &'static TerrainClass,
 }
-
