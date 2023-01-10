@@ -1,6 +1,12 @@
 [book]
-authors = ["Noah"]
+authors = ["Noah Shomette"]
 language = "en"
 multilingual = false
 src = "src"
 title = "Bevy Grid Game Framework Design Document"
+
+[output.html]
+git-repository-url = "https://github.com/NoahShomette/bevy_ggf"
+git-repository-icon = "fa-github"
+edit-url-template = "https://github.com/NoahShomette/bevy_ggf/edit/main/design"
+
