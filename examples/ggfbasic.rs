@@ -15,8 +15,7 @@ use bevy_ggf::movement::{
     UnitMovementBundle,
 };
 use bevy_ggf::object::{
-    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType,
-    UnitBundle,
+    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
 };
 use bevy_ggf::selection::{
     ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
@@ -265,7 +264,6 @@ fn select_and_move_unit_to_tile_clicked(
     mut move_event_writer: EventWriter<MoveEvent>,
     mut click_event_reader: EventReader<ClickEvent>,
     mut select_object_event_writer: EventWriter<TrySelectEvents>,
-
 ) {
     let (transform, map_size, grid_size, map_type) = map_transform.single();
 
@@ -283,7 +281,7 @@ fn select_and_move_unit_to_tile_clicked(
                                     object_moving: selected_entity,
                                     new_pos: tile_pos,
                                 });
-                            } else{
+                            } else {
                                 select_object_event_writer.send(TrySelectEvents::TilePos(tile_pos));
                             }
                         }

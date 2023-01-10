@@ -1,9 +1,8 @@
+use crate::mapping::tiles::ObjectStackingClass;
 use crate::movement::UnitMovementBundle;
 use crate::selection::SelectableEntity;
 use bevy::prelude::{Bundle, Component, Resource, SpriteBundle};
 use bevy_ecs_tilemap::prelude::TilePos;
-use crate::mapping::tiles::ObjectStackingClass;
-
 
 // Default Components that we should have for objects
 // These are separated simply to ease development and thought process. Any component for any object can
@@ -39,20 +38,17 @@ BuildOptions
 AddResourceOnTurn
  */
 
-
-
 // ObjectClass -> (Ground, Air, Water, Building, etc)
 // ObjectGroup -> (Armor, Capital Ship, Helicopter)
 // ObjectType -> (Light Tank, Battleship, Infantry, Unit Barracks, Wall)
 #[derive(Bundle)]
-pub struct ObjectMinimalBundle{
+pub struct ObjectMinimalBundle {
     pub object: Object,
     pub object_info: ObjectInfo,
     pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
 }
-
 
 /// Base bundle that provides all functionality for all subsystems in the crate
 #[derive(Bundle)]
@@ -89,17 +85,10 @@ pub struct UnitBundle {
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
 pub struct Object;
 
-impl Object{
-    
+impl Object {
     // texture, tile_pos, stacking type, object type
-    pub fn spawn(){
-        
-        
-    }
-    
+    pub fn spawn() {}
 }
-
-
 
 /// Defines a new distinct ObjectClass. ObjectClass is used to represent the base class of an Object.
 ///
@@ -144,7 +133,7 @@ pub struct ObjectGroup {
 ///
 /// ## Example
 /// Example items that might fall under this type and their potential trees
-/// 
+///
 /// [`ObjectType`] / [`ObjectGroup`] / [`ObjectClass`]
 /// - Rifleman < Infantry < Ground
 /// - LightTank < Armor < Ground
@@ -152,18 +141,18 @@ pub struct ObjectGroup {
 /// - Submarine < Submersable < Water
 /// - UnitBarracks < ProductionBuilding < Building
 /// - Wall < Fortification < Building
-/// 
+///
 /// ---
-/// 
+///
 /// ```rust
 /// use bevy_ggf::object::{ObjectClass, ObjectGroup, ObjectType};
 ///
 /// // Declare an ObjectClass to use in our ObjectGroup
 /// pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass{name: "Ground"};
-/// 
+///
 /// // Declare an ObjectGroup using our ObjectClass
 /// pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup{name: "Infantry", object_class: &OBJECT_CLASS_GROUND};
-/// 
+///
 /// // Declare our ObjectType using the ObjectGroup which uses in itself the ObjectClass
 /// pub const OBJECT_TYPE_RIFLEMAN: ObjectType = ObjectType{name: "Rifleman", object_group: &OBJECT_GROUP_INFANTRY};
 ///
@@ -172,7 +161,7 @@ pub struct ObjectGroup {
 ///     let object_type_group = OBJECT_TYPE_RIFLEMAN.object_group;
 ///     let object_type_class = object_type_group.object_class;
 /// }
-/// 
+///
 /// ```
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
 pub struct ObjectType {
@@ -196,7 +185,8 @@ pub struct GameObjectInfo {
     object_types: Vec<ObjectType>,
 }
 
+/// The position of the Object on the Tilemap.
 #[derive(Component)]
-pub struct ObjectGridPosition{
-    pub tile_position: TilePos
+pub struct ObjectGridPosition {
+    pub tile_position: TilePos,
 }

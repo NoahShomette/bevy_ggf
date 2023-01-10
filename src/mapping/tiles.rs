@@ -116,7 +116,7 @@ pub struct StackingClass {
     pub name: &'static str,
 }
 
-/// A component to hold a [`StackingClass`]. 
+/// A component to hold a [`StackingClass`].
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Component)]
 pub struct ObjectStackingClass {
     pub stack_class: &'static StackingClass,
@@ -141,7 +141,7 @@ impl TileObjects {
     pub fn contains_object(&self, entity: Entity) -> bool {
         self.entities_in_tile.contains(&entity)
     }
-    
+
     /// Adds the given entity
     pub fn add_object(&mut self, entity: Entity) {
         self.entities_in_tile.push(entity);
