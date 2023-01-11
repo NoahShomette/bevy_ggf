@@ -8,7 +8,7 @@
 
 Bevy Grid Game Framework (Bevy_ggf), is a framework for creating grid based tactics and strategy games in the Bevy game
 engine. This framework is intended to provide easy to use yet extensible systems for quickly putting together basic
-grid based tactics games and allow them to be customized and extended as deeply as possible. If you run into a problem
+grid based tactics games and allow them to be customized and extended as deeply as needed. If you run into a problem
 with something that goes against this goal, open an [issue](https://github.com/NoahShomette/bevy_ggf/issues/new/choose)
 and we will work to address it!
 

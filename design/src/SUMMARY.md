@@ -11,4 +11,7 @@
 
 # Design Reference
 
-# Development
+- [Bevy_ggf Design](./design/design_main.md)
+- [Game Runtime](./design/game_runtime.md)
+
+# Dev
