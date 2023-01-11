@@ -3,7 +3,7 @@ pub mod defaults;
 
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::movement::backend::{
-    handle_move_begin_events, handle_try_move_events, MoveNode, MovementNodes,
+    handle_move_begin_events, handle_try_move_events, MovementNodes,
 };
 use bevy::prelude::{
     App, Bundle, Component, CoreStage, Entity, IntoSystemDescriptor, Plugin, Res, Resource, World,
@@ -37,6 +37,31 @@ pub struct MovementSystem {
 }
 
 impl MovementSystem {
+    /// Helper function that will loop through each [`TileMoveCheck`] in the movement system and return
+    /// false if any *one* was false, or true if all were true.
+    pub fn check_tile_move_checks(
+        &self,
+        entity_moving: Entity,
+        tile_entity: Entity,
+        tile_pos: &TilePos,
+        last_tile_pos: &TilePos,
+        world: &World,
+    ) -> bool {
+        for i in 0..self.tile_move_checks.len() {
+            let check = self.tile_move_checks[i].as_ref();
+            if !check.is_valid_move(
+                entity_moving,
+                tile_entity,
+                tile_pos,
+                last_tile_pos,
+                world,
+            ) {
+                false
+            }
+        }
+        true
+    }
+
     fn new(
         map_type: TilemapType,
         movement_calculator: Box<dyn MovementCalculator>,
