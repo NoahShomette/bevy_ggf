@@ -2,9 +2,7 @@ pub mod backend;
 pub mod defaults;
 
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
-use crate::movement::backend::{
-    handle_move_begin_events, handle_try_move_events, MovementNodes,
-};
+use crate::movement::backend::{handle_move_begin_events, handle_try_move_events, MovementNodes};
 use bevy::prelude::{
     App, Bundle, Component, CoreStage, Entity, IntoSystemDescriptor, Plugin, Res, Resource, World,
 };
@@ -49,14 +47,8 @@ impl MovementSystem {
     ) -> bool {
         for i in 0..self.tile_move_checks.len() {
             let check = self.tile_move_checks[i].as_ref();
-            if !check.is_valid_move(
-                entity_moving,
-                tile_entity,
-                tile_pos,
-                last_tile_pos,
-                world,
-            ) {
-                false
+            if !check.is_valid_move(entity_moving, tile_entity, tile_pos, last_tile_pos, world) {
+                return false;
             }
         }
         true
