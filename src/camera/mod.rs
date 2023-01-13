@@ -1,4 +1,4 @@
-//! # Bev_GGF/camera
+//! # Bevy_GGF/camera
 //! Simply add the [`GGFCameraPlugin`] to your app to get a working 2d camera with click to drag
 //! movement and support for left click, right click, and left click hold.
 //!
@@ -294,7 +294,7 @@ fn handle_camera_movement(
 
     //if the cursor is inside the current window then we want to handle any clicks that it might do
     if let Some(current_cursor_position) = wnd.cursor_position() {
-        let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
+        let window_size = Vec2::new(wnd.width(), wnd.height());
         if camera_cursor_information.camera_state == CameraState::Dragging {
             info!("Dragging");
 

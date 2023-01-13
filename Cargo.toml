@@ -30,8 +30,5 @@ bevy = { version = "0.9.1", features = ["bevy_asset", "bevy_scene", "bevy_gilrs"
 bevy_ecs_tilemap = "0.9.0"
 leafwing-input-manager = "0.7.0"
 iyes_loopless = { version = "0.9.1", features = ["states", "fixedtimestep", "app"] }
-#bevy_pixel_camera = "0.2.1"   # waiting for it to bump to bevy 0.9
 serde = { version = "1.0.125", features = ["derive"] }
-typetag = "0.2.3"
-downcast-rs = "1.2.0"
 rand = "0.8.5"

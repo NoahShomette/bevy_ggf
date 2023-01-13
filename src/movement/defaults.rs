@@ -110,22 +110,18 @@ impl MovementCalculator for SquareMovementCalculator {
                     &current_node.node_pos,
                     &mut move_info,
                     world,
-                ) {
-                } else {
+                ) {} else {
                     continue 'neighbors;
                 }
-                // checks the tile against each of the move rules added if its false kill this loop
-                for i in 0..movement_system.tile_move_checks.len() {
-                    let check = movement_system.tile_move_checks[i].as_ref();
-                    if !check.is_valid_move(
-                        *object_moving,
-                        tile_entity,
-                        neighbor,
-                        &current_node.node_pos,
-                        world,
-                    ) {
-                        continue 'neighbors;
-                    }
+
+                if !movement_system.check_tile_move_checks(
+                    *object_moving,
+                    tile_entity,
+                    neighbor,
+                    &current_node.node_pos,
+                    world,
+                ) {
+                    continue 'neighbors;
                 }
 
                 // if none of them return false and cancel the loop then we can infer that we are able to move into that neighbor
@@ -150,13 +146,13 @@ pub struct MoveCheckSpace;
 impl TileMoveCheck for MoveCheckSpace {
     fn is_valid_move(
         &self,
-        entity_moving: Entity,
+        moving_entity: Entity,
         tile_entity: Entity,
-        _tile_pos: &TilePos,
-        _last_tile_pos: &TilePos,
+        _checking_tile_pos: &TilePos,
+        _move_from_tile_pos: &TilePos,
         world: &World,
     ) -> bool {
-        let Some(object_stack_class) = world.get::<ObjectStackingClass>(entity_moving) else {
+        let Some(object_stack_class) = world.get::<ObjectStackingClass>(moving_entity) else {
             return false;
         };
         let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {

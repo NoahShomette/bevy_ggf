@@ -10,8 +10,7 @@ recommendations that would make networking easier in the future, please open an 
 
 - Cross platform support (Web, Windows, Mac, Linux)
     - The framework should make every effort *not* to limit anyone using it. Instead it should give more functionality
-      and
-      ease development. If Networking was to be added then it must be cross platform then.
+      and ease development. If Networking was to be added then it must be cross platform then.
     -
 
 # Particular Issues
