@@ -25,9 +25,10 @@ allow = [
   "Zlib",
   "CC0-1.0",
   "OFL-1.1",
-  "Unicode-DFS-2016",
 ]
-exceptions = []
+exceptions = [
+  { name = "unicode-ident", allow = ["Unicode-DFS-2016"] },
+]
 default = "deny"
 
 [bans]
@@ -37,3 +38,26 @@ multiple-versions = "deny"
 # See <https://github.com/Leafwing-Studios/Emergence/issues/193>
 wildcards = "warn"
 highlight = "all"
+
+skip = [
+  { name = "concurrent-queue", version = "1.2.4" }, # from bevy_tasks
+
+  # below are from bevy 0.9.1 > bevy_winit 0.9.1 > winit 0.27.5
+
+  { name = "raw-window-handle", version = "0.4.3" }, # from winit 0.27.5
+  { name = "windows-sys", version = "0.36.1" }, # from winit 0.27.5
+  { name = "windows_aarch64_msvc", version = "0.36.1" }, # from windows-sys - 0.36.1
+  { name = "windows_x86_64_gnu", version = "0.36.1" }, # from windows-sys - 0.36.1
+  { name = "windows_i686_msvc", version = "0.36.1" }, # from windows-sys - 0.36.1
+  { name = "windows_x86_64_gnu", version = "0.36.1" }, # from windows-sys - 0.36.1
+  { name = "windows_x86_64_msvc", version = "0.36.1" }, # from windows-sys - 0.36.1
+
+
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# If you add something here please also add a comment explaining why it's necessary :)
+allow-git = []

@@ -1,4 +1,4 @@
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::mapping::{
     add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
 };
@@ -15,7 +15,7 @@ use bevy::prelude::{
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType};
 
-/// Provided function that can be used in a [`MovementCalculator`] to keep track of the nodes in a pathfinding node,
+/// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific
 /// node. Will automatically compute all of the above.
 pub fn tile_movement_cost_check(
@@ -78,7 +78,7 @@ pub fn tile_movement_cost_check(
     };
 }
 
-/// Struct used in a [`MovementCalculator`] to hold the list of [`MoveNode`]
+/// Struct used in a [`MovementCalculator`](crate::movement::MovementCalculator) to hold the list of [`MoveNode`]
 pub struct MovementNodes {
     pub move_nodes: HashMap<TilePos, MoveNode>,
 }
@@ -194,6 +194,8 @@ impl MovementNodes {
     }
 }
 
+//TODO refactor this to have a field declaring it a valid move. then use that to filter the movenodes
+// into available moves
 /// Represents a tile in a MovementNodes struct. Used to hold information relevant to movement calculation
 #[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
 pub struct MoveNode {
@@ -287,7 +289,7 @@ pub(crate) fn handle_try_move_events(
         ),
         With<Object>,
     >,
-    mut tile_query: Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    mut tile_query: Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
     mut tilemap_q: Query<
         (
             &mut Map,
@@ -353,7 +355,7 @@ pub fn move_object(
         ),
         With<Object>,
     >,
-    tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
     tilemap_q: &mut Query<
         (
             &mut Map,
@@ -412,5 +414,3 @@ pub fn move_object(
         )))
     };
 }
-
-pub fn move_complete(object_moving: Entity) {}

@@ -1,5 +1,5 @@
 //! # Bevy_GGF/camera
-//! Simply add the [`GGFCameraPlugin`] to your app to get a working 2d camera with click to drag
+//! Simply add the [`BggfCameraPlugin`] to your app to get a working 2d camera with click to drag
 //! movement and support for left click, right click, and left click hold.
 //!
 //! Alternatively if you don't want to use the built in plugin you are free to create your own

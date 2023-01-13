@@ -1,5 +1,5 @@
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks};
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules};
 use crate::mapping::MapHandler;
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
 use crate::movement::{
@@ -12,7 +12,7 @@ use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapSize};
 
 // BUILT IN IMPLEMENTATIONS
 
-/// Built in struct with an implementation for a [`MovementCalculator`] for a simple square based map.
+/// Built in struct with an implementation for a [`MovementCalculator`](crate::movement::MovementCalculator) for a simple square based map.
 /// The pathfinding algorithm is an implementation of Djikstras.
 /// Contains a field for a [`DiagonalMovement`] enum. The pathfinding algorithm will include diagonal
 /// tiles based on this enum.
@@ -155,7 +155,7 @@ impl TileMoveCheck for MoveCheckSpace {
         let Some(object_stack_class) = world.get::<ObjectStackingClass>(moving_entity) else {
             return false;
         };
-        let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
+        let Some(tile_objects) = world.get::<TileObjectStackingRules>(tile_entity) else {
             return false;
         };
 

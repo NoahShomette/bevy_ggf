@@ -54,6 +54,8 @@ impl MovementSystem {
         true
     }
 
+    /// Unused currently. Kept for future reference and potential implementation
+    #[allow(dead_code)]
     fn new(
         map_type: TilemapType,
         movement_calculator: Box<dyn MovementCalculator>,
@@ -65,7 +67,8 @@ impl MovementSystem {
             tile_move_checks,
         }
     }
-
+    /// Unused currently. Kept for future reference and potential implementation
+    #[allow(dead_code)]
     fn register_movement_system(
         app: &mut App,
         map_type: TilemapType,
@@ -77,11 +80,12 @@ impl MovementSystem {
     }
 }
 
-/// A trait defining a new MovementCalculator - define the [`calculate_move`] fn in order to control
+/// A trait defining a new MovementCalculator - define the [`calculate_move`](MovementCalculator::calculate_move) fn in order to control
 /// exactly how the movement works. Add this to a [`MovementSystem`] and insert that as a resource
 /// to define your movement system
 ///
-/// Bevy_GGF contains a MovementCalculator for Square based maps called [`SquareMovementSystem`]
+/// Bevy_GGF contains a series of default MovementCalculators, detailed in [`defaults`] including one
+/// that implements Advance Wars style movement for square based maps called [`SquareMovementCalculator`](defaults::SquareMovementCalculator)
 pub trait MovementCalculator: 'static + Send + Sync {
     /// The main function of a [`MovementCalculator`]. This is called when a [`MoveEvent`] is received
     /// and the result is pushed into the [`CurrentMovementInformation`] Resource automatically. Use
@@ -104,7 +108,7 @@ pub trait MovementCalculator: 'static + Send + Sync {
 /// ```rust
 /// use bevy::prelude::{Entity, World};
 /// use bevy_ecs_tilemap::prelude::TilePos;
-/// use bevy_ggf::mapping::tiles::{ObjectStackingClass, TileObjectStacks};
+/// use bevy_ggf::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules};
 /// use bevy_ggf::movement::TileMoveCheck;
 ///
 /// // Create a new struct for our TileMoveCheck
@@ -126,7 +130,7 @@ pub trait MovementCalculator: 'static + Send + Sync {
 ///             return false;
 ///         };
 /// // Get the TileObjectStacks component of the tile that we are checking
-///         let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
+///         let Some(tile_objects) = world.get::<TileObjectStackingRules>(tile_entity) else {
 ///             return false;
 ///         };
 /// // Use the built in function on a TileObjectStacks struct to check if the tile has space for this objects stacking class
@@ -147,8 +151,8 @@ pub trait TileMoveCheck {
     ) -> bool;
 }
 
-/// Resource that holds the TilePos of any available moves and the move nodes of whatever the [`calculate_move`]
-/// function created
+/// Resource that holds a Hashmap of [`AvailableMove`] structs. These structs should represent verified
+/// valid moves and are updated when the [`MoveEvent::MoveBegin`] event is processed.
 #[derive(Clone, Eq, PartialEq, Default, Debug, Resource)]
 pub struct CurrentMovementInformation {
     pub available_moves: HashMap<TilePos, AvailableMove>,

@@ -4,7 +4,8 @@ pub mod tiles;
 
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
-    BggfTileBundle, BggfTileObjectBundle, ObjectStackingClass, Tile, TileObjectStacks, TileObjects,
+    BggfTileBundle, BggfTileObjectBundle, ObjectStackingClass, Tile, TileObjectStackingRules,
+    TileObjects,
 };
 use crate::movement::TileMovementRules;
 use crate::object::{Object, ObjectGridPosition};
@@ -65,7 +66,7 @@ impl Map {
         map_texture_handle: Handle<Image>,
         map_terrain_vec: &Vec<TerrainType>,
         tile_movement_rules: ResMut<TileMovementRules>,
-        tile_stack_rules: TileObjectStacks,
+        tile_stack_rules: TileObjectStackingRules,
     ) -> Entity {
         let map_size = *tile_map_size;
         let mut tile_storage = TileStorage::empty(map_size);
@@ -146,7 +147,7 @@ pub fn add_object_to_tile(
     object_grid_position: &mut ObjectGridPosition,
     object_stack_class: &ObjectStackingClass,
     tile_storage: &mut TileStorage,
-    tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
     tile_pos_to_add: TilePos,
 ) {
     let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
@@ -159,7 +160,7 @@ pub fn add_object_to_tile(
         info!(
             "tile_stacks_rules_count: {:?}",
             tile_stack_rules
-                .tile_object_stacks
+                .tile_object_stacking_rules
                 .get(&object_stack_class.stack_class)
                 .unwrap()
         );
@@ -171,7 +172,7 @@ pub fn remove_object_from_tile(
     object_to_remove: Entity,
     object_stack_class: &ObjectStackingClass,
     tile_storage: &mut TileStorage,
-    tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
     tile_pos_to_remove: TilePos,
 ) {
     let tile_entity = tile_storage.get(&tile_pos_to_remove).unwrap();
@@ -183,7 +184,7 @@ pub fn remove_object_from_tile(
         info!(
             "tile_stacks_rules_count: {:?}",
             tile_stack_rules
-                .tile_object_stacks
+                .tile_object_stacking_rules
                 .get(&object_stack_class.stack_class)
                 .unwrap()
         );
@@ -205,7 +206,7 @@ pub enum UpdateMapTileObject {
 fn update_map_tile_object_event(
     mut update_event: EventReader<UpdateMapTileObject>,
     mut object_query: Query<(&mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
-    mut tile_query: Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    mut tile_query: Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
     mut tilemap_q: Query<&mut TileStorage, Without<Object>>,
 ) {
     for event in update_event.iter() {

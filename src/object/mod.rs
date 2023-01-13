@@ -177,8 +177,9 @@ pub struct ObjectInfo {
     pub object_type: &'static ObjectType,
 }
 
-/// Resource holding all [`UnitType`]s that are used in the game
+/// Resource holding all [`ObjectType`]s that are used in the game
 #[derive(Resource)]
+#[allow(dead_code)]
 pub struct GameObjectInfo {
     object_classes: Vec<ObjectClass>,
     object_groups: Vec<ObjectGroup>,
