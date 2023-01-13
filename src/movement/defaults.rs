@@ -21,6 +21,7 @@ pub struct SquareMovementCalculator {
     pub diagonal_movement: DiagonalMovement,
 }
 
+#[rustfmt::skip] // rustfmt breaking ci
 impl MovementCalculator for SquareMovementCalculator {
     fn calculate_move(
         &self,

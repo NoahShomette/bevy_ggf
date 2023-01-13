@@ -22,6 +22,7 @@ const CLIPPY_FLAGS: [&str; 3] = [
     "-Dwarnings",
 ];
 
+#[rustfmt::skip] // rustfmt breaking ci
 fn main() {
     // When run locally, results may differ from actual CI runs triggered by
     // .github/workflows/ci.yml

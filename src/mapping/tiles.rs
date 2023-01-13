@@ -86,6 +86,7 @@ impl TileObjectStackingRules {
         }
     }
 
+    #[rustfmt::skip] // rustfmt breaking ci
     pub fn decrement_object_class_count(&mut self, object_class: &ObjectStackingClass) {
         if let Some(tile_stack_count_max) = self
             .tile_object_stacking_rules
@@ -98,6 +99,7 @@ impl TileObjectStackingRules {
     }
 }
 
+#[rustfmt::skip] // rustfmt breaking ci
 #[test] // This is kinda a useless test but whatever. new year new tests
 fn test_tile_object_stacks() {
     const STACKING_CLASS_GROUND: StackingClass = StackingClass { name: "Ground" };
