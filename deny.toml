@@ -47,7 +47,7 @@ skip = [
   { name = "raw-window-handle", version = "0.4.3" }, # from winit 0.27.5
   { name = "windows-sys", version = "0.36.1" }, # from winit 0.27.5
   { name = "windows_aarch64_msvc", version = "0.36.1" }, # from windows-sys - 0.36.1
-  { name = "windows_x86_64_gnu", version = "0.36.1" }, # from windows-sys - 0.36.1
+  { name = "windows_i686_gnu", version = "0.36.1" }, # from windows-sys - 0.36.1
   { name = "windows_i686_msvc", version = "0.36.1" }, # from windows-sys - 0.36.1
   { name = "windows_x86_64_gnu", version = "0.36.1" }, # from windows-sys - 0.36.1
   { name = "windows_x86_64_msvc", version = "0.36.1" }, # from windows-sys - 0.36.1
