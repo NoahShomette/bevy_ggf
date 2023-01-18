@@ -28,26 +28,29 @@ impl MovementCalculator for SquareMovementCalculator {
         movement_system: &Res<MovementSystem>,
         object_moving: &Entity,
         world: &World,
-    ) -> (Vec<TilePos>, MovementNodes) {
+    ) -> MovementNodes {
         let Some(object_grid_position) = world.get::<ObjectGridPosition>(*object_moving) else {
-            return (vec![], MovementNodes {
+            return MovementNodes {
                 move_nodes: HashMap::new(),
-            });
+            };
         };
 
         let Some(map_handler) = world.get_resource::<MapHandler>() else {
-            return (vec![], MovementNodes {
+            return MovementNodes {
                 move_nodes: HashMap::new(),
-            });        };
+            };
+        };
 
-        let Some(tile_storage) = world.get::<TileStorage>(map_handler.get_map_entity(IVec2{x: 0, y: 0}).unwrap()) else {
-            return (vec![], MovementNodes {
+        let Some(tile_storage) = world.get::<TileStorage>(map_handler.get_map_entity(IVec2 { x: 0, y: 0 }).unwrap()) else {
+            return MovementNodes {
                 move_nodes: HashMap::new(),
-            });        };
-        let Some(tilemap_size) = world.get::<TilemapSize>(map_handler.get_map_entity(IVec2{x: 0, y: 0}).unwrap()) else {
-            return (vec![], MovementNodes {
+            };
+        };
+        let Some(tilemap_size) = world.get::<TilemapSize>(map_handler.get_map_entity(IVec2 { x: 0, y: 0 }).unwrap()) else {
+            return MovementNodes {
                 move_nodes: HashMap::new(),
-            });        };
+            };
+        };
 
         let mut move_info = MovementNodes {
             move_nodes: HashMap::new(),
@@ -62,6 +65,7 @@ impl MovementCalculator for SquareMovementCalculator {
                 node_pos: object_grid_position.tile_position,
                 prior_node: object_grid_position.tile_position,
                 move_cost: Some(0),
+                valid_move: true,
             },
         );
 
@@ -70,6 +74,7 @@ impl MovementCalculator for SquareMovementCalculator {
             node_pos: object_grid_position.tile_position,
             prior_node: object_grid_position.tile_position,
             move_cost: Some(0),
+            valid_move: false,
         }];
         let mut visited_nodes: Vec<TilePos> = vec![];
 
@@ -99,7 +104,6 @@ impl MovementCalculator for SquareMovementCalculator {
                 }
                 let Some(tile_entity) = tile_storage.get(neighbor) else {
                     continue;
-
                 };
 
                 move_info.add_node(neighbor, current_node);
@@ -125,6 +129,9 @@ impl MovementCalculator for SquareMovementCalculator {
                     continue 'neighbors;
                 }
 
+
+                let _ = move_info.set_valid_move(neighbor);
+
                 // if none of them return false and cancel the loop then we can infer that we are able to move into that neighbor
                 // we add the neighbor to the list of unvisited nodes and then push the neighbor to the available moves list
                 unvisited_nodes.push(*move_info.get_node_mut(neighbor).expect(
@@ -136,7 +143,7 @@ impl MovementCalculator for SquareMovementCalculator {
             unvisited_nodes.remove(0);
             visited_nodes.push(current_node.node_pos);
         }
-        (available_moves, move_info)
+        move_info
     }
 }
 

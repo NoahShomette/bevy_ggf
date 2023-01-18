@@ -96,6 +96,7 @@ impl MovementNodes {
                 node_pos: *tile_pos,
                 prior_node: prior_node.node_pos,
                 move_cost: None,
+                valid_move: false,
             };
             self.move_nodes.insert(*tile_pos, node);
         }
@@ -192,6 +193,15 @@ impl MovementNodes {
         }
         neighbor_tiles
     }
+
+    pub fn set_valid_move(&mut self, node_pos_to_update: &TilePos) -> Result<(), String> {
+        return if let Some(node) = self.get_node_mut(&node_pos_to_update) {
+            node.valid_move = true;
+            Ok(())
+        } else {
+            Err(String::from("Error getting node"))
+        }
+    }
 }
 
 //TODO refactor this to have a field declaring it a valid move. then use that to filter the movenodes
@@ -202,6 +212,13 @@ pub struct MoveNode {
     pub node_pos: TilePos,
     pub prior_node: TilePos,
     pub move_cost: Option<i32>,
+    pub valid_move: bool,
+}
+
+impl MoveNode {
+    pub fn set_cost(&mut self, new_cost: i32) {
+        self.move_cost = Some(new_cost);
+    }
 }
 
 // main events
@@ -229,12 +246,9 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
     let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(world);
     let movement_system = system_state.get(world);
 
-    let mut move_info: (Vec<TilePos>, MovementNodes) = (
-        vec![],
-        MovementNodes {
-            move_nodes: HashMap::new(),
-        },
-    );
+    let mut move_info: MovementNodes = (MovementNodes {
+        move_nodes: HashMap::new(),
+    });
 
     for event in move_events_vec {
         if let MoveEvent::MoveBegin { object_moving } = event {
@@ -246,10 +260,10 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
         }
     }
 
-    if !move_info.0.is_empty() {
+    if !move_info.move_nodes.is_empty() {
         world.resource_scope(|_world, mut a: Mut<CurrentMovementInformation>| {
-            for (tile_pos, move_node) in move_info.1.move_nodes.iter() {
-                if move_info.0.contains(&move_node.node_pos) {
+            for (tile_pos, move_node) in move_info.move_nodes.iter() {
+                if move_node.valid_move {
                     a.available_moves.insert(
                         *tile_pos,
                         AvailableMove {
@@ -258,17 +272,6 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
                             move_cost: move_node
                                 .move_cost
                                 .expect("All valid moves should have a move cost"),
-                        },
-                    );
-                }
-                // if the move node is the starting node we want to add it to the available moves.
-                if move_node.move_cost == Some(0) {
-                    a.available_moves.insert(
-                        *tile_pos,
-                        AvailableMove {
-                            tile_pos: move_node.node_pos,
-                            prior_tile_pos: move_node.node_pos,
-                            move_cost: 0,
                         },
                     );
                 }

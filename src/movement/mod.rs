@@ -88,14 +88,15 @@ impl MovementSystem {
 /// that implements Advance Wars style movement for square based maps called [`SquareMovementCalculator`](defaults::SquareMovementCalculator)
 pub trait MovementCalculator: 'static + Send + Sync {
     /// The main function of a [`MovementCalculator`]. This is called when a [`MoveEvent`] is received
-    /// and the result is pushed into the [`CurrentMovementInformation`] Resource automatically. Use
+    /// and all [`MoveNode`](backend::MoveNode) with valid_move marked true will be 
+    /// pushed into the [`CurrentMovementInformation`] Resource automatically. Use
     /// this function to define your own movement algorithm.
     fn calculate_move(
         &self,
         movement_system: &Res<MovementSystem>,
         object_moving: &Entity,
         world: &World,
-    ) -> (Vec<TilePos>, MovementNodes);
+    ) -> MovementNodes;
 }
 
 /// A trait used to define a new check for a tile in a [`MovementCalculator`]s pathfinding algorithm.
