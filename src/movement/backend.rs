@@ -1,4 +1,4 @@
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::mapping::{
     add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
 };
@@ -15,7 +15,7 @@ use bevy::prelude::{
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType};
 
-/// Provided function that can be used in a [`MovementCalculator`] to keep track of the nodes in a pathfinding node,
+/// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific
 /// node. Will automatically compute all of the above.
 pub fn tile_movement_cost_check(
@@ -78,7 +78,7 @@ pub fn tile_movement_cost_check(
     };
 }
 
-/// Struct used in a [`MovementCalculator`] to hold the list of [`MoveNode`]
+/// Struct used in a [`MovementCalculator`](crate::movement::MovementCalculator) to hold the list of [`MoveNode`]
 pub struct MovementNodes {
     pub move_nodes: HashMap<TilePos, MoveNode>,
 }
@@ -96,6 +96,7 @@ impl MovementNodes {
                 node_pos: *tile_pos,
                 prior_node: prior_node.node_pos,
                 move_cost: None,
+                valid_move: false,
             };
             self.move_nodes.insert(*tile_pos, node);
         }
@@ -192,14 +193,32 @@ impl MovementNodes {
         }
         neighbor_tiles
     }
+
+    pub fn set_valid_move(&mut self, node_pos_to_update: &TilePos) -> Result<(), String> {
+        return if let Some(node) = self.get_node_mut(&node_pos_to_update) {
+            node.valid_move = true;
+            Ok(())
+        } else {
+            Err(String::from("Error getting node"))
+        }
+    }
 }
 
+//TODO refactor this to have a field declaring it a valid move. then use that to filter the movenodes
+// into available moves
 /// Represents a tile in a MovementNodes struct. Used to hold information relevant to movement calculation
 #[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
 pub struct MoveNode {
     pub node_pos: TilePos,
     pub prior_node: TilePos,
     pub move_cost: Option<i32>,
+    pub valid_move: bool,
+}
+
+impl MoveNode {
+    pub fn set_cost(&mut self, new_cost: i32) {
+        self.move_cost = Some(new_cost);
+    }
 }
 
 // main events
@@ -227,12 +246,9 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
     let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(world);
     let movement_system = system_state.get(world);
 
-    let mut move_info: (Vec<TilePos>, MovementNodes) = (
-        vec![],
-        MovementNodes {
-            move_nodes: HashMap::new(),
-        },
-    );
+    let mut move_info: MovementNodes = (MovementNodes {
+        move_nodes: HashMap::new(),
+    });
 
     for event in move_events_vec {
         if let MoveEvent::MoveBegin { object_moving } = event {
@@ -244,10 +260,10 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
         }
     }
 
-    if !move_info.0.is_empty() {
+    if !move_info.move_nodes.is_empty() {
         world.resource_scope(|_world, mut a: Mut<CurrentMovementInformation>| {
-            for (tile_pos, move_node) in move_info.1.move_nodes.iter() {
-                if move_info.0.contains(&move_node.node_pos) {
+            for (tile_pos, move_node) in move_info.move_nodes.iter() {
+                if move_node.valid_move {
                     a.available_moves.insert(
                         *tile_pos,
                         AvailableMove {
@@ -256,17 +272,6 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
                             move_cost: move_node
                                 .move_cost
                                 .expect("All valid moves should have a move cost"),
-                        },
-                    );
-                }
-                // if the move node is the starting node we want to add it to the available moves.
-                if move_node.move_cost == Some(0) {
-                    a.available_moves.insert(
-                        *tile_pos,
-                        AvailableMove {
-                            tile_pos: move_node.node_pos,
-                            prior_tile_pos: move_node.node_pos,
-                            move_cost: 0,
                         },
                     );
                 }
@@ -287,7 +292,7 @@ pub(crate) fn handle_try_move_events(
         ),
         With<Object>,
     >,
-    mut tile_query: Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    mut tile_query: Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
     mut tilemap_q: Query<
         (
             &mut Map,
@@ -353,7 +358,7 @@ pub fn move_object(
         ),
         With<Object>,
     >,
-    tile_query: &mut Query<(&mut TileObjectStacks, &mut TileObjects)>,
+    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
     tilemap_q: &mut Query<
         (
             &mut Map,
@@ -412,5 +417,3 @@ pub fn move_object(
         )))
     };
 }
-
-pub fn move_complete(object_moving: Entity) {}

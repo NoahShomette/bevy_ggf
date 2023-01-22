@@ -1,3 +1,7 @@
+//! bevy_ggf contains a built in method to represent units, buildings, and anything else that is not
+//! a tile and resides on the map. This system is built on top of Bevy_ECS and is based on the entity
+//! component system.
+
 use crate::mapping::tiles::ObjectStackingClass;
 use crate::movement::UnitMovementBundle;
 use crate::selection::SelectableEntity;
@@ -177,8 +181,9 @@ pub struct ObjectInfo {
     pub object_type: &'static ObjectType,
 }
 
-/// Resource holding all [`UnitType`]s that are used in the game
+/// Resource holding all [`ObjectType`]s that are used in the game
 #[derive(Resource)]
+#[allow(dead_code)]
 pub struct GameObjectInfo {
     object_classes: Vec<ObjectClass>,
     object_groups: Vec<ObjectGroup>,

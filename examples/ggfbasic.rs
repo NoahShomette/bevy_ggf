@@ -3,7 +3,7 @@ use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
-    ObjectStackingClass, ObjectStacksCount, StackingClass, TileObjectStacks,
+    ObjectStackingClass, StackingClass, TileObjectStackingRules, TileObjectStacksCount,
 };
 use bevy_ggf::mapping::{
     tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, MapHandler, UpdateMapTileObject,
@@ -141,9 +141,9 @@ fn startup(
         }
     }
 
-    let tile_stack_rules = TileObjectStacks::new(vec![(
+    let tile_stack_rules = TileObjectStackingRules::new(vec![(
         &STACKING_CLASS_GROUND,
-        ObjectStacksCount {
+        TileObjectStacksCount {
             current_count: 0,
             max_count: 2,
         },
