@@ -3,6 +3,7 @@ pub mod defaults;
 
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::movement::backend::{handle_move_begin_events, handle_try_move_events, MovementNodes};
+use crate::object::{ObjectClass, ObjectGroup, ObjectType};
 use bevy::prelude::{
     App, Bundle, Component, CoreStage, Entity, IntoSystemDescriptor, Plugin, Res, Resource, World,
 };
@@ -88,7 +89,7 @@ impl MovementSystem {
 /// that implements Advance Wars style movement for square based maps called [`SquareMovementCalculator`](defaults::SquareMovementCalculator)
 pub trait MovementCalculator: 'static + Send + Sync {
     /// The main function of a [`MovementCalculator`]. This is called when a [`MoveEvent`] is received
-    /// and all [`MoveNode`](backend::MoveNode) with valid_move marked true will be 
+    /// and all [`MoveNode`](backend::MoveNode) with valid_move marked true will be
     /// pushed into the [`CurrentMovementInformation`] Resource automatically. Use
     /// this function to define your own movement algorithm.
     fn calculate_move(
@@ -264,18 +265,115 @@ pub struct TileMovementRules {
 
 // UNIT MOVEMENT STUFF
 
-/// Basic Bundle that supplies all needed movement components for a unit
+/// Basic Bundle that supplies all required movement components for an object
 #[derive(Bundle)]
-pub struct UnitMovementBundle {
+pub struct ObjectMovementBundle {
     pub object_movement: ObjectMovement,
 }
 
-/// Required for an Object to move. Without this an object is unable to move.
+/// Component that allows an object to move. Defines three things:
+///
+/// **move_points** - Represents how far an object can move.
+/// **movement_type - what kinda MovementType that the attached object uses
+/// **object_terrain_movement_rules** - defines a list of rules based on TerrainType and TerrainClass
+/// that the object follows. If you want to declare movement rules based on the type of object that
+/// is in the tile that is getting checked, use ObjectTypeMovementRules
 #[derive(Clone, Eq, PartialEq, Debug, Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
     pub movement_type: &'static MovementType,
     pub object_terrain_movement_rules: ObjectTerrainMovementRules,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Component)]
+pub struct ObjectTypeMovementRules {
+    object_class_rules: HashMap<&'static ObjectClass, bool>,
+    object_group_rules: HashMap<&'static ObjectGroup, bool>,
+    object_type_rules: HashMap<&'static ObjectType, bool>,
+}
+
+impl ObjectTypeMovementRules {
+    /// Creates a new [`ObjectTerrainMovementRules`] from the provided [`TerrainClass`] vec and [`TerrainType`] rules
+    pub fn new(
+        object_class_rules: Vec<(&'static ObjectClass, bool)>,
+        object_group_rules: Vec<(&'static ObjectGroup, bool)>,
+        object_type_rules: Vec<(&'static ObjectType, bool)>,
+    ) -> ObjectTypeMovementRules {
+        ObjectTypeMovementRules {
+            object_class_rules: ObjectTypeMovementRules::new_class_rules_hashmaps(
+                object_class_rules,
+            ),
+            object_group_rules: ObjectTypeMovementRules::new_group_rules_hashmaps(
+                object_group_rules,
+            ),
+            object_type_rules: ObjectTypeMovementRules::new_type_rules_hashmaps(object_type_rules),
+        }
+    }
+
+    /// Returns true if there is a rule in the
+    ///
+    /// # Logic
+    /// It checks self.terrain_type_rules for a rule for the tiles [`TerrainType`]. If it finds a rule
+    /// it returns that directly. If it doesn't find a rule it checks if self.terrain_class_rules
+    /// contains a reference to the tiles [`TerrainClass`]. If it does then it returns true. Else
+    /// it returns false.
+    pub fn can_move_on_tile(&self, object_type: &ObjectType) -> Option<bool> {
+        if let Some(rule) = self.object_type_rules.get(&object_type) {
+            return Some(*rule);
+        }
+        if let Some(rule) = self.object_group_rules.get(&object_type.object_group) {
+            return Some(*rule);
+        }
+        if let Some(rule) = self
+            .object_class_rules
+            .get(&object_type.object_group.object_class)
+        {
+            return Some(*rule);
+        }
+        return None;
+    }
+
+    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    pub fn new_type_rules_hashmaps(
+        type_rules: Vec<(&'static ObjectType, bool)>,
+    ) -> HashMap<&'static ObjectType, bool> {
+        let mut type_hashmap: HashMap<&'static ObjectType, bool> = HashMap::new();
+
+        for rule in type_rules.iter() {
+            type_hashmap.insert(rule.0, rule.1);
+        }
+        type_hashmap
+    }
+
+    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    pub fn new_group_rules_hashmaps(
+        group_rules: Vec<(&'static ObjectGroup, bool)>,
+    ) -> HashMap<&'static ObjectGroup, bool> {
+        let mut group_hashmap: HashMap<&'static ObjectGroup, bool> = HashMap::new();
+
+        for rule in group_rules.iter() {
+            group_hashmap.insert(rule.0, rule.1);
+        }
+        group_hashmap
+    }
+
+    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    pub fn new_class_rules_hashmaps(
+        class_rules: Vec<(&'static ObjectClass, bool)>,
+    ) -> HashMap<&'static ObjectClass, bool> {
+        let mut class_hashmap: HashMap<&'static ObjectClass, bool> = HashMap::new();
+
+        for rule in class_rules.iter() {
+            class_hashmap.insert(rule.0, rule.1);
+        }
+
+        class_hashmap
+    }
+
+    /// Helper function to add a rule to a hashmap.
+    fn add_terrain_class_rule(&mut self, rule: &'static TerrainClass) {
+        //self.terrain_class_rules.push(rule);
+    }
 }
 
 /// Defines what type of terrain an object can move onto. Place into an [`ObjectMovement`] component to
@@ -295,8 +393,8 @@ pub struct ObjectMovement {
 ///
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ObjectTerrainMovementRules {
-    pub terrain_class_rules: Vec<&'static TerrainClass>,
-    pub terrain_type_rules: HashMap<&'static TerrainType, bool>,
+    terrain_class_rules: Vec<&'static TerrainClass>,
+    terrain_type_rules: HashMap<&'static TerrainType, bool>,
 }
 
 impl ObjectTerrainMovementRules {
@@ -313,7 +411,7 @@ impl ObjectTerrainMovementRules {
         }
     }
 
-    /// Returns true if the object can move onto that tiles terrain. Returns false if it cannot
+    /// Returns true if the object can move onto the given tiles terrain. Returns false if it cannot
     ///
     /// # Logic
     /// It checks self.terrain_type_rules for a rule for the tiles [`TerrainType`]. If it finds a rule
@@ -331,7 +429,7 @@ impl ObjectTerrainMovementRules {
             .contains(&tile_terrain_info.terrain_type.terrain_class)
     }
 
-    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    /// Helper function to create a hashmap of [`TerrainType`] rules for Object Movement.
     pub fn new_terrain_type_rules(
         rules: Vec<(&'static TerrainType, bool)>,
     ) -> HashMap<&'static TerrainType, bool> {
@@ -342,7 +440,7 @@ impl ObjectTerrainMovementRules {
         hashmap
     }
 
-    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    /// Helper function to add a rule to the list of rules
     pub fn add_terrain_class_rule(&mut self, rule: &'static TerrainClass) {
         self.terrain_class_rules.push(rule);
     }

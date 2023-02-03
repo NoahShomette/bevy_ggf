@@ -3,7 +3,7 @@
 //! component system.
 
 use crate::mapping::tiles::ObjectStackingClass;
-use crate::movement::UnitMovementBundle;
+use crate::movement::ObjectMovementBundle;
 use crate::selection::SelectableEntity;
 use bevy::prelude::{Bundle, Component, Resource, SpriteBundle};
 use bevy_ecs_tilemap::prelude::TilePos;
@@ -81,10 +81,9 @@ pub struct UnitBundle {
 
     //
     pub sprite_bundle: SpriteBundle,
-    pub unit_movement_bundle: UnitMovementBundle,
+    pub unit_movement_bundle: ObjectMovementBundle,
 }
 
-//TODO Figure out if I can do a spawn event or implementation thing
 ///Marker component for an entity signifying it as an Object
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
 pub struct Object;

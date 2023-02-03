@@ -12,7 +12,7 @@ use bevy_ggf::movement::defaults::{MoveCheckSpace, MoveCheckTerrain, SquareMovem
 use bevy_ggf::movement::{
     CurrentMovementInformation, DiagonalMovement, MoveEvent, MovementSystem, MovementType,
     ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules,
-    UnitMovementBundle,
+    ObjectMovementBundle,
 };
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
@@ -194,7 +194,7 @@ fn startup(
             texture: infantry_texture_handle.clone(),
             ..default()
         },
-        unit_movement_bundle: UnitMovementBundle {
+        unit_movement_bundle: ObjectMovementBundle {
             object_movement: ObjectMovement {
                 move_points: 10,
                 movement_type: &MOVEMENT_TYPES[0],
@@ -229,7 +229,7 @@ fn startup(
             texture: infantry_texture_handle.clone(),
             ..default()
         },
-        unit_movement_bundle: UnitMovementBundle {
+        unit_movement_bundle: ObjectMovementBundle {
             object_movement: ObjectMovement {
                 move_points: 20,
                 movement_type: &MOVEMENT_TYPES[0],

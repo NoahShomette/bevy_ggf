@@ -25,6 +25,7 @@ pub struct BggfTileBundle {
     pub tile_bundle: TileBundle,
     pub tile: Tile,
     pub tile_terrain_info: TileTerrainInfo,
+    //pub tile_texture_index: TileTextureIndex,
 }
 
 #[derive(Bundle)]
@@ -36,6 +37,14 @@ pub struct BggfTileObjectBundle {
 /// Marker component on map tiles for ease of query and accessing
 #[derive(Component)]
 pub struct Tile;
+
+/* TODO: Implement this
+#[derive(Component)]
+pub struct TileTextureIndex{
+    pub texture_index: u32,
+}
+
+ */
 
 /// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
 /// using an [`TileObjectStacksCount`] struct.
