@@ -244,9 +244,9 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
     let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(world);
     let movement_system = system_state.get(world);
 
-    let mut move_info: MovementNodes = (MovementNodes {
+    let mut move_info: MovementNodes = MovementNodes {
         move_nodes: HashMap::new(),
-    });
+    };
 
     for event in move_events_vec {
         if let MoveEvent::MoveBegin { object_moving } = event {
