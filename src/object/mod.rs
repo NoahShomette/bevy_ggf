@@ -66,7 +66,6 @@ pub struct ObjectCoreBundle {
 
     //
     pub selectable: SelectableEntity,
-
     //pub unit_movement_bundle: UnitMovementBundle,
 }
 

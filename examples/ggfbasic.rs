@@ -194,10 +194,8 @@ fn startup(
         vec![(&TERRAIN_TYPES[2], false)],
     );
 
-    let movement_rules_2 = ObjectTerrainMovementRules::new(
-        vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
-        vec![],
-    );
+    let movement_rules_2 =
+        ObjectTerrainMovementRules::new(vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]], vec![]);
 
     let entity = commands.spawn(UnitBundle {
         object: Object,

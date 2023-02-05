@@ -294,7 +294,7 @@ pub struct ObjectMovement {
 /// # NOTE
 /// These rules override [`ObjectTerrainMovementRules`].
 ///
-/// If using the built in [`MoveCheckAllowedTile`](defaults::MoveCheckAllowedTile) implementation, 
+/// If using the built in [`MoveCheckAllowedTile`](defaults::MoveCheckAllowedTile) implementation,
 /// these rules ignore [`ObjectStackingClass`](crate::mapping::tiles::ObjectStackingClass).
 ///
 #[derive(Clone, Eq, PartialEq, Debug, Component)]
@@ -328,7 +328,7 @@ impl ObjectTypeMovementRules {
     /// Returns an option if there is a rule for any of the object type, group, or class given.
     ///
     /// # Logic
-    /// It checks each set of rules for a match to the object information in the given [`ObjectInfo`]. 
+    /// It checks each set of rules for a match to the object information in the given [`ObjectInfo`].
     /// If one is found, it returns the bool associated with it. If none are found it returns None.
     ///
     /// The order is [`ObjectType`] > [`ObjectGroup`] > [`ObjectClass`] - returning on the first rule

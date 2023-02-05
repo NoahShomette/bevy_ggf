@@ -200,7 +200,7 @@ impl MovementNodes {
             Ok(())
         } else {
             Err(String::from("Error getting node"))
-        }
+        };
     }
 }
 

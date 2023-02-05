@@ -198,7 +198,7 @@ impl TileMoveCheck for MoveCheckAllowedTile {
         {
             // get the tiles object holder
             if let Some(tile_objects) = world.get::<TileObjects>(tile_entity) {
-                // for each object in the holder we feed its info into the ObjectTypeMovementRules 
+                // for each object in the holder we feed its info into the ObjectTypeMovementRules
                 // and return the bool if its there, else we just ignore it
                 for tile_object in tile_objects.entities_in_tile.iter() {
                     let Some(object_info) = world.get::<ObjectInfo>(*tile_object) else {
