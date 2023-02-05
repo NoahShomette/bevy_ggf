@@ -140,7 +140,7 @@ impl Map {
 /// Adds the given object to a tile while keeping the TileObjectStacks component of the tile up to date
 ///
 /// Will Panic if tile_pos isn't a valid tile position in [`TileStorage`]
-
+//TODO: Remove unwrap() usage here -
 // Look at having this return a result with an error message
 pub fn add_object_to_tile(
     object_to_add: Entity,
@@ -162,7 +162,7 @@ pub fn add_object_to_tile(
             tile_stack_rules
                 .tile_object_stacking_rules
                 .get(&object_stack_class.stack_class)
-                .unwrap()
+                .expect("Tile does not have the requested ObjectStackClass information")
         );
     }
 }

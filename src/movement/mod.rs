@@ -3,7 +3,7 @@ pub mod defaults;
 
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::movement::backend::{handle_move_begin_events, handle_try_move_events, MovementNodes};
-use crate::object::{ObjectClass, ObjectGroup, ObjectType};
+use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
 use bevy::prelude::{
     App, Bundle, Component, CoreStage, Entity, IntoSystemDescriptor, Plugin, Res, Resource, World,
 };
@@ -285,6 +285,18 @@ pub struct ObjectMovement {
     pub object_terrain_movement_rules: ObjectTerrainMovementRules,
 }
 
+/// Optional component that can be attached to an object to define rules related to that objects movement
+/// on other objects. Eg, allowing objects to move over water using bridges. In this situation bridges
+/// would be another object.
+///
+/// The order is [`ObjectType`] > [`ObjectGroup`] > [`ObjectClass`]
+///
+/// # NOTE
+/// These rules override [`ObjectTerrainMovementRules`].
+///
+/// If using the built in [`MoveCheckAllowedTile`](defaults::MoveCheckAllowedTile) implementation, 
+/// these rules ignore [`ObjectStackingClass`](crate::mapping::tiles::ObjectStackingClass).
+///
 #[derive(Clone, Eq, PartialEq, Debug, Component)]
 pub struct ObjectTypeMovementRules {
     object_class_rules: HashMap<&'static ObjectClass, bool>,
@@ -293,7 +305,10 @@ pub struct ObjectTypeMovementRules {
 }
 
 impl ObjectTypeMovementRules {
-    /// Creates a new [`ObjectTerrainMovementRules`] from the provided [`TerrainClass`] vec and [`TerrainType`] rules
+    /// Creates a new [`ObjectTypeMovementRules`] from the three provided vecs holding a tuple containing
+    /// one each of the following, [`ObjectClass`], [`ObjectGroup`], [`ObjectType`], and a bool. The
+    /// bool fed in with the corresponding object info controls whether the object that has this component
+    /// is allowed to move onto the given tile.
     pub fn new(
         object_class_rules: Vec<(&'static ObjectClass, bool)>,
         object_group_rules: Vec<(&'static ObjectGroup, bool)>,
@@ -310,30 +325,36 @@ impl ObjectTypeMovementRules {
         }
     }
 
-    /// Returns true if there is a rule in the
+    /// Returns an option if there is a rule for any of the object type, group, or class given.
     ///
     /// # Logic
-    /// It checks self.terrain_type_rules for a rule for the tiles [`TerrainType`]. If it finds a rule
-    /// it returns that directly. If it doesn't find a rule it checks if self.terrain_class_rules
-    /// contains a reference to the tiles [`TerrainClass`]. If it does then it returns true. Else
-    /// it returns false.
-    pub fn can_move_on_tile(&self, object_type: &ObjectType) -> Option<bool> {
-        if let Some(rule) = self.object_type_rules.get(&object_type) {
+    /// It checks each set of rules for a match to the object information in the given [`ObjectInfo`]. 
+    /// If one is found, it returns the bool associated with it. If none are found it returns None.
+    ///
+    /// The order is [`ObjectType`] > [`ObjectGroup`] > [`ObjectClass`] - returning on the first rule
+    /// found. Therefore you can use the layers of an object type to grant increasing specificity for
+    /// what other objects an object can walk on.
+    ///
+    pub fn can_move_on_tile(&self, object_info: &ObjectInfo) -> Option<bool> {
+        if let Some(rule) = self.object_type_rules.get(&object_info.object_type) {
             return Some(*rule);
         }
-        if let Some(rule) = self.object_group_rules.get(&object_type.object_group) {
+        if let Some(rule) = self
+            .object_group_rules
+            .get(&object_info.object_type.object_group)
+        {
             return Some(*rule);
         }
         if let Some(rule) = self
             .object_class_rules
-            .get(&object_type.object_group.object_class)
+            .get(&object_info.object_type.object_group.object_class)
         {
             return Some(*rule);
         }
         return None;
     }
 
-    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    /// Helper function to create a hashmap of [`ObjectType`] rules for Object Movement.
     pub fn new_type_rules_hashmaps(
         type_rules: Vec<(&'static ObjectType, bool)>,
     ) -> HashMap<&'static ObjectType, bool> {
@@ -345,7 +366,7 @@ impl ObjectTypeMovementRules {
         type_hashmap
     }
 
-    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    /// Helper function to create a hashmap of [`ObjectGroup`] rules for Object Movement.
     pub fn new_group_rules_hashmaps(
         group_rules: Vec<(&'static ObjectGroup, bool)>,
     ) -> HashMap<&'static ObjectGroup, bool> {
@@ -357,7 +378,7 @@ impl ObjectTypeMovementRules {
         group_hashmap
     }
 
-    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    /// Helper function to create a hashmap of [`ObjectClass`] rules for Object Movement.
     pub fn new_class_rules_hashmaps(
         class_rules: Vec<(&'static ObjectClass, bool)>,
     ) -> HashMap<&'static ObjectClass, bool> {

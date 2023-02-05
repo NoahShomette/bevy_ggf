@@ -1,11 +1,12 @@
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules};
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::mapping::MapHandler;
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
 use crate::movement::{
-    DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, TileMoveCheck,
+    DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, ObjectTypeMovementRules,
+    TileMoveCheck,
 };
-use crate::object::ObjectGridPosition;
+use crate::object::{ObjectGridPosition, ObjectInfo};
 use bevy::prelude::{Entity, IVec2, Res, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapSize};
@@ -171,11 +172,11 @@ impl TileMoveCheck for MoveCheckSpace {
     }
 }
 
-/// implements TileMoveCheck. Provides a check for whether an object is able to move in the given tiles
-/// terrain or not
-pub struct MoveCheckTerrain;
+/// implements TileMoveCheck. Provides a check for whether an object is able to move in the given tile
+/// based on the tiles terrain and the objects in the tile
+pub struct MoveCheckAllowedTile;
 
-impl TileMoveCheck for MoveCheckTerrain {
+impl TileMoveCheck for MoveCheckAllowedTile {
     fn is_valid_move(
         &self,
         entity_moving: Entity,
@@ -189,6 +190,26 @@ impl TileMoveCheck for MoveCheckTerrain {
         };
         let Some(tile_terrain_info) = world.get::<TileTerrainInfo>(tile_entity) else {
             return false;
+        };
+
+        // if the moving object has the optional type movement rules
+        if let Some(object_type_movement_rules) =
+            world.get::<ObjectTypeMovementRules>(entity_moving)
+        {
+            // get the tiles object holder
+            if let Some(tile_objects) = world.get::<TileObjects>(tile_entity) {
+                // for each object in the holder we feed its info into the ObjectTypeMovementRules 
+                // and return the bool if its there, else we just ignore it
+                for tile_object in tile_objects.entities_in_tile.iter() {
+                    let Some(object_info) = world.get::<ObjectInfo>(*tile_object) else {
+                        continue;
+                    };
+
+                    if let Some(bool) = object_type_movement_rules.can_move_on_tile(object_info) {
+                        return bool;
+                    }
+                }
+            };
         };
 
         object_movement

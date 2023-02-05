@@ -204,8 +204,6 @@ impl MovementNodes {
     }
 }
 
-//TODO refactor this to have a field declaring it a valid move. then use that to filter the movenodes
-// into available moves
 /// Represents a tile in a MovementNodes struct. Used to hold information relevant to movement calculation
 #[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
 pub struct MoveNode {

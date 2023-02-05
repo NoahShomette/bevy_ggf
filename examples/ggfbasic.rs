@@ -8,11 +8,13 @@ use bevy_ggf::mapping::tiles::{
 use bevy_ggf::mapping::{
     tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, MapHandler, UpdateMapTileObject,
 };
-use bevy_ggf::movement::defaults::{MoveCheckSpace, MoveCheckTerrain, SquareMovementCalculator};
+use bevy_ggf::movement::defaults::{
+    MoveCheckAllowedTile, MoveCheckSpace, SquareMovementCalculator,
+};
 use bevy_ggf::movement::{
     CurrentMovementInformation, DiagonalMovement, MoveEvent, MovementSystem, MovementType,
-    ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts, TileMovementRules,
-    ObjectMovementBundle,
+    ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules, ObjectTypeMovementRules,
+    TileMovementCosts, TileMovementRules,
 };
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
@@ -32,7 +34,18 @@ pub const OBJECT_TYPE_RIFLEMAN: ObjectType = ObjectType {
     object_group: &OBJECT_GROUP_INFANTRY,
 };
 
+pub const OBJECT_CLASS_BUILDING: ObjectClass = ObjectClass { name: "Building" };
+pub const OBJECT_GROUP_IMPROVEMENTS: ObjectGroup = ObjectGroup {
+    name: "OBJECT_CLASS_BUILDING",
+    object_class: &OBJECT_CLASS_GROUND,
+};
+pub const OBJECT_TYPE_BRIDGE: ObjectType = ObjectType {
+    name: "Bridge",
+    object_group: &OBJECT_GROUP_INFANTRY,
+};
+
 pub const STACKING_CLASS_GROUND: StackingClass = StackingClass { name: "Ground" };
+pub const STACKING_CLASS_BUILDING: StackingClass = StackingClass { name: "Building" };
 
 pub const MOVEMENT_TYPES: &'static [MovementType] = &[
     MovementType { name: "Infantry" },
@@ -141,13 +154,22 @@ fn startup(
         }
     }
 
-    let tile_stack_rules = TileObjectStackingRules::new(vec![(
-        &STACKING_CLASS_GROUND,
-        TileObjectStacksCount {
-            current_count: 0,
-            max_count: 2,
-        },
-    )]);
+    let tile_stack_rules = TileObjectStackingRules::new(vec![
+        (
+            &STACKING_CLASS_GROUND,
+            TileObjectStacksCount {
+                current_count: 0,
+                max_count: 1,
+            },
+        ),
+        (
+            &STACKING_CLASS_BUILDING,
+            TileObjectStacksCount {
+                current_count: 0,
+                max_count: 1,
+            },
+        ),
+    ]);
 
     //let map_texture_vec: Vec<Box<dyn TerrainExtensionTraitBase>> = vec![Box::new(Grassland{}), Box::new(Hill{}), Box::new(Ocean{})];
     Map::generate_random_map(
@@ -172,17 +194,22 @@ fn startup(
         vec![(&TERRAIN_TYPES[2], false)],
     );
 
+    let movement_rules_2 = ObjectTerrainMovementRules::new(
+        vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
+        vec![],
+    );
+
     let entity = commands.spawn(UnitBundle {
         object: Object,
         object_info: ObjectInfo {
-            object_type: &OBJECT_TYPE_RIFLEMAN,
+            object_type: &OBJECT_TYPE_BRIDGE,
         },
         selectable: SelectableEntity,
         object_grid_position: ObjectGridPosition {
             tile_position: TilePos::new(0, 0),
         },
         object_stacking_class: ObjectStackingClass {
-            stack_class: &STACKING_CLASS_GROUND,
+            stack_class: &STACKING_CLASS_BUILDING,
         },
         sprite_bundle: SpriteBundle {
             transform: Transform {
@@ -198,7 +225,7 @@ fn startup(
             object_movement: ObjectMovement {
                 move_points: 10,
                 movement_type: &MOVEMENT_TYPES[0],
-                object_terrain_movement_rules: movement_rules.clone(),
+                object_terrain_movement_rules: movement_rules_2.clone(),
             },
         },
     });
@@ -207,38 +234,44 @@ fn startup(
         tile_pos: TilePos::new(0, 0),
     });
 
-    let entity = commands.spawn(UnitBundle {
-        object: Object,
-        object_info: ObjectInfo {
-            object_type: &OBJECT_TYPE_RIFLEMAN,
-        },
-        selectable: SelectableEntity,
-        object_grid_position: ObjectGridPosition {
-            tile_position: TilePos::new(1, 1),
-        },
-        object_stacking_class: ObjectStackingClass {
-            stack_class: &STACKING_CLASS_GROUND,
-        },
-        sprite_bundle: SpriteBundle {
-            transform: Transform {
-                translation: tile_pos
-                    .center_in_world(&grid_size, &tilemap_type)
-                    .extend(5.0),
+    let object_movement_rules =
+        ObjectTypeMovementRules::new(vec![], vec![], vec![(&OBJECT_TYPE_BRIDGE, true)]);
+
+    let entity = commands
+        .spawn(UnitBundle {
+            object: Object,
+            object_info: ObjectInfo {
+                object_type: &OBJECT_TYPE_RIFLEMAN,
+            },
+            selectable: SelectableEntity,
+            object_grid_position: ObjectGridPosition {
+                tile_position: TilePos::new(1, 1),
+            },
+            object_stacking_class: ObjectStackingClass {
+                stack_class: &STACKING_CLASS_GROUND,
+            },
+            sprite_bundle: SpriteBundle {
+                transform: Transform {
+                    translation: tile_pos
+                        .center_in_world(&grid_size, &tilemap_type)
+                        .extend(5.0),
+                    ..default()
+                },
+                texture: infantry_texture_handle.clone(),
                 ..default()
             },
-            texture: infantry_texture_handle.clone(),
-            ..default()
-        },
-        unit_movement_bundle: ObjectMovementBundle {
-            object_movement: ObjectMovement {
-                move_points: 20,
-                movement_type: &MOVEMENT_TYPES[0],
-                object_terrain_movement_rules: movement_rules.clone(),
+            unit_movement_bundle: ObjectMovementBundle {
+                object_movement: ObjectMovement {
+                    move_points: 20,
+                    movement_type: &MOVEMENT_TYPES[0],
+                    object_terrain_movement_rules: movement_rules.clone(),
+                },
             },
-        },
-    });
+        })
+        .insert(object_movement_rules.clone())
+        .id();
     move_event_writer.send(UpdateMapTileObject::Add {
-        object_entity: entity.id(),
+        object_entity: entity,
         tile_pos: TilePos::new(1, 1),
     });
 }
@@ -457,10 +490,10 @@ fn main() {
         }).set(ImagePlugin::default_nearest()))
         .add_plugins(BggfDefaultPlugins)
         .add_plugin(TilemapPlugin)
-        .insert_resource(MovementSystem{
+        .insert_resource(MovementSystem {
             movement_calculator: Box::new(SquareMovementCalculator { diagonal_movement: DiagonalMovement::Disabled }),
             map_type: TilemapType::Square,
-            tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckTerrain)],
+            tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckAllowedTile)],
         })
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)
