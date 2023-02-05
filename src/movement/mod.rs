@@ -369,11 +369,6 @@ impl ObjectTypeMovementRules {
 
         class_hashmap
     }
-
-    /// Helper function to add a rule to a hashmap.
-    fn add_terrain_class_rule(&mut self, rule: &'static TerrainClass) {
-        //self.terrain_class_rules.push(rule);
-    }
 }
 
 /// Defines what type of terrain an object can move onto. Place into an [`ObjectMovement`] component to
@@ -438,11 +433,6 @@ impl ObjectTerrainMovementRules {
             hashmap.insert(rule.0, rule.1);
         }
         hashmap
-    }
-
-    /// Helper function to add a rule to the list of rules
-    pub fn add_terrain_class_rule(&mut self, rule: &'static TerrainClass) {
-        self.terrain_class_rules.push(rule);
     }
 }
 
