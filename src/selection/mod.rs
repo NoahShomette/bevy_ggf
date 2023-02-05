@@ -9,6 +9,7 @@ use bevy::prelude::{
 };
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage};
 
+//TODO: Update this to actually use the Selection Component
 pub struct BggfSelectionPlugin;
 
 impl Plugin for BggfSelectionPlugin {

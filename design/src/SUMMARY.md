@@ -7,7 +7,10 @@
 - [Project Overview](./overview.md)
 - [Development](./overview/development.md)
   - [Help Wanted](./overview/help_wanted.md)
-- [Usage](./overview/usage.md)
+
+# Usage
+
+- [The Absolute Basics](./usage/the_absolute_basics.md)
 
 # Design Reference
 

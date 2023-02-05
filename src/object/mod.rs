@@ -49,9 +49,9 @@ AddResourceOnTurn
 pub struct ObjectMinimalBundle {
     pub object: Object,
     pub object_info: ObjectInfo,
-    pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
+    pub sprite_bundle: SpriteBundle,
 }
 
 /// Base bundle that provides all functionality for all subsystems in the crate
@@ -60,12 +60,13 @@ pub struct ObjectCoreBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
     pub object_info: ObjectInfo,
-    pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
+    pub sprite_bundle: SpriteBundle,
 
     //
-    pub sprite_bundle: SpriteBundle,
+    pub selectable: SelectableEntity,
+
     //pub unit_movement_bundle: UnitMovementBundle,
 }
 
@@ -75,13 +76,13 @@ pub struct UnitBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
     pub object_info: ObjectInfo,
-    pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
+    pub sprite_bundle: SpriteBundle,
 
     //
-    pub sprite_bundle: SpriteBundle,
     pub unit_movement_bundle: ObjectMovementBundle,
+    pub selectable: SelectableEntity,
 }
 
 ///Marker component for an entity signifying it as an Object

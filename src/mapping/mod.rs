@@ -140,7 +140,10 @@ impl Map {
 /// Adds the given object to a tile while keeping the TileObjectStacks component of the tile up to date
 ///
 /// Will Panic if tile_pos isn't a valid tile position in [`TileStorage`]
-//TODO: Remove unwrap() usage here -
+//TODO: Remove unwrap() usage here - keep it crashing if there isnt the right stack rules. Unless we
+// switch to loading all this stuff from files. Then have someway to recover -- Only crashing because
+// of the info stuff here. Wouldnt crash without it
+
 // Look at having this return a result with an error message
 pub fn add_object_to_tile(
     object_to_add: Entity,
