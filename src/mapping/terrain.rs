@@ -37,6 +37,7 @@ pub struct TerrainClass {
 #[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
 pub struct TerrainType {
     pub name: &'static str,
+    //TODO remove this
     pub texture_index: u32,
     pub terrain_class: &'static TerrainClass,
 }

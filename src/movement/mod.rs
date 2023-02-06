@@ -2,7 +2,11 @@ pub mod backend;
 pub mod defaults;
 
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
-use crate::movement::backend::{handle_move_begin_events, handle_try_move_events, MovementNodes};
+use crate::movement::backend::{
+    add_object_moved_component_on_moves, handle_move_begin_events, handle_try_move_events,
+    MovementNodes,
+};
+use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
 use bevy::prelude::{
     App, Bundle, Component, CoreStage, Entity, IntoSystemDescriptor, Plugin, Res, Resource, World,
 };
@@ -12,16 +16,33 @@ use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
 ///
-pub struct BggfMovementPlugin;
+pub struct BggfMovementPlugin {
+    pub add_defaults_core: bool,
+    pub add_defaults_extra: bool,
+}
 
 impl Plugin for BggfMovementPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<TileMovementRules>()
+        app.init_resource::<TerrainMovementCosts>()
             .init_resource::<CurrentMovementInformation>()
             .add_event::<MoveEvent>()
-            .add_event::<MoveError>()
-            .add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end())
-            .add_system(handle_try_move_events);
+            .add_event::<MoveError>();
+        if self.add_defaults_core {
+            app.add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end())
+                .add_system(handle_try_move_events);
+        }
+        if self.add_defaults_extra {
+            app.add_system(add_object_moved_component_on_moves);
+        }
+    }
+}
+
+impl Default for BggfMovementPlugin {
+    fn default() -> Self {
+        Self {
+            add_defaults_core: true,
+            add_defaults_extra: true,
+        }
     }
 }
 
@@ -88,7 +109,7 @@ impl MovementSystem {
 /// that implements Advance Wars style movement for square based maps called [`SquareMovementCalculator`](defaults::SquareMovementCalculator)
 pub trait MovementCalculator: 'static + Send + Sync {
     /// The main function of a [`MovementCalculator`]. This is called when a [`MoveEvent`] is received
-    /// and all [`MoveNode`](backend::MoveNode) with valid_move marked true will be 
+    /// and all [`MoveNode`](backend::MoveNode) with valid_move marked true will be
     /// pushed into the [`CurrentMovementInformation`] Resource automatically. Use
     /// this function to define your own movement algorithm.
     fn calculate_move(
@@ -178,6 +199,15 @@ pub struct AvailableMove {
 }
 
 /// A move event. Used to conduct actions related to object movement
+/// - [Self::MoveBegin] represents starting a move. By default, this will run the [`handle_move_begin_events`]
+/// which will calculate the available moves for the given unit.
+/// - [Self::MoveCalculated] is intended to run after a move has been calculated with the current units
+/// available moves. __This is not used currently. Instead available moves are pushed straight to the
+/// [`CurrentMovementInformation`] resource.__
+/// - [Self::TryMoveObject] is sent when you want to try to move an object to a specific tile. Send
+/// the object thats trying to move and the tile you want it to move to. By default is handles by
+/// [`handle_try_move_events`]
+/// - [Self::MoveComplete] is sent if the [Self::TryMoveObject] event was successful.
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum MoveEvent {
     MoveBegin {
@@ -255,27 +285,141 @@ impl TileMovementCosts {
     pub fn calculate_unit_move_cost(&self) {}
 }
 
-/// Defines a resource that will hold all [`TileMovementCosts`] - references to a specific TileMovementCosts
-/// are stored in each tile as their current cost.
+/// Defines a resource that will hold all [`TileMovementCosts`] related to TerrainTypes - references to a specific TileMovementCosts
+/// are stored in each tile as their current cost using the [`TileMovementCosts`] component.
 #[derive(Resource, Default, Debug)]
-pub struct TileMovementRules {
+pub struct TerrainMovementCosts {
     pub movement_cost_rules: HashMap<TerrainType, TileMovementCosts>,
 }
 
 // UNIT MOVEMENT STUFF
 
-/// Basic Bundle that supplies all needed movement components for a unit
+/// Basic Bundle that supplies all required movement components for an object
 #[derive(Bundle)]
-pub struct UnitMovementBundle {
+pub struct ObjectMovementBundle {
     pub object_movement: ObjectMovement,
 }
 
-/// Required for an Object to move. Without this an object is unable to move.
+/// Component that allows an object to move. Defines three things:
+///
+/// **move_points** - Represents how far an object can move.
+/// **movement_type - what kinda MovementType that the attached object uses
+/// **object_terrain_movement_rules** - defines a list of rules based on TerrainType and TerrainClass
+/// that the object follows. If you want to declare movement rules based on the type of object that
+/// is in the tile that is getting checked, use ObjectTypeMovementRules
 #[derive(Clone, Eq, PartialEq, Debug, Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
     pub movement_type: &'static MovementType,
     pub object_terrain_movement_rules: ObjectTerrainMovementRules,
+}
+
+/// Optional component that can be attached to an object to define rules related to that objects movement
+/// on other objects. Eg, allowing objects to move over water using bridges. In this situation bridges
+/// would be another object.
+///
+/// The order is [`ObjectType`] > [`ObjectGroup`] > [`ObjectClass`]
+///
+/// # NOTE
+/// These rules override [`ObjectTerrainMovementRules`].
+///
+/// If using the built in [`MoveCheckAllowedTile`](defaults::MoveCheckAllowedTile) implementation,
+/// these rules ignore [`ObjectStackingClass`](crate::mapping::tiles::ObjectStackingClass).
+///
+#[derive(Clone, Eq, PartialEq, Debug, Component)]
+pub struct ObjectTypeMovementRules {
+    object_class_rules: HashMap<&'static ObjectClass, bool>,
+    object_group_rules: HashMap<&'static ObjectGroup, bool>,
+    object_type_rules: HashMap<&'static ObjectType, bool>,
+}
+
+impl ObjectTypeMovementRules {
+    /// Creates a new [`ObjectTypeMovementRules`] from the three provided vecs holding a tuple containing
+    /// one each of the following, [`ObjectClass`], [`ObjectGroup`], [`ObjectType`], and a bool. The
+    /// bool fed in with the corresponding object info controls whether the object that has this component
+    /// is allowed to move onto the given tile.
+    pub fn new(
+        object_class_rules: Vec<(&'static ObjectClass, bool)>,
+        object_group_rules: Vec<(&'static ObjectGroup, bool)>,
+        object_type_rules: Vec<(&'static ObjectType, bool)>,
+    ) -> ObjectTypeMovementRules {
+        ObjectTypeMovementRules {
+            object_class_rules: ObjectTypeMovementRules::new_class_rules_hashmaps(
+                object_class_rules,
+            ),
+            object_group_rules: ObjectTypeMovementRules::new_group_rules_hashmaps(
+                object_group_rules,
+            ),
+            object_type_rules: ObjectTypeMovementRules::new_type_rules_hashmaps(object_type_rules),
+        }
+    }
+
+    /// Returns an option if there is a rule for any of the object type, group, or class given.
+    ///
+    /// # Logic
+    /// It checks each set of rules for a match to the object information in the given [`ObjectInfo`].
+    /// If one is found, it returns the bool associated with it. If none are found it returns None.
+    ///
+    /// The order is [`ObjectType`] > [`ObjectGroup`] > [`ObjectClass`] - returning on the first rule
+    /// found. Therefore you can use the layers of an object type to grant increasing specificity for
+    /// what other objects an object can walk on.
+    ///
+    pub fn can_move_on_tile(&self, object_info: &ObjectInfo) -> Option<bool> {
+        if let Some(rule) = self.object_type_rules.get(&object_info.object_type) {
+            return Some(*rule);
+        }
+        if let Some(rule) = self
+            .object_group_rules
+            .get(&object_info.object_type.object_group)
+        {
+            return Some(*rule);
+        }
+        if let Some(rule) = self
+            .object_class_rules
+            .get(&object_info.object_type.object_group.object_class)
+        {
+            return Some(*rule);
+        }
+
+        None
+    }
+
+    /// Helper function to create a hashmap of [`ObjectType`] rules for Object Movement.
+    pub fn new_type_rules_hashmaps(
+        type_rules: Vec<(&'static ObjectType, bool)>,
+    ) -> HashMap<&'static ObjectType, bool> {
+        let mut type_hashmap: HashMap<&'static ObjectType, bool> = HashMap::new();
+
+        for rule in type_rules.iter() {
+            type_hashmap.insert(rule.0, rule.1);
+        }
+        type_hashmap
+    }
+
+    /// Helper function to create a hashmap of [`ObjectGroup`] rules for Object Movement.
+    pub fn new_group_rules_hashmaps(
+        group_rules: Vec<(&'static ObjectGroup, bool)>,
+    ) -> HashMap<&'static ObjectGroup, bool> {
+        let mut group_hashmap: HashMap<&'static ObjectGroup, bool> = HashMap::new();
+
+        for rule in group_rules.iter() {
+            group_hashmap.insert(rule.0, rule.1);
+        }
+        group_hashmap
+    }
+
+    /// Helper function to create a hashmap of [`ObjectClass`] rules for Object Movement.
+    pub fn new_class_rules_hashmaps(
+        class_rules: Vec<(&'static ObjectClass, bool)>,
+    ) -> HashMap<&'static ObjectClass, bool> {
+        let mut class_hashmap: HashMap<&'static ObjectClass, bool> = HashMap::new();
+
+        for rule in class_rules.iter() {
+            class_hashmap.insert(rule.0, rule.1);
+        }
+
+        class_hashmap
+    }
 }
 
 /// Defines what type of terrain an object can move onto. Place into an [`ObjectMovement`] component to
@@ -295,8 +439,8 @@ pub struct ObjectMovement {
 ///
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ObjectTerrainMovementRules {
-    pub terrain_class_rules: Vec<&'static TerrainClass>,
-    pub terrain_type_rules: HashMap<&'static TerrainType, bool>,
+    terrain_class_rules: Vec<&'static TerrainClass>,
+    terrain_type_rules: HashMap<&'static TerrainType, bool>,
 }
 
 impl ObjectTerrainMovementRules {
@@ -313,7 +457,7 @@ impl ObjectTerrainMovementRules {
         }
     }
 
-    /// Returns true if the object can move onto that tiles terrain. Returns false if it cannot
+    /// Returns true if the object can move onto the given tiles terrain. Returns false if it cannot
     ///
     /// # Logic
     /// It checks self.terrain_type_rules for a rule for the tiles [`TerrainType`]. If it finds a rule
@@ -331,7 +475,7 @@ impl ObjectTerrainMovementRules {
             .contains(&tile_terrain_info.terrain_type.terrain_class)
     }
 
-    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
+    /// Helper function to create a hashmap of [`TerrainType`] rules for Object Movement.
     pub fn new_terrain_type_rules(
         rules: Vec<(&'static TerrainType, bool)>,
     ) -> HashMap<&'static TerrainType, bool> {
@@ -340,11 +484,6 @@ impl ObjectTerrainMovementRules {
             hashmap.insert(rule.0, rule.1);
         }
         hashmap
-    }
-
-    /// Helper function to create a hashmap of TerrainType rules for Object Movement.
-    pub fn add_terrain_class_rule(&mut self, rule: &'static TerrainClass) {
-        self.terrain_class_rules.push(rule);
     }
 }
 
@@ -381,10 +520,13 @@ fn test_terrain_rules() {
         terrain_type: TERRAIN_TYPES[2],
     };
 
-    // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2] is set to false
+    // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2] 
+    // is set to false
     assert_eq!(movement_rules.can_move_on_tile(&tile_terrain_info), false);
 }
 
+//TODO: When we have some form of scheduling, make this go away by default at the beginning of the
+// players turn
 /// Marker component signifying that the unit has moved and cannot move anymore
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Component)]
 pub struct ObjectMoved;

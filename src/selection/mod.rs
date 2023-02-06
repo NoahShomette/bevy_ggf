@@ -9,6 +9,7 @@ use bevy::prelude::{
 };
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage};
 
+//TODO: Update this to actually use the Selection Component
 pub struct BggfSelectionPlugin;
 
 impl Plugin for BggfSelectionPlugin {
@@ -113,7 +114,7 @@ pub fn select_object_at_tile_pos(
     selection_events: &mut EventWriter<SelectionEvents>,
     tile_selected_info: &mut Local<LastSelectedTileInfo>,
 ) {
-    let tile_entity = tile_storage.get(&tile_pos).unwrap();
+    let tile_entity = tile_storage.get(tile_pos).unwrap();
     if let Ok(tile_objects) = tile_query.get_mut(tile_entity) {
         // if the tile pos of the selected tile is the same as the one in the tile pos we saved,
         // we want to get the next unselected entity in the tile based on our list

@@ -3,7 +3,7 @@
 //! component system.
 
 use crate::mapping::tiles::ObjectStackingClass;
-use crate::movement::UnitMovementBundle;
+use crate::movement::ObjectMovementBundle;
 use crate::selection::SelectableEntity;
 use bevy::prelude::{Bundle, Component, Resource, SpriteBundle};
 use bevy_ecs_tilemap::prelude::TilePos;
@@ -49,9 +49,9 @@ AddResourceOnTurn
 pub struct ObjectMinimalBundle {
     pub object: Object,
     pub object_info: ObjectInfo,
-    pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
+    pub sprite_bundle: SpriteBundle,
 }
 
 /// Base bundle that provides all functionality for all subsystems in the crate
@@ -60,12 +60,12 @@ pub struct ObjectCoreBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
     pub object_info: ObjectInfo,
-    pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
+    pub sprite_bundle: SpriteBundle,
 
     //
-    pub sprite_bundle: SpriteBundle,
+    pub selectable: SelectableEntity,
     //pub unit_movement_bundle: UnitMovementBundle,
 }
 
@@ -75,16 +75,15 @@ pub struct UnitBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
     pub object_info: ObjectInfo,
-    pub selectable: SelectableEntity,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
+    pub sprite_bundle: SpriteBundle,
 
     //
-    pub sprite_bundle: SpriteBundle,
-    pub unit_movement_bundle: UnitMovementBundle,
+    pub unit_movement_bundle: ObjectMovementBundle,
+    pub selectable: SelectableEntity,
 }
 
-//TODO Figure out if I can do a spawn event or implementation thing
 ///Marker component for an entity signifying it as an Object
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
 pub struct Object;

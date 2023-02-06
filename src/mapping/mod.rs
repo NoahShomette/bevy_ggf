@@ -7,7 +7,7 @@ use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, ObjectStackingClass, Tile, TileObjectStackingRules,
     TileObjects,
 };
-use crate::movement::TileMovementRules;
+use crate::movement::TerrainMovementCosts;
 use crate::object::{Object, ObjectGridPosition};
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
@@ -57,6 +57,7 @@ pub struct Map {
 }
 
 impl Map {
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_random_map(
         commands: &mut Commands,
         mut map_handler: ResMut<MapHandler>,
@@ -65,7 +66,7 @@ impl Map {
         tilemap_tile_size: &TilemapTileSize,
         map_texture_handle: Handle<Image>,
         map_terrain_vec: &Vec<TerrainType>,
-        tile_movement_rules: ResMut<TileMovementRules>,
+        tile_movement_rules: ResMut<TerrainMovementCosts>,
         tile_stack_rules: TileObjectStackingRules,
     ) -> Entity {
         let map_size = *tile_map_size;
@@ -140,6 +141,9 @@ impl Map {
 /// Adds the given object to a tile while keeping the TileObjectStacks component of the tile up to date
 ///
 /// Will Panic if tile_pos isn't a valid tile position in [`TileStorage`]
+//TODO: Remove unwrap() usage here - keep it crashing if there isnt the right stack rules. Unless we
+// switch to loading all this stuff from files. Then have someway to recover -- Only crashing because
+// of the info stuff here. Wouldnt crash without it
 
 // Look at having this return a result with an error message
 pub fn add_object_to_tile(
@@ -162,7 +166,7 @@ pub fn add_object_to_tile(
             tile_stack_rules
                 .tile_object_stacking_rules
                 .get(&object_stack_class.stack_class)
-                .unwrap()
+                .expect("Tile does not have the requested ObjectStackClass information")
         );
     }
 }
