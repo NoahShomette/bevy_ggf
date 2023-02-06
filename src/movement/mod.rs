@@ -351,7 +351,8 @@ impl ObjectTypeMovementRules {
         {
             return Some(*rule);
         }
-        return None;
+
+        None
     }
 
     /// Helper function to create a hashmap of [`ObjectType`] rules for Object Movement.

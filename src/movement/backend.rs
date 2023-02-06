@@ -195,7 +195,7 @@ impl MovementNodes {
     }
 
     pub fn set_valid_move(&mut self, node_pos_to_update: &TilePos) -> Result<(), String> {
-        return if let Some(node) = self.get_node_mut(&node_pos_to_update) {
+        return if let Some(node) = self.get_node_mut(node_pos_to_update) {
             node.valid_move = true;
             Ok(())
         } else {

@@ -57,6 +57,7 @@ pub struct Map {
 }
 
 impl Map {
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_random_map(
         commands: &mut Commands,
         mut map_handler: ResMut<MapHandler>,

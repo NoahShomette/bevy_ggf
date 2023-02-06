@@ -51,7 +51,7 @@ impl PluginGroup for BggfDefaultPlugins {
 ///
 /// Represents a menu outside of a game. Eg, the main menu, or an after game screen
 ///
-/// ## InGame
+/// ## `InGame`
 ///
 /// Represents any time you are in a game and game logic should happen. Eg, starting a match, etc
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
