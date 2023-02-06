@@ -36,7 +36,7 @@ impl PluginGroup for BggfDefaultPlugins {
             .add(BggfCorePlugin)
             .add(BggfCameraPlugin)
             .add(BggfSelectionPlugin)
-            .add(BggfMovementPlugin)
+            .add(BggfMovementPlugin::default())
             .add(BggfMappingPlugin)
     }
 }

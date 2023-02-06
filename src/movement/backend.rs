@@ -3,13 +3,13 @@ use crate::mapping::{
     add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
 };
 use crate::movement::{
-    AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem,
+    AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem, ObjectMoved,
     ObjectMovement, TileMovementCosts,
 };
 use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    info, Entity, EventReader, EventWriter, Mut, ParamSet, Query, Res, ResMut, Transform, With,
+    Commands, Entity, EventReader, EventWriter, Mut, ParamSet, Query, Res, ResMut, Transform, With,
     Without, World,
 };
 use bevy::utils::hashbrown::HashMap;
@@ -278,8 +278,14 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
     }
 }
 
-/// Handles the TryMove events. Will check if the given TilePos is inside the CurrentMovementInformation
+/// Handles the TryMoveObject events. Will check if the given TilePos is inside the CurrentMovementInformation
 /// resource and will move the unit if so.
+///
+/// Clears the CurrentAvailableMoves resource if the move was successful.
+///
+/// Sends an event with the success or the error depending on the move
+// TODO: Remove it clearing the CurrentAvailableMoves resource - place that in its own system that
+// is optional
 pub(crate) fn handle_try_move_events(
     mut move_events: ParamSet<(EventReader<MoveEvent>, EventWriter<MoveEvent>)>,
     mut object_query: Query<
@@ -314,7 +320,6 @@ pub(crate) fn handle_try_move_events(
         } = event
         {
             if movement_information.contains_move(new_pos) {
-                info!("check move worked");
                 result = move_object(
                     object_moving,
                     new_pos,
@@ -414,4 +419,17 @@ pub fn move_object(
             "Move Position not valid",
         )))
     };
+}
+
+/// Adds the [`ObjectMoved`] component to any entity that is sent through the [`MoveEvent::MoveComplete`]
+/// event.
+pub fn add_object_moved_component_on_moves(
+    mut move_events: EventReader<MoveEvent>,
+    mut commands: Commands,
+) {
+    for event in move_events.iter() {
+        if let MoveEvent::MoveComplete { object_moved } = event {
+            commands.entity(*object_moved).insert(ObjectMoved);
+        }
+    }
 }

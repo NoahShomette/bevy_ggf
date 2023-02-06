@@ -14,7 +14,7 @@ use bevy_ggf::movement::defaults::{
 use bevy_ggf::movement::{
     CurrentMovementInformation, DiagonalMovement, MoveEvent, MovementSystem, MovementType,
     ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules, ObjectTypeMovementRules,
-    TileMovementCosts, TileMovementRules,
+    TileMovementCosts, TerrainMovementCosts,
 };
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
@@ -95,11 +95,45 @@ pub const TERRAIN_TYPES: &'static [TerrainType] = &[
     },
 ];
 
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            window: WindowDescriptor {
+                width: 1270.0,
+                height: 720.0,
+                title: String::from(
+                    "Basic Example - Press Space to change Texture and H to show/hide tilemap.",
+                ),
+                ..Default::default()
+            },
+            ..default()
+        }).set(ImagePlugin::default_nearest()))
+        .add_plugins(BggfDefaultPlugins)
+        .add_plugin(TilemapPlugin)
+        .insert_resource(MovementSystem {
+            movement_calculator: Box::new(SquareMovementCalculator { diagonal_movement: DiagonalMovement::Disabled }),
+            map_type: TilemapType::Square,
+            tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckAllowedTile)],
+        })
+        .add_startup_system(startup)
+        .add_system(select_and_move_unit_to_tile_clicked)
+        .add_system(handle_move_complete_event)
+        .add_system(handle_move_sprites)
+        .add_system(show_move_path)
+        .add_system(handle_right_click)
+
+        //.add_plugin(FrameTimeDiagnosticsPlugin::default())
+        //.add_plugin(LogDiagnosticsPlugin::default())
+        .run();
+}
+
+
 fn startup(
     mut commands: Commands,
     map_handler: ResMut<MapHandler>,
     asset_server: Res<AssetServer>,
-    mut tile_movement_rules: ResMut<TileMovementRules>,
+    mut tile_movement_rules: ResMut<TerrainMovementCosts>,
     mut move_event_writer: EventWriter<UpdateMapTileObject>,
 ) {
     let tilemap_size = TilemapSize { x: 100, y: 100 };
@@ -471,36 +505,4 @@ fn show_move_path(
             sprite_entities.clear();
         }
     }
-}
-
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin{
-            window: WindowDescriptor {
-                width: 1270.0,
-                height: 720.0,
-                title: String::from(
-                    "Basic Example - Press Space to change Texture and H to show/hide tilemap.",
-                ),
-                ..Default::default()
-            },
-            ..default()
-        }).set(ImagePlugin::default_nearest()))
-        .add_plugins(BggfDefaultPlugins)
-        .add_plugin(TilemapPlugin)
-        .insert_resource(MovementSystem {
-            movement_calculator: Box::new(SquareMovementCalculator { diagonal_movement: DiagonalMovement::Disabled }),
-            map_type: TilemapType::Square,
-            tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckAllowedTile)],
-        })
-        .add_startup_system(startup)
-        .add_system(select_and_move_unit_to_tile_clicked)
-        .add_system(handle_move_complete_event)
-        .add_system(handle_move_sprites)
-        .add_system(show_move_path)
-        .add_system(handle_right_click)
-
-        //.add_plugin(FrameTimeDiagnosticsPlugin::default())
-        //.add_plugin(LogDiagnosticsPlugin::default())
-        .run();
 }

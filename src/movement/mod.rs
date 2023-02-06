@@ -2,7 +2,10 @@ pub mod backend;
 pub mod defaults;
 
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
-use crate::movement::backend::{handle_move_begin_events, handle_try_move_events, MovementNodes};
+use crate::movement::backend::{
+    add_object_moved_component_on_moves, handle_move_begin_events, handle_try_move_events,
+    MovementNodes,
+};
 use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
 use bevy::prelude::{
     App, Bundle, Component, CoreStage, Entity, IntoSystemDescriptor, Plugin, Res, Resource, World,
@@ -13,16 +16,33 @@ use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
 ///
-pub struct BggfMovementPlugin;
+pub struct BggfMovementPlugin {
+    pub add_defaults_core: bool,
+    pub add_defaults_extra: bool,
+}
 
 impl Plugin for BggfMovementPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<TileMovementRules>()
+        app.init_resource::<TerrainMovementCosts>()
             .init_resource::<CurrentMovementInformation>()
             .add_event::<MoveEvent>()
-            .add_event::<MoveError>()
-            .add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end())
-            .add_system(handle_try_move_events);
+            .add_event::<MoveError>();
+        if self.add_defaults_core {
+            app.add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end())
+                .add_system(handle_try_move_events);
+        }
+        if self.add_defaults_extra {
+            app.add_system(add_object_moved_component_on_moves);
+        }
+    }
+}
+
+impl Default for BggfMovementPlugin {
+    fn default() -> Self {
+        Self {
+            add_defaults_core: true,
+            add_defaults_extra: true,
+        }
     }
 }
 
@@ -179,6 +199,15 @@ pub struct AvailableMove {
 }
 
 /// A move event. Used to conduct actions related to object movement
+/// - [Self::MoveBegin] represents starting a move. By default, this will run the [`handle_move_begin_events`]
+/// which will calculate the available moves for the given unit.
+/// - [Self::MoveCalculated] is intended to run after a move has been calculated with the current units
+/// available moves. __This is not used currently. Instead available moves are pushed straight to the
+/// [`CurrentMovementInformation`] resource.__
+/// - [Self::TryMoveObject] is sent when you want to try to move an object to a specific tile. Send
+/// the object thats trying to move and the tile you want it to move to. By default is handles by
+/// [`handle_try_move_events`]
+/// - [Self::MoveComplete] is sent if the [Self::TryMoveObject] event was successful.
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum MoveEvent {
     MoveBegin {
@@ -256,10 +285,10 @@ impl TileMovementCosts {
     pub fn calculate_unit_move_cost(&self) {}
 }
 
-/// Defines a resource that will hold all [`TileMovementCosts`] - references to a specific TileMovementCosts
-/// are stored in each tile as their current cost.
+/// Defines a resource that will hold all [`TileMovementCosts`] related to TerrainTypes - references to a specific TileMovementCosts
+/// are stored in each tile as their current cost using the [`TileMovementCosts`] component.
 #[derive(Resource, Default, Debug)]
-pub struct TileMovementRules {
+pub struct TerrainMovementCosts {
     pub movement_cost_rules: HashMap<TerrainType, TileMovementCosts>,
 }
 
@@ -491,10 +520,13 @@ fn test_terrain_rules() {
         terrain_type: TERRAIN_TYPES[2],
     };
 
-    // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2] is set to false
+    // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2] 
+    // is set to false
     assert_eq!(movement_rules.can_move_on_tile(&tile_terrain_info), false);
 }
 
+//TODO: When we have some form of scheduling, make this go away by default at the beginning of the
+// players turn
 /// Marker component signifying that the unit has moved and cannot move anymore
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Component)]
 pub struct ObjectMoved;

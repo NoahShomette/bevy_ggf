@@ -7,7 +7,7 @@ use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, ObjectStackingClass, Tile, TileObjectStackingRules,
     TileObjects,
 };
-use crate::movement::TileMovementRules;
+use crate::movement::TerrainMovementCosts;
 use crate::object::{Object, ObjectGridPosition};
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
@@ -66,7 +66,7 @@ impl Map {
         tilemap_tile_size: &TilemapTileSize,
         map_texture_handle: Handle<Image>,
         map_terrain_vec: &Vec<TerrainType>,
-        tile_movement_rules: ResMut<TileMovementRules>,
+        tile_movement_rules: ResMut<TerrainMovementCosts>,
         tile_stack_rules: TileObjectStackingRules,
     ) -> Entity {
         let map_size = *tile_map_size;
