@@ -14,7 +14,7 @@ use bevy_ggf::movement::defaults::{
 use bevy_ggf::movement::{
     CurrentMovementInformation, DiagonalMovement, MoveEvent, MovementSystem, MovementType,
     ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules, ObjectTypeMovementRules,
-    TileMovementCosts, TerrainMovementCosts,
+    TerrainMovementCosts, TileMovementCosts,
 };
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
@@ -95,7 +95,6 @@ pub const TERRAIN_TYPES: &'static [TerrainType] = &[
     },
 ];
 
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -127,7 +126,6 @@ fn main() {
         //.add_plugin(LogDiagnosticsPlugin::default())
         .run();
 }
-
 
 fn startup(
     mut commands: Commands,
@@ -255,7 +253,7 @@ fn startup(
         },
         unit_movement_bundle: ObjectMovementBundle {
             object_movement: ObjectMovement {
-                move_points: 10,
+                move_points: 3,
                 movement_type: &MOVEMENT_TYPES[0],
                 object_terrain_movement_rules: movement_rules_2.clone(),
             },
@@ -294,7 +292,7 @@ fn startup(
             },
             unit_movement_bundle: ObjectMovementBundle {
                 object_movement: ObjectMovement {
-                    move_points: 20,
+                    move_points: 5,
                     movement_type: &MOVEMENT_TYPES[0],
                     object_terrain_movement_rules: movement_rules.clone(),
                 },
