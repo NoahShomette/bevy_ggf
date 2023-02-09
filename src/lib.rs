@@ -20,6 +20,7 @@ pub mod movement;
 pub mod object;
 pub mod selection;
 pub mod combat;
+pub mod team;
 
 pub struct BggfCorePlugin;
 

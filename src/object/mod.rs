@@ -130,8 +130,8 @@ pub struct ObjectGroup {
     pub object_class: &'static ObjectClass,
 }
 
-/// Defines a new distinct ObjectType. ObjectType is
-/// used to explicitly differentiate different types of objects and enable logic based on an objects type.
+/// Defines a new distinct ObjectType. Each ObjectType should represent a distinct and unique type of
+/// object. 
 /// Add the [`ObjectInfo`] wrapper component to an entity to use.
 ///
 /// ## Example
@@ -193,4 +193,11 @@ pub struct GameObjectInfo {
 #[derive(Component)]
 pub struct ObjectGridPosition {
     pub tile_position: TilePos,
+}
+
+// TODO: Implement building objects eventually
+/// Allows this object to build other objects. Not currently implemented
+#[derive(Clone, Eq, Hash, Debug, PartialEq, Component)]
+struct Builder {
+    pub can_build: Vec<ObjectType>,
 }
