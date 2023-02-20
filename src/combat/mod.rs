@@ -1,12 +1,22 @@
-use crate::object::ObjectType;
-use bevy::prelude::Component;
-use bevy::utils::HashMap;
+use bevy::prelude::{Component, Entity, World};
+use bevy_ecs_tilemap::tiles::TilePos;
 
 pub mod backend;
 pub mod defaults;
+pub mod resolver;
+
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
+pub struct AvailableAttacks {}
+
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
+pub struct ValidAttack {
+    pub target_entity: Entity,
+    pub target_tile_position: TilePos,
+}
 
 /// The health of an object. Without a Health component an object is not able to be attacked or killed.
-/// Objects with a health component can be attacked
+/// Objects with a health component can be attacked and will be returned as valid targets by relevant
+/// systems
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
 pub struct Health {
     pub current_health: u32,
@@ -40,16 +50,17 @@ pub enum OnDeath {
     Capture { restore_at_health: u32 },
 }
 
-///
-#[derive(Clone, Eq, Debug, PartialEq, Component)]
-pub struct AttackPower {
-    attack_type: AttackType,
+pub trait AttackPower {
+    /// Returns the *base* attack power of the unit. This should be the base power, unmodified by any
+    /// buffs, nerfs, or other modifiers.
+    fn get_attack_power(&self, world: &World, entity: Entity, opponent_entity: Entity) -> u32;
 }
 
-#[derive(Clone, Eq, Debug, PartialEq)]
-pub enum AttackType {
-    Object { damage: HashMap<ObjectType, u32> },
-    Strength { strength: u32 },
+/// Component that holds an [`AttackPower`] trait object. Attach this to objects that should deal damage
+/// in combat
+#[derive(Component)]
+pub struct ObjectAttackPower {
+    attack_power: Box<dyn AttackPower + Send + Sync>,
 }
 
 /// Marks this object as NOT being attackable, can not be targeted or attacked

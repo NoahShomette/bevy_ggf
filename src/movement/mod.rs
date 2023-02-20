@@ -520,7 +520,7 @@ fn test_terrain_rules() {
         terrain_type: TERRAIN_TYPES[2],
     };
 
-    // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2] 
+    // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2]
     // is set to false
     assert_eq!(movement_rules.can_move_on_tile(&tile_terrain_info), false);
 }

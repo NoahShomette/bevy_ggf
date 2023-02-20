@@ -131,7 +131,7 @@ pub struct ObjectGroup {
 }
 
 /// Defines a new distinct ObjectType. Each ObjectType should represent a distinct and unique type of
-/// object. 
+/// object.
 /// Add the [`ObjectInfo`] wrapper component to an entity to use.
 ///
 /// ## Example

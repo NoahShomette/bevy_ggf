@@ -15,11 +15,11 @@ use bevy::prelude::PluginGroup;
 use iyes_loopless::prelude::AppLooplessStateExt;
 
 pub mod camera;
+pub mod combat;
 pub mod mapping;
 pub mod movement;
 pub mod object;
 pub mod selection;
-pub mod combat;
 pub mod team;
 
 pub struct BggfCorePlugin;
