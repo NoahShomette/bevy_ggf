@@ -35,7 +35,9 @@ list!
 
 # Current Features
 
-* Massively inprogresss
+Massively inprogresss
+
+- [x] Mapping / Current minimal viable product
 
 # In Progress Features
 
