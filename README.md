@@ -37,12 +37,11 @@ list!
 
 Massively inprogresss
 
-- [x] Mapping / Current minimal viable product
+- [x] Mapping / Current minimal viable product - still getting updates but working on other features
 
 # In Progress Features
 
 - Mapping
-- Movement
 - Combat
 - Units
 
