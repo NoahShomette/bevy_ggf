@@ -1,7 +1,7 @@
 ---
 name: Docs/Meta-docs request
 about: Request a doc or meta-doc
-title: "[DOCS/META-DOCS]"
+title: ""
 labels: discussion, documentation, meta-doc
 assignees: NoahShomette
 
