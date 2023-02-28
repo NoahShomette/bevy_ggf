@@ -1,4 +1,45 @@
-﻿use crate::game::Game;
+﻿//! Any actions that affect the game world should be specified as a [`GameCommand`] and submitted to
+//! through the [`Game`] to enable saving, rollback, and more.
+//!
+//! To use in a system request the [`Game`] Resource, get the commands field, and call a defined
+//! command or submit a custom command using commands.add().
+//! ```rust
+//! use bevy::prelude::{Commands, ResMut, World};
+//! use bevy_ecs_tilemap::prelude::TilePos;
+//! use bevy_ggf::game::command::GameCommand;
+//! use bevy_ggf::game::Game;
+//!     
+//! fn spawn_object_built_in_command(
+//!     mut game: ResMut<Game>,
+//!     mut commands: Commands,
+//! ){
+//!     let entity = commands.spawn_empty().id();
+//!     game.commands.add_object_to_tile(entity, TilePos::new(1, 1));
+//! }
+//!
+//! #[derive(Clone, Debug)]
+//! struct MyCustomCommand;
+//!
+//! impl GameCommand for MyCustomCommand{fn execute(&mut self, world: &mut World) -> Result<(), String> {
+//!         todo!() // Implement whatever your custom command should do here
+//!     }
+//!
+//! fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+//!         todo!() // Implement how to reverse your custom command
+//!     }
+//! }
+//!
+//! fn spawn_object_custom_command(
+//!    mut game: ResMut<Game>,
+//!     mut commands: Commands,
+//! ){
+//!     let entity = commands.spawn_empty().id();
+//!     game.commands.add(MyCustomCommand);
+//! }
+//!
+//! ```
+
+use crate::game::Game;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::mapping::{tile_pos_to_centered_map_world_pos, MapHandler};
 use crate::object::{Object, ObjectGridPosition};
@@ -31,9 +72,21 @@ pub fn execute_game_rollbacks_buffer(world: &mut World) {
 }
 
 /// A base trait defining an action that affects the game. Define your own to implement your own
-/// custom commands that will be automatically saved and executed
+/// custom commands that will be automatically saved, executed, and rolledback
 /// ```rust
+/// use bevy::prelude::World;
+/// use bevy_ggf::game::command::GameCommand;
+/// #[derive(Clone, Debug)]
+///  struct MyCustomCommand;
 ///
+///  impl GameCommand for MyCustomCommand{fn execute(&mut self, world: &mut World) -> Result<(), String> {
+///          todo!() // Implement whatever your custom command should do here
+///      }
+///
+///  fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+///          todo!() // Implement how to reverse your custom command
+///      }
+///  }
 ///
 /// ```
 pub trait GameCommand: Send + Sync + Debug + GameCommandClone + 'static {
@@ -54,8 +107,8 @@ pub trait GameCommandClone {
 }
 
 impl<T> GameCommandClone for T
-    where
-        T: 'static + GameCommand + Clone,
+where
+    T: 'static + GameCommand + Clone,
 {
     fn clone_box(&self) -> Box<dyn GameCommand> {
         Box::new(self.clone())
@@ -71,8 +124,8 @@ pub struct GameCommandQueue {
 impl GameCommandQueue {
     /// Push a new command to the end of the queue
     pub fn push<C>(&mut self, command: C)
-        where
-            C: GameCommand,
+    where
+        C: GameCommand,
     {
         self.queue.push(Box::from(command));
     }
@@ -140,8 +193,8 @@ impl GameCommands {
 
     /// Add a custom command to the queue
     pub fn add<T>(&mut self, command: T) -> T
-        where
-            T: GameCommand + Clone,
+    where
+        T: GameCommand + Clone,
     {
         self.queue.push(command.clone());
         command

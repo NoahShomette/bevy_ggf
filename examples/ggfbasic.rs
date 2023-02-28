@@ -143,7 +143,6 @@ fn startup(
     map_handler: ResMut<MapHandler>,
     asset_server: Res<AssetServer>,
     mut tile_movement_rules: ResMut<TerrainMovementCosts>,
-    mut move_event_writer: EventWriter<UpdateMapTileObject>,
     mut game: ResMut<Game>,
 ) {
     let tilemap_size = TilemapSize { x: 100, y: 100 };
