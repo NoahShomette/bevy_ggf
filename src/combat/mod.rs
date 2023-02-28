@@ -1,17 +1,48 @@
-use bevy::prelude::{Component, Entity, World};
+//!
+
+use bevy::app::App;
+use bevy::prelude::{Component, Entity, Plugin, World};
 use bevy_ecs_tilemap::tiles::TilePos;
 
 pub mod backend;
+pub mod battle_resolver;
 pub mod defaults;
-pub mod resolver;
+
+pub struct BggfCombatPlugin {}
+
+impl Plugin for BggfCombatPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<CombatEvent>();
+    }
+}
+
+impl Default for BggfCombatPlugin {
+    fn default() -> Self {
+        BggfCombatPlugin {}
+    }
+}
+
+/// Command events. Send an event to conduct the specified action correlating to the event.
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub enum CombatEvent {
+    CalculateAttacks {
+        attacking_entity: Entity,
+    },
+    Attack {
+        attacking_entity: Entity,
+        defending_entity: Entity,
+        attack_info: ValidAttack,
+    },
+}
 
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
 pub struct AvailableAttacks {}
 
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
+#[derive(Clone, Eq, Hash, Debug, PartialEq)]
 pub struct ValidAttack {
     pub target_entity: Entity,
     pub target_tile_position: TilePos,
+    pub requires_move: Option<Vec<TilePos>>,
 }
 
 /// The health of an object. Without a Health component an object is not able to be attacked or killed.
@@ -50,17 +81,21 @@ pub enum OnDeath {
     Capture { restore_at_health: u32 },
 }
 
-pub trait AttackPower {
+pub trait BaseAttackPower {
     /// Returns the *base* attack power of the unit. This should be the base power, unmodified by any
     /// buffs, nerfs, or other modifiers.
-    fn get_attack_power(&self, world: &World, entity: Entity, opponent_entity: Entity) -> u32;
+    fn get_base_attack_power(&self, world: &World, entity: Entity, opponent_entity: Entity) -> u32;
 }
 
-/// Component that holds an [`AttackPower`] trait object. Attach this to objects that should deal damage
+/// Marker component denoting this unit as having attacked.
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
+pub struct ObjectAttacked;
+
+/// Component that holds an [`BaseAttackPower`] trait object. Attach this to objects that should deal damage
 /// in combat
 #[derive(Component)]
-pub struct ObjectAttackPower {
-    attack_power: Box<dyn AttackPower + Send + Sync>,
+pub struct AttackPower {
+    attack_power: Box<dyn BaseAttackPower + Send + Sync>,
 }
 
 /// Marks this object as NOT being attackable, can not be targeted or attacked

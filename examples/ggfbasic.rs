@@ -1,6 +1,10 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
+use bevy_ggf::combat::battle_resolver::BattleResolver;
+use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult};
+use bevy_ggf::game::command::{execute_game_commands_buffer, execute_game_rollbacks_buffer};
+use bevy_ggf::game::Game;
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStackingRules, TileObjectStacksCount,
@@ -11,18 +15,14 @@ use bevy_ggf::mapping::{
 use bevy_ggf::movement::defaults::{
     MoveCheckAllowedTile, MoveCheckSpace, SquareMovementCalculator,
 };
-use bevy_ggf::movement::{
-    CurrentMovementInformation, DiagonalMovement, MoveEvent, MovementSystem, MovementType,
-    ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules, ObjectTypeMovementRules,
-    TerrainMovementCosts, TileMovementCosts,
-};
+use bevy_ggf::movement::{CurrentMovementInformation, DiagonalMovement, MoveCommandsExt, MoveEvent, MovementSystem, MovementType, ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules, ObjectTypeMovementRules, TerrainMovementCosts, TileMovementCosts};
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
 };
 use bevy_ggf::selection::{
     ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
 };
-use bevy_ggf::BggfDefaultPlugins;
+use bevy_ggf::{game, BggfDefaultPlugins};
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -97,31 +97,42 @@ pub const TERRAIN_TYPES: &'static [TerrainType] = &[
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
-                width: 1270.0,
-                height: 720.0,
-                title: String::from(
-                    "Basic Example - Press Space to change Texture and H to show/hide tilemap.",
-                ),
-                ..Default::default()
-            },
-            ..default()
-        }).set(ImagePlugin::default_nearest()))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    window: WindowDescriptor {
+                        width: 1270.0,
+                        height: 720.0,
+                        title: String::from("Bevy Grid Game Framework Complete Example"),
+                        ..Default::default()
+                    },
+                    ..default()
+                })
+                .set(ImagePlugin::default_nearest()),
+        )
         .add_plugins(BggfDefaultPlugins)
         .add_plugin(TilemapPlugin)
         .insert_resource(MovementSystem {
-            movement_calculator: Box::new(SquareMovementCalculator { diagonal_movement: DiagonalMovement::Disabled }),
+            movement_calculator: Box::new(SquareMovementCalculator {
+                diagonal_movement: DiagonalMovement::Disabled,
+            }),
             map_type: TilemapType::Square,
             tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckAllowedTile)],
         })
+        .insert_resource(BattleResolver::<BasicBattleResult> {
+            battle_calculator: Box::new(BasicBattleCalculator {}),
+        })
+        .add_event::<BasicBattleResult>()
+        .insert_resource(Game::default())
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)
         .add_system(handle_move_complete_event)
         .add_system(handle_move_sprites)
         .add_system(show_move_path)
         .add_system(handle_right_click)
-
+        .add_system(execute_game_commands_buffer)
+        .add_system(execute_game_rollbacks_buffer)
+        .add_system(rollback)
         //.add_plugin(FrameTimeDiagnosticsPlugin::default())
         //.add_plugin(LogDiagnosticsPlugin::default())
         .run();
@@ -133,6 +144,7 @@ fn startup(
     asset_server: Res<AssetServer>,
     mut tile_movement_rules: ResMut<TerrainMovementCosts>,
     mut move_event_writer: EventWriter<UpdateMapTileObject>,
+    mut game: ResMut<Game>,
 ) {
     let tilemap_size = TilemapSize { x: 100, y: 100 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
@@ -259,10 +271,8 @@ fn startup(
             },
         },
     });
-    move_event_writer.send(UpdateMapTileObject::Add {
-        object_entity: entity.id(),
-        tile_pos: TilePos::new(0, 0),
-    });
+    game.commands
+        .add_object_to_tile(entity.id(), TilePos::new(0, 0));
 
     let object_movement_rules =
         ObjectTypeMovementRules::new(vec![], vec![], vec![(&OBJECT_TYPE_BRIDGE, true)]);
@@ -300,10 +310,8 @@ fn startup(
         })
         .insert(object_movement_rules.clone())
         .id();
-    move_event_writer.send(UpdateMapTileObject::Add {
-        object_entity: entity,
-        tile_pos: TilePos::new(1, 1),
-    });
+
+    game.commands.add_object_to_tile(entity, TilePos::new(1, 1));
 }
 
 fn handle_right_click(
@@ -327,6 +335,7 @@ fn select_and_move_unit_to_tile_clicked(
     mut move_event_writer: EventWriter<MoveEvent>,
     mut click_event_reader: EventReader<ClickEvent>,
     mut select_object_event_writer: EventWriter<TrySelectEvents>,
+    mut game: ResMut<Game>,
 ) {
     let (transform, map_size, grid_size, map_type) = map_transform.single();
 
@@ -340,10 +349,11 @@ fn select_and_move_unit_to_tile_clicked(
                             &world_pos, transform, map_size, grid_size, map_type,
                         ) {
                             if object_tile_pos.tile_position != tile_pos {
-                                move_event_writer.send(MoveEvent::TryMoveObject {
-                                    object_moving: selected_entity,
-                                    new_pos: tile_pos,
-                                });
+                                game.commands.try_move_object(
+                                    selected_entity,
+                                    object_tile_pos.tile_position,
+                                    tile_pos,
+                                );
                             } else {
                                 select_object_event_writer.send(TrySelectEvents::TilePos(tile_pos));
                             }
@@ -365,11 +375,13 @@ fn select_and_move_unit_to_tile_clicked(
 fn handle_move_complete_event(
     mut selected_object: ResMut<CurrentSelectedObject>,
     mut event_reader: EventReader<MoveEvent>,
+    mut commands: Commands,
 ) {
     for event in event_reader.iter() {
         match event {
-            MoveEvent::MoveComplete { .. } => {
+            MoveEvent::MoveComplete { object_moved } => {
                 selected_object.object_entity = None;
+                commands.entity(*object_moved).remove::<CurrentMovementInformation>();
             }
             _ => {}
         }
@@ -377,7 +389,7 @@ fn handle_move_complete_event(
 }
 
 fn handle_move_sprites(
-    movement_info: Res<CurrentMovementInformation>,
+    move_info_query: Query<&CurrentMovementInformation>,
     mut tilemap_q: Query<
         (
             &mut Map,
@@ -398,7 +410,7 @@ fn handle_move_sprites(
     if *sprite_handle_exists != true {
         *sprite_handle = asset_server.load("movement_sprite.png");
     }
-    if movement_info.available_moves.len() > 0 {
+    for movement_info in move_info_query.iter() {
         if sprite_entities.len() == 0 {
             for i in movement_info.available_moves.iter() {
                 let sprite = commands.spawn(SpriteBundle {
@@ -409,7 +421,7 @@ fn handle_move_sprites(
                             grid_size,
                             map_type,
                         )
-                        .extend(4.0),
+                            .extend(4.0),
                         ..default()
                     },
                     texture: sprite_handle.clone(),
@@ -418,7 +430,8 @@ fn handle_move_sprites(
                 sprite_entities.push(sprite.id());
             }
         }
-    } else {
+    }
+    if move_info_query.is_empty() {
         for sprite_entity in sprite_entities.iter() {
             commands.entity(*sprite_entity).despawn();
         }
@@ -428,9 +441,8 @@ fn handle_move_sprites(
 
 fn show_move_path(
     cursor_world_pos: Res<CursorWorldPos>,
-    movement_information: Res<CurrentMovementInformation>,
+    movement_information: Query<&CurrentMovementInformation>,
     map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
-
     mut sprite_entities: Local<Vec<Entity>>,
     mut sprite_handle: Local<Handle<Image>>,
     sprite_handle_exists: Local<bool>,
@@ -452,55 +464,62 @@ fn show_move_path(
             commands.entity(*sprite_entity).despawn();
         }
         sprite_entities.clear();
-        let movement_info = movement_information.into_inner();
-        if movement_info.contains_move(&tile_pos) {
-            // get move node from movement information for this tile. follow the line back
-            if let Some(node) = movement_info.available_moves.get(&tile_pos) {
-                let mut reached_player = false;
-                let sprite = commands.spawn(SpriteBundle {
-                    transform: Transform {
-                        translation: tile_pos_to_centered_map_world_pos(
-                            &tile_pos, transform, grid_size, map_type,
-                        )
-                        .extend(6.0),
-                        ..default()
-                    },
-                    texture: sprite_handle.clone(),
-                    ..default()
-                });
-                sprite_entities.push(sprite.id());
-                let mut current_node = *node;
-                while reached_player == false {
-                    let new_node_pos = current_node.prior_tile_pos;
-                    if let Some(new_node) = movement_info.available_moves.get(&new_node_pos) {
-                        let sprite = commands.spawn(SpriteBundle {
-                            transform: Transform {
-                                translation: tile_pos_to_centered_map_world_pos(
-                                    &new_node_pos,
-                                    transform,
-                                    grid_size,
-                                    map_type,
-                                )
+        for movement_info in movement_information.iter() {
+            if movement_info.contains_move(&tile_pos) {
+                // get move node from movement information for this tile. follow the line back
+                if let Some(node) = movement_info.available_moves.get(&tile_pos) {
+                    let mut reached_player = false;
+                    let sprite = commands.spawn(SpriteBundle {
+                        transform: Transform {
+                            translation: tile_pos_to_centered_map_world_pos(
+                                &tile_pos, transform, grid_size, map_type,
+                            )
                                 .extend(6.0),
-                                ..default()
-                            },
-                            texture: sprite_handle.clone(),
                             ..default()
-                        });
-                        sprite_entities.push(sprite.id());
-                        current_node = *new_node;
+                        },
+                        texture: sprite_handle.clone(),
+                        ..default()
+                    });
+                    sprite_entities.push(sprite.id());
+                    let mut current_node = *node;
+                    while reached_player == false {
+                        let new_node_pos = current_node.prior_tile_pos;
+                        if let Some(new_node) = movement_info.available_moves.get(&new_node_pos) {
+                            let sprite = commands.spawn(SpriteBundle {
+                                transform: Transform {
+                                    translation: tile_pos_to_centered_map_world_pos(
+                                        &new_node_pos,
+                                        transform,
+                                        grid_size,
+                                        map_type,
+                                    )
+                                        .extend(6.0),
+                                    ..default()
+                                },
+                                texture: sprite_handle.clone(),
+                                ..default()
+                            });
+                            sprite_entities.push(sprite.id());
+                            current_node = *new_node;
 
-                        if new_node.move_cost == 0 {
-                            reached_player = true;
+                            if new_node.move_cost == 0 {
+                                reached_player = true;
+                            }
                         }
                     }
                 }
+            } else {
+                for sprite_entity in sprite_entities.iter() {
+                    commands.entity(*sprite_entity).despawn();
+                }
+                sprite_entities.clear();
             }
-        } else {
-            for sprite_entity in sprite_entities.iter() {
-                commands.entity(*sprite_entity).despawn();
-            }
-            sprite_entities.clear();
         }
+    }
+}
+
+fn rollback(keys: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
+    if keys.just_pressed(KeyCode::Z) {
+        game.commands.rollback_one();
     }
 }

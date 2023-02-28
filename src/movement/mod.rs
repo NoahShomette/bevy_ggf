@@ -1,14 +1,18 @@
+//!
+
 pub mod backend;
 pub mod defaults;
 
+use crate::game::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::movement::backend::{
-    add_object_moved_component_on_moves, handle_move_begin_events, handle_try_move_events,
-    MovementNodes,
+    add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
 };
 use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
+use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    App, Bundle, Component, CoreStage, Entity, IntoSystemDescriptor, Plugin, Res, Resource, World,
+    info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter,
+    IntoSystemDescriptor, Plugin, Query, Res, Resource, World,
 };
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
@@ -24,12 +28,11 @@ pub struct BggfMovementPlugin {
 impl Plugin for BggfMovementPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TerrainMovementCosts>()
-            .init_resource::<CurrentMovementInformation>()
+            .add_event::<ClearObjectAvailableMoves>()
             .add_event::<MoveEvent>()
             .add_event::<MoveError>();
         if self.add_defaults_core {
-            app.add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end())
-                .add_system(handle_try_move_events);
+            app.add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end());
         }
         if self.add_defaults_extra {
             app.add_system(add_object_moved_component_on_moves);
@@ -43,6 +46,170 @@ impl Default for BggfMovementPlugin {
             add_defaults_core: true,
             add_defaults_extra: true,
         }
+    }
+}
+
+/// An extension trait for [GameCommands] with movement related commands.
+pub trait MoveCommandsExt {
+    fn move_object(
+        &mut self,
+        object_moving: Entity,
+        current_pos: TilePos,
+        new_pos: TilePos,
+    ) -> MoveObject;
+
+    fn try_move_object(
+        &mut self,
+        object_moving: Entity,
+        current_pos: TilePos,
+        new_pos: TilePos,
+    ) -> TryMoveObject;
+}
+
+impl MoveCommandsExt for GameCommands {
+    fn move_object(
+        &mut self,
+        object_moving: Entity,
+        current_pos: TilePos,
+        new_pos: TilePos,
+    ) -> MoveObject {
+        self.queue.push(MoveObject {
+            object_moving,
+            current_pos,
+            new_pos,
+        });
+        MoveObject {
+            object_moving,
+            current_pos,
+            new_pos,
+        }
+    }
+    /// Moves an object if the object has a [`CurrentMovementInformation`] struct and that contains
+    /// the [`TilePos`] that the object is moving too
+    fn try_move_object(
+        &mut self,
+        object_moving: Entity,
+        current_pos: TilePos,
+        new_pos: TilePos,
+    ) -> TryMoveObject {
+        self.queue.push(TryMoveObject {
+            object_moving,
+            current_pos,
+            new_pos,
+        });
+        TryMoveObject {
+            object_moving,
+            current_pos,
+            new_pos,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MoveObject {
+    object_moving: Entity,
+    current_pos: TilePos,
+    new_pos: TilePos,
+}
+
+impl GameCommand for MoveObject {
+    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
+        let mut remove = RemoveObjectFromTile {
+            object_entity: self.object_moving,
+            tile_pos: self.current_pos,
+        };
+        let mut add = AddObjectToTile {
+            object_entity: self.object_moving,
+            tile_pos: self.new_pos,
+        };
+
+        remove.execute(world)?;
+        add.execute(world)?;
+
+        let mut system_state: SystemState<EventWriter<MoveEvent>> = SystemState::new(world);
+        let mut move_event = system_state.get_mut(world);
+
+        move_event.send(MoveEvent::MoveComplete {
+            object_moved: self.object_moving,
+        });
+
+        system_state.apply(world);
+        return Ok(());
+    }
+
+    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+        let mut remove = RemoveObjectFromTile {
+            object_entity: self.object_moving,
+            tile_pos: self.new_pos,
+        };
+        let mut add = AddObjectToTile {
+            object_entity: self.object_moving,
+            tile_pos: self.current_pos,
+        };
+
+        return add
+            .execute(world)
+            .and_then(|_| remove.execute(world).and_then(|_| Ok(())));
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TryMoveObject {
+    object_moving: Entity,
+    current_pos: TilePos,
+    new_pos: TilePos,
+}
+
+impl GameCommand for TryMoveObject {
+    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
+        let mut remove = RemoveObjectFromTile {
+            object_entity: self.object_moving,
+            tile_pos: self.current_pos,
+        };
+        let mut add = AddObjectToTile {
+            object_entity: self.object_moving,
+            tile_pos: self.new_pos,
+        };
+
+        return if let Some(movement_information) =
+            world.get::<CurrentMovementInformation>(self.object_moving)
+        {
+            return if movement_information.contains_move(&self.new_pos) {
+                remove.execute(world)?;
+                add.execute(world)?;
+
+                let mut system_state: SystemState<EventWriter<MoveEvent>> = SystemState::new(world);
+                let mut move_event = system_state.get_mut(world);
+
+                move_event.send(MoveEvent::MoveComplete {
+                    object_moved: self.object_moving,
+                });
+
+                system_state.apply(world);
+                return Ok(());
+            } else {
+                info!("TilePos not in movement info");
+                Err(String::from("Tile_pos not in movement information"))
+            };
+        } else {
+            info!("Object has no movemement information");
+            Err(String::from("Object has no movemement information"))
+        };
+    }
+
+    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+        let mut remove = RemoveObjectFromTile {
+            object_entity: self.object_moving,
+            tile_pos: self.new_pos,
+        };
+        let mut add = AddObjectToTile {
+            object_entity: self.object_moving,
+            tile_pos: self.current_pos,
+        };
+
+        return remove
+            .execute(world)
+            .and_then(|_| add.execute(world).and_then(|_| Ok(())));
     }
 }
 
@@ -173,29 +340,23 @@ pub trait TileMoveCheck {
     ) -> bool;
 }
 
-/// Resource that holds a Hashmap of [`AvailableMove`] structs. These structs should represent verified
-/// valid moves and are updated when the [`MoveEvent::MoveBegin`] event is processed.
-#[derive(Clone, Eq, PartialEq, Default, Debug, Resource)]
-pub struct CurrentMovementInformation {
-    pub available_moves: HashMap<TilePos, AvailableMove>,
-}
-
-impl CurrentMovementInformation {
-    /// Returns true or false if CurrentMovementInformation contains a move at the assigned TilePos
-    pub fn contains_move(&self, new_pos: &TilePos) -> bool {
-        self.available_moves.contains_key(new_pos)
-    }
-
-    pub fn clear_information(&mut self) {
-        self.available_moves.clear();
-    }
-}
-
 #[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Debug)]
 pub struct AvailableMove {
     pub tile_pos: TilePos,
     pub prior_tile_pos: TilePos,
     pub move_cost: i32,
+}
+
+impl From<MoveNode> for AvailableMove {
+    /// Converts the MoveNode to AvailableMove. It will panic if the given MoveNode does not have
+    /// a move_cost.
+    fn from(node: MoveNode) -> Self {
+        AvailableMove {
+            tile_pos: node.node_pos,
+            prior_tile_pos: node.prior_node,
+            move_cost: node.move_cost.expect("move_cost cannot be None"),
+        }
+    }
 }
 
 /// A move event. Used to conduct actions related to object movement
@@ -228,12 +389,12 @@ pub enum MoveEvent {
 /// An error that represents any MoveErrors
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub enum MoveError {
-    NotValidMove(String),
+    InvalidMove(String),
 }
 
 impl Default for MoveError {
     fn default() -> Self {
-        MoveError::NotValidMove(String::from("Invalid Move"))
+        MoveError::InvalidMove(String::from("Invalid Move"))
     }
 }
 
@@ -312,6 +473,41 @@ pub struct ObjectMovement {
     pub move_points: i32,
     pub movement_type: &'static MovementType,
     pub object_terrain_movement_rules: ObjectTerrainMovementRules,
+}
+
+//TODO: Update this to just a guaranteed ordered vec - ordered meaning the first element
+/// Resource that holds a Hashmap of [`AvailableMove`] structs. These structs should represent verified
+/// valid moves and are updated when the [`MoveEvent::MoveBegin`] event is processed.
+#[derive(Clone, Eq, PartialEq, Default, Debug, Component)]
+pub struct CurrentMovementInformation {
+    pub available_moves: HashMap<TilePos, AvailableMove>,
+}
+
+impl CurrentMovementInformation {
+    /// Returns true or false if CurrentMovementInformation contains a move at the assigned TilePos
+    pub fn contains_move(&self, new_pos: &TilePos) -> bool {
+        self.available_moves.contains_key(new_pos)
+    }
+
+    /// Clears the moves from the collection
+    pub fn clear_moves(&mut self) {
+        self.available_moves.clear();
+    }
+}
+
+pub struct ClearObjectAvailableMoves {
+    object: Entity,
+}
+
+fn clear_selected_object(
+    mut clear_object_reader: EventReader<ClearObjectAvailableMoves>,
+    mut current_movement_information: Query<&mut CurrentMovementInformation>,
+) {
+    for event in clear_object_reader.iter() {
+        if let Ok(mut info) = current_movement_information.get_mut(event.object) {
+            info.clear_moves();
+        }
+    }
 }
 
 /// Optional component that can be attached to an object to define rules related to that objects movement

@@ -8,12 +8,11 @@ use crate::movement::{
 };
 use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{
-    Commands, Entity, EventReader, EventWriter, Mut, ParamSet, Query, Res, ResMut, Transform, With,
-    Without, World,
-};
+use bevy::log::info;
+use bevy::prelude::{Commands, Entity, EventReader, Query, Res, Transform, With, Without, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType};
+use std::hash::Hash;
 
 /// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific
@@ -33,7 +32,7 @@ pub fn tile_movement_cost_check(
         return false;
     };
 
-    let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else{
+    let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else {
         return false;
     };
 
@@ -78,7 +77,9 @@ pub fn tile_movement_cost_check(
     };
 }
 
-/// Struct used in a [`MovementCalculator`](crate::movement::MovementCalculator) to hold the list of [`MoveNode`]
+/// Struct to be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to hold the
+/// list of [`MoveNode`]s. This is not to be used for any other purpose than calculating movement
+/// and will be converted into an [`AvailableMove`] struct to be used outside the movement calculater
 pub struct MovementNodes {
     pub move_nodes: HashMap<TilePos, MoveNode>,
 }
@@ -229,7 +230,6 @@ impl MoveNode {
 /// the CurrentMoveInformation resource
 pub(crate) fn handle_move_begin_events(world: &mut World) {
     let mut move_events_vec: Vec<MoveEvent> = vec![];
-
     let mut system_state: SystemState<EventReader<MoveEvent>> = SystemState::new(world);
     let mut move_events = system_state.get_mut(world);
 
@@ -244,109 +244,46 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
     let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(world);
     let movement_system = system_state.get(world);
 
-    let mut move_info: MovementNodes = MovementNodes {
-        move_nodes: HashMap::new(),
-    };
+    let mut moves: HashMap<Entity, MovementNodes> = HashMap::new();
 
     for event in move_events_vec {
         if let MoveEvent::MoveBegin { object_moving } = event {
-            move_info = movement_system.movement_calculator.calculate_move(
+            let move_info = movement_system.movement_calculator.calculate_move(
                 &movement_system,
                 &object_moving,
                 world,
             );
+
+            moves.insert(object_moving, move_info);
         }
     }
 
-    if !move_info.move_nodes.is_empty() {
-        world.resource_scope(|_world, mut a: Mut<CurrentMovementInformation>| {
-            for (tile_pos, move_node) in move_info.move_nodes.iter() {
+    let mut system_state: SystemState<Commands> = SystemState::new(world);
+    let mut commands = system_state.get_mut(world);
+
+    for (entity, move_nodes) in moves.iter() {
+        if !move_nodes.move_nodes.is_empty() {
+            let mut moves: HashMap<TilePos, AvailableMove> = HashMap::new();
+
+            for (tile_pos, move_node) in move_nodes.move_nodes.iter() {
                 if move_node.valid_move {
-                    a.available_moves.insert(
-                        *tile_pos,
-                        AvailableMove {
-                            tile_pos: move_node.node_pos,
-                            prior_tile_pos: move_node.prior_node,
-                            move_cost: move_node
-                                .move_cost
-                                .expect("All valid moves should have a move cost"),
-                        },
-                    );
+                    moves.insert(*tile_pos, AvailableMove::from(*move_node));
                 }
             }
-        });
-    }
-}
 
-/// Handles the TryMoveObject events. Will check if the given TilePos is inside the CurrentMovementInformation
-/// resource and will move the unit if so.
-///
-/// Clears the CurrentAvailableMoves resource if the move was successful.
-///
-/// Sends an event with the success or the error depending on the move
-// TODO: Remove it clearing the CurrentAvailableMoves resource - place that in its own system that
-// is optional
-pub(crate) fn handle_try_move_events(
-    mut move_events: ParamSet<(EventReader<MoveEvent>, EventWriter<MoveEvent>)>,
-    mut object_query: Query<
-        (
-            &mut Transform,
-            &mut ObjectGridPosition,
-            &ObjectStackingClass,
-        ),
-        With<Object>,
-    >,
-    mut tile_query: Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-    mut tilemap_q: Query<
-        (
-            &mut Map,
-            &TilemapGridSize,
-            &TilemapType,
-            &mut TileStorage,
-            &Transform,
-        ),
-        Without<Object>,
-    >,
-    mut movement_information: ResMut<CurrentMovementInformation>,
-    mut move_error_writer: EventWriter<MoveError>,
-) {
-    let mut result: Result<MoveEvent, MoveError> =
-        Err(MoveError::NotValidMove(String::from("Try move failed")));
-
-    for event in move_events.p0().iter() {
-        if let MoveEvent::TryMoveObject {
-            object_moving,
-            new_pos,
-        } = event
-        {
-            if movement_information.contains_move(new_pos) {
-                result = move_object(
-                    object_moving,
-                    new_pos,
-                    &mut object_query,
-                    &mut tile_query,
-                    &mut tilemap_q,
-                );
-            } else {
-                result = Err(MoveError::default());
-            }
+            commands.entity(*entity).insert(CurrentMovementInformation {
+                available_moves: moves,
+            });
         }
     }
-    match result {
-        Ok(move_event) => {
-            movement_information.available_moves.clear();
-            move_events.p1().send(move_event);
-        }
-        Err(error) => {
-            move_error_writer.send(error);
-        }
-    }
+    
+    system_state.apply(world);
 }
 
 /// this is an unchecked move of an object. It adds the object to the tile at new_pos,
 /// it removes the object from the old tile, and then it moves the object transform and updates the
 /// object tile_pos.
-/// it does not provide any sort of valid movement
+/// it does not provide any sort of movement validation
 ///
 /// currently only works for one map entity. If there are more than one it will panic
 //TODO update this to use the MapHandler resource
@@ -410,12 +347,12 @@ pub fn move_object(
                 object_moved: *object_moving,
             })
         } else {
-            Err(MoveError::NotValidMove(String::from(
+            Err(MoveError::InvalidMove(String::from(
                 "Tile does not have needed components",
             )))
         }
     } else {
-        Err(MoveError::NotValidMove(String::from(
+        Err(MoveError::InvalidMove(String::from(
             "Move Position not valid",
         )))
     };

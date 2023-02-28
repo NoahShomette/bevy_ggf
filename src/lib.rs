@@ -7,6 +7,7 @@
 //!
 
 use crate::camera::BggfCameraPlugin;
+use crate::combat::BggfCombatPlugin;
 use crate::mapping::BggfMappingPlugin;
 use crate::movement::BggfMovementPlugin;
 use crate::selection::BggfSelectionPlugin;
@@ -21,6 +22,7 @@ pub mod movement;
 pub mod object;
 pub mod selection;
 pub mod team;
+pub mod game;
 
 pub struct BggfCorePlugin;
 
@@ -40,6 +42,7 @@ impl PluginGroup for BggfDefaultPlugins {
             .add(BggfSelectionPlugin)
             .add(BggfMovementPlugin::default())
             .add(BggfMappingPlugin)
+            .add(BggfCombatPlugin::default())
     }
 }
 

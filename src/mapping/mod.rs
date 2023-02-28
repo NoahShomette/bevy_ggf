@@ -28,9 +28,10 @@ impl Plugin for BggfMappingPlugin {
     }
 }
 
-/// Master resource that holds the entities related to any maps
+/// Master resource that holds the entities related to any tile_maps
 #[derive(Default, Resource)]
 pub struct MapHandler {
+    /// A hashmap of every tilemap entity in the game.
     map_entities: HashMap<IVec2, Entity>,
 }
 

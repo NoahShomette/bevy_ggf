@@ -6,3 +6,4 @@
 -
 
 # Ideas:
+- use a new custom schedule. Idk if this allows runtime editing of custom schedules.
