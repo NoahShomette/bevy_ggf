@@ -3,7 +3,9 @@ use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::combat::battle_resolver::BattleResolver;
 use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult};
-use bevy_ggf::game::command::{execute_game_commands_buffer, execute_game_rollbacks_buffer};
+use bevy_ggf::game::command::{
+    execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
+};
 use bevy_ggf::game::Game;
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
@@ -15,7 +17,11 @@ use bevy_ggf::mapping::{
 use bevy_ggf::movement::defaults::{
     MoveCheckAllowedTile, MoveCheckSpace, SquareMovementCalculator,
 };
-use bevy_ggf::movement::{CurrentMovementInformation, DiagonalMovement, MoveCommandsExt, MoveEvent, MovementSystem, MovementType, ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules, ObjectTypeMovementRules, TerrainMovementCosts, TileMovementCosts};
+use bevy_ggf::movement::{
+    CurrentMovementInformation, DiagonalMovement, MoveCommandsExt, MoveEvent, MovementSystem,
+    MovementType, ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules,
+    ObjectTypeMovementRules, TerrainMovementCosts, TileMovementCosts,
+};
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
 };
@@ -132,7 +138,9 @@ fn main() {
         .add_system(handle_right_click)
         .add_system(execute_game_commands_buffer)
         .add_system(execute_game_rollbacks_buffer)
+        .add_system(execute_game_rollforward_buffer)
         .add_system(rollback)
+        .add_system(rollforward)
         //.add_plugin(FrameTimeDiagnosticsPlugin::default())
         //.add_plugin(LogDiagnosticsPlugin::default())
         .run();
@@ -145,6 +153,8 @@ fn startup(
     mut tile_movement_rules: ResMut<TerrainMovementCosts>,
     mut game: ResMut<Game>,
 ) {
+    game.commands.spawn_object((Object), Default::default());
+
     let tilemap_size = TilemapSize { x: 100, y: 100 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
 
@@ -240,54 +250,18 @@ fn startup(
     let movement_rules_2 =
         ObjectTerrainMovementRules::new(vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]], vec![]);
 
-    let entity = commands.spawn(UnitBundle {
-        object: Object,
-        object_info: ObjectInfo {
-            object_type: &OBJECT_TYPE_BRIDGE,
-        },
-        selectable: SelectableEntity,
-        object_grid_position: ObjectGridPosition {
-            tile_position: TilePos::new(0, 0),
-        },
-        object_stacking_class: ObjectStackingClass {
-            stack_class: &STACKING_CLASS_BUILDING,
-        },
-        sprite_bundle: SpriteBundle {
-            transform: Transform {
-                translation: tile_pos
-                    .center_in_world(&grid_size, &tilemap_type)
-                    .extend(5.0),
-                ..default()
-            },
-            texture: infantry_texture_handle.clone(),
-            ..default()
-        },
-        unit_movement_bundle: ObjectMovementBundle {
-            object_movement: ObjectMovement {
-                move_points: 3,
-                movement_type: &MOVEMENT_TYPES[0],
-                object_terrain_movement_rules: movement_rules_2.clone(),
-            },
-        },
-    });
-    game.commands
-        .add_object_to_tile(entity.id(), TilePos::new(0, 0));
-
-    let object_movement_rules =
-        ObjectTypeMovementRules::new(vec![], vec![], vec![(&OBJECT_TYPE_BRIDGE, true)]);
-
-    let entity = commands
-        .spawn(UnitBundle {
+    game.commands.spawn_object(
+        (UnitBundle {
             object: Object,
             object_info: ObjectInfo {
-                object_type: &OBJECT_TYPE_RIFLEMAN,
+                object_type: &OBJECT_TYPE_BRIDGE,
             },
             selectable: SelectableEntity,
             object_grid_position: ObjectGridPosition {
-                tile_position: TilePos::new(1, 1),
+                tile_position: TilePos::new(0, 0),
             },
             object_stacking_class: ObjectStackingClass {
-                stack_class: &STACKING_CLASS_GROUND,
+                stack_class: &STACKING_CLASS_BUILDING,
             },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
@@ -301,16 +275,54 @@ fn startup(
             },
             unit_movement_bundle: ObjectMovementBundle {
                 object_movement: ObjectMovement {
-                    move_points: 5,
+                    move_points: 3,
                     movement_type: &MOVEMENT_TYPES[0],
-                    object_terrain_movement_rules: movement_rules.clone(),
+                    object_terrain_movement_rules: movement_rules_2.clone(),
                 },
             },
-        })
-        .insert(object_movement_rules.clone())
-        .id();
+        }),
+        TilePos::new(0, 0),
+    );
 
-    game.commands.add_object_to_tile(entity, TilePos::new(1, 1));
+    let object_movement_rules =
+        ObjectTypeMovementRules::new(vec![], vec![], vec![(&OBJECT_TYPE_BRIDGE, true)]);
+
+    game.commands.spawn_object(
+        (
+            (UnitBundle {
+                object: Object,
+                object_info: ObjectInfo {
+                    object_type: &OBJECT_TYPE_RIFLEMAN,
+                },
+                selectable: SelectableEntity,
+                object_grid_position: ObjectGridPosition {
+                    tile_position: TilePos::new(1, 1),
+                },
+                object_stacking_class: ObjectStackingClass {
+                    stack_class: &STACKING_CLASS_GROUND,
+                },
+                sprite_bundle: SpriteBundle {
+                    transform: Transform {
+                        translation: tile_pos
+                            .center_in_world(&grid_size, &tilemap_type)
+                            .extend(5.0),
+                        ..default()
+                    },
+                    texture: infantry_texture_handle.clone(),
+                    ..default()
+                },
+                unit_movement_bundle: ObjectMovementBundle {
+                    object_movement: ObjectMovement {
+                        move_points: 5,
+                        movement_type: &MOVEMENT_TYPES[0],
+                        object_terrain_movement_rules: movement_rules.clone(),
+                    },
+                },
+            }),
+            object_movement_rules.clone(),
+        ),
+        TilePos::new(1, 1),
+    );
 }
 
 fn handle_right_click(
@@ -348,10 +360,11 @@ fn select_and_move_unit_to_tile_clicked(
                             &world_pos, transform, map_size, grid_size, map_type,
                         ) {
                             if object_tile_pos.tile_position != tile_pos {
-                                game.commands.try_move_object(
+                                game.commands.move_object(
                                     selected_entity,
                                     object_tile_pos.tile_position,
                                     tile_pos,
+                                    true,
                                 );
                             } else {
                                 select_object_event_writer.send(TrySelectEvents::TilePos(tile_pos));
@@ -380,7 +393,9 @@ fn handle_move_complete_event(
         match event {
             MoveEvent::MoveComplete { object_moved } => {
                 selected_object.object_entity = None;
-                commands.entity(*object_moved).remove::<CurrentMovementInformation>();
+                commands
+                    .entity(*object_moved)
+                    .remove::<CurrentMovementInformation>();
             }
             _ => {}
         }
@@ -420,7 +435,7 @@ fn handle_move_sprites(
                             grid_size,
                             map_type,
                         )
-                            .extend(4.0),
+                        .extend(4.0),
                         ..default()
                     },
                     texture: sprite_handle.clone(),
@@ -473,7 +488,7 @@ fn show_move_path(
                             translation: tile_pos_to_centered_map_world_pos(
                                 &tile_pos, transform, grid_size, map_type,
                             )
-                                .extend(6.0),
+                            .extend(6.0),
                             ..default()
                         },
                         texture: sprite_handle.clone(),
@@ -492,7 +507,7 @@ fn show_move_path(
                                         grid_size,
                                         map_type,
                                     )
-                                        .extend(6.0),
+                                    .extend(6.0),
                                     ..default()
                                 },
                                 texture: sprite_handle.clone(),
@@ -520,5 +535,11 @@ fn show_move_path(
 fn rollback(keys: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
     if keys.just_pressed(KeyCode::Z) {
         game.commands.rollback_one();
+    }
+}
+
+fn rollforward(keys: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
+    if keys.just_pressed(KeyCode::X) {
+        game.commands.rollforward(1);
     }
 }

@@ -29,7 +29,7 @@ impl Plugin for BggfSelectionPlugin {
 /// either the grid or items in the grid are selected follows this:
 /// ### {unit > building > tile}
 ///
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct SelectableEntity;
 
 #[derive(Resource, Default)]

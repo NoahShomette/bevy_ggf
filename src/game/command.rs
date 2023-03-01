@@ -46,7 +46,9 @@ use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
 use bevy::math::IVec2;
-use bevy::prelude::{Entity, Mut, Query, Res, Transform, With, Without, World};
+use bevy::prelude::{
+    Bundle, DespawnRecursiveExt, Entity, Mut, Query, Res, Transform, With, Without, World,
+};
 use bevy_ecs_tilemap::prelude::{TilemapGridSize, TilemapType};
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use std::fmt::Debug;
@@ -62,11 +64,39 @@ pub fn execute_game_commands_buffer(world: &mut World) {
 pub fn execute_game_rollbacks_buffer(world: &mut World) {
     world.resource_scope(|world, mut game: Mut<Game>| {
         while game.commands.history.rollbacks != 0 {
-            if let Some(mut command) = game.commands.history.history.pop() {
-                command.rollback(world).expect("Rollback failed");
-                info!("Rollbacked: {:?}", command);
+            if let Some(mut command) = game.commands.history.pop() {
+                
+                let new_command = command.rollback(world).expect("Rollback failed");
+                if let Some(command) = new_command {
+                    game.commands.history.rolledback_history.push(command);
+
+                } else {
+                    game.commands.history.rolledback_history.push(command);
+                }
+                info!("Rollbacked command");
             }
             game.commands.history.rollbacks -= 1;
+        }
+    });
+}
+
+/// Executes all rollforwards requested - panics if an execute fails
+pub fn execute_game_rollforward_buffer(world: &mut World) {
+    world.resource_scope(|world, mut game: Mut<Game>| {
+        while game.commands.history.rollforwards != 0 {
+            if let Some(mut command) = game.commands.history.rolledback_history.pop() {
+                if let Ok(new_command) = command.execute(world) {
+                    info!("Rolledforward command");
+                    if let Some(command) = new_command {
+                        game.commands.history.push(command.clone());
+                    } else {
+                        game.commands.history.push(command.clone());
+                    }
+                } else {
+                    info!("Rolledforward failed");
+                }
+            }
+            game.commands.history.rollforwards -= 1;
         }
     });
 }
@@ -89,11 +119,27 @@ pub fn execute_game_rollbacks_buffer(world: &mut World) {
 ///  }
 ///
 /// ```
-pub trait GameCommand: Send + Sync + Debug + GameCommandClone + 'static {
+pub trait GameCommand: Send + GameCommandClone + Sync + 'static {
     /// Execute the command
-    fn execute(&mut self, world: &mut World) -> Result<(), String>;
-    fn rollback(&mut self, world: &mut World) -> Result<(), String>;
+    fn execute(&mut self, world: &mut World) -> Result<Option<Box<dyn GameCommand>>, String>;
+    fn rollback(&mut self, world: &mut World) -> Result<Option<Box<dyn GameCommand>>, String>;
 }
+
+/* TODO: Figure out if a closure is possible. Probably not since we have two functions, but either way
+ it would be nice if we can but they can still do whatever they need otherwise
+impl<F> GameCommand for F
+    where
+        F: FnOnce(&mut World) + Sync + Copy + Debug + GameCommandClone + Send + 'static,
+{
+    fn execute(self: &mut F, world: &mut World) -> Result<(), String> {
+        Ok(self(world))
+    }
+    fn rollback(self: &mut F, world: &mut World) -> Result<(), String> {
+        Ok(self(world))
+    }
+}
+
+ */
 
 impl Clone for Box<dyn GameCommand> {
     fn clone(&self) -> Self {
@@ -108,7 +154,7 @@ pub trait GameCommandClone {
 
 impl<T> GameCommandClone for T
 where
-    T: 'static + GameCommand + Clone,
+    T: 'static + GameCommand + Clone + ?Sized,
 {
     fn clone_box(&self) -> Box<dyn GameCommand> {
         Box::new(self.clone())
@@ -142,7 +188,9 @@ impl GameCommandQueue {
 #[derive(Default)]
 pub struct GameCommandsHistory {
     pub history: Vec<Box<dyn GameCommand>>,
+    pub rolledback_history: Vec<Box<dyn GameCommand>>,
     rollbacks: u32,
+    rollforwards: u32,
 }
 
 impl GameCommandsHistory {
@@ -154,6 +202,20 @@ impl GameCommandsHistory {
     /// Take the last command in the queue. Returns None if queue is empty
     pub fn pop(&mut self) -> Option<Box<dyn GameCommand>> {
         self.history.pop()
+    }
+
+    /// Push a command to the end of the history vec
+    pub fn push_rollback_history(&mut self, command: Box<dyn GameCommand>) {
+        self.rolledback_history.push(command);
+    }
+
+    /// Take the last command in the queue. Returns None if queue is empty
+    pub fn pop_rollback_history(&mut self) -> Option<Box<dyn GameCommand>> {
+        self.rolledback_history.pop()
+    }
+
+    pub fn clear_rollback_history(&mut self) {
+        self.rolledback_history.clear();
     }
 }
 
@@ -170,11 +232,16 @@ impl GameCommands {
     /// succeed to the history. If commands dont succeed they are silently failed
     pub fn execute_buffer(&mut self, world: &mut World) {
         for mut command in self.queue.queue.drain(..).into_iter() {
-            if let Ok(_) = command.execute(world) {
-                info!("executed {:?}", command);
-                self.history.push(command.clone());
+            if let Ok(new_command) = command.execute(world) {
+                self.history.clear_rollback_history();
+                info!("executed Command");
+                if let Some(command) = new_command {
+                    self.history.push(command.clone());
+                } else {
+                    self.history.push(command.clone());
+                }
             } else {
-                info!("execution failed {:?}", command);
+                info!("execution failed ");
             }
         }
     }
@@ -189,6 +256,10 @@ impl GameCommands {
     /// [`execute_game_rollbacks_buffer`] is called
     pub fn rollback_amount(&mut self, amount: u32) {
         self.history.rollbacks += amount;
+    }
+
+    pub fn rollforward(&mut self, amount: u32) {
+        self.history.rollforwards += amount;
     }
 
     /// Add a custom command to the queue
@@ -238,6 +309,23 @@ impl GameCommands {
             tile_pos,
         }
     }
+
+    pub fn spawn_object<T>(&mut self, bundle: T, tile_pos: TilePos) -> SpawnObject<T>
+    where
+        T: Bundle + Clone,
+    {
+        self.queue.push(SpawnObject {
+            bundle: bundle.clone(),
+            tile_pos,
+            entity_id: None,
+        });
+        SpawnObject {
+            bundle,
+            tile_pos,
+            entity_id: None,
+        }
+    }
+    pub fn despawn_object(&mut self) {}
 }
 
 /// Removes the given entity from the given tile if the tile exists and the entity has the required components.
@@ -250,7 +338,10 @@ pub struct RemoveObjectFromTile {
 }
 
 impl GameCommand for RemoveObjectFromTile {
-    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
+    fn execute(
+        &mut self,
+        mut world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut system_state: SystemState<(
             Query<&ObjectStackingClass>,
             Res<MapHandler>,
@@ -273,10 +364,13 @@ impl GameCommand for RemoveObjectFromTile {
 
         tile_objects.remove_object(self.object_entity);
         tile_stack_rules.decrement_object_class_count(object_stacking_class);
-        return Ok(());
+        return Ok(None);
     }
 
-    fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
+    fn rollback(
+        &mut self,
+        mut world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut system_state: SystemState<(
             Query<(&mut ObjectGridPosition, &ObjectStackingClass)>,
             Res<MapHandler>,
@@ -303,13 +397,13 @@ impl GameCommand for RemoveObjectFromTile {
         tile_objects.add_object(self.object_entity);
         object_grid_position.tile_position = self.tile_pos;
         tile_stack_rules.increment_object_class_count(object_stacking_class);
-        Ok(())
+        Ok(None)
     }
 }
 
 /// Adds the given entity to the given tile if the tile exists and the entity has the required components.
 /// Will silently fail if either of the above are invalid.
-/// Rollback will *not* set the objects grid position
+/// Rollback will *not* set the objects grid position or change the position of the objects transform
 #[derive(Clone, Debug)]
 pub struct AddObjectToTile {
     pub object_entity: Entity,
@@ -317,7 +411,10 @@ pub struct AddObjectToTile {
 }
 
 impl GameCommand for AddObjectToTile {
-    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
+    fn execute(
+        &mut self,
+        mut world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut system_state: SystemState<(
             Query<
                 (
@@ -362,10 +459,13 @@ impl GameCommand for AddObjectToTile {
             tile_pos_to_centered_map_world_pos(&self.tile_pos, map_transform, grid_size, map_type);
 
         transform.translation = tile_world_pos.extend(5.0);
-        Ok(())
+        Ok(None)
     }
 
-    fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
+    fn rollback(
+        &mut self,
+        mut world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut system_state: SystemState<(
             Query<&ObjectStackingClass>,
             Res<MapHandler>,
@@ -391,6 +491,59 @@ impl GameCommand for AddObjectToTile {
 
         tile_objects.remove_object(self.object_entity);
         tile_stack_rules.decrement_object_class_count(object_stacking_class);
-        Ok(())
+        Ok(None)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SpawnObject<T>
+where
+    T: Bundle,
+{
+    pub bundle: T,
+    pub tile_pos: TilePos,
+    pub entity_id: Option<Entity>,
+}
+
+impl<T> GameCommand for SpawnObject<T>
+where
+    T: Bundle + Clone,
+{
+    fn execute(
+        &mut self,
+        world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
+        let id = world.spawn(self.bundle.clone()).id();
+        let mut add = AddObjectToTile {
+            object_entity: id,
+            tile_pos: self.tile_pos,
+        };
+        let _ = add.execute(world);
+        return Ok(Some(Box::new(SpawnObject {
+            bundle: self.bundle.clone(),
+            tile_pos: self.tile_pos,
+            entity_id: Some(id),
+        })));
+    }
+
+    fn rollback(
+        &mut self,
+        world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
+        let mut remove = RemoveObjectFromTile {
+            object_entity: self
+                .entity_id
+                .expect("Rollback can only be called after execute which returns an entity id"),
+            tile_pos: self.tile_pos,
+        };
+        let _ = remove.execute(world);
+        world
+            .entity_mut(
+                self.entity_id
+                    .expect("Rollback can only be called after execute which returns an entity id"),
+            )
+            .despawn_recursive();
+
+        return Ok(None);
     }
 }

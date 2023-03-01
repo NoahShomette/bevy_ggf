@@ -8,6 +8,7 @@ use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::movement::backend::{
     add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
 };
+use crate::movement::MoveEvent::TryMoveObject;
 use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
@@ -56,51 +57,31 @@ pub trait MoveCommandsExt {
         object_moving: Entity,
         current_pos: TilePos,
         new_pos: TilePos,
+        attempt: bool,
     ) -> MoveObject;
-
-    fn try_move_object(
-        &mut self,
-        object_moving: Entity,
-        current_pos: TilePos,
-        new_pos: TilePos,
-    ) -> TryMoveObject;
 }
 
 impl MoveCommandsExt for GameCommands {
+    /// Moves an object if the object has a [`CurrentMovementInformation`] struct and that contains
+    /// the [`TilePos`] that the object is moving too
     fn move_object(
         &mut self,
         object_moving: Entity,
         current_pos: TilePos,
         new_pos: TilePos,
+        attempt: bool,
     ) -> MoveObject {
         self.queue.push(MoveObject {
             object_moving,
             current_pos,
             new_pos,
+            attempt,
         });
         MoveObject {
             object_moving,
             current_pos,
             new_pos,
-        }
-    }
-    /// Moves an object if the object has a [`CurrentMovementInformation`] struct and that contains
-    /// the [`TilePos`] that the object is moving too
-    fn try_move_object(
-        &mut self,
-        object_moving: Entity,
-        current_pos: TilePos,
-        new_pos: TilePos,
-    ) -> TryMoveObject {
-        self.queue.push(TryMoveObject {
-            object_moving,
-            current_pos,
-            new_pos,
-        });
-        TryMoveObject {
-            object_moving,
-            current_pos,
-            new_pos,
+            attempt,
         }
     }
 }
@@ -110,10 +91,14 @@ pub struct MoveObject {
     object_moving: Entity,
     current_pos: TilePos,
     new_pos: TilePos,
+    attempt: bool,
 }
 
 impl GameCommand for MoveObject {
-    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
+    fn execute(
+        &mut self,
+        world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut remove = RemoveObjectFromTile {
             object_entity: self.object_moving,
             tile_pos: self.current_pos,
@@ -123,58 +108,35 @@ impl GameCommand for MoveObject {
             tile_pos: self.new_pos,
         };
 
-        remove.execute(world)?;
-        add.execute(world)?;
+        return match self.attempt {
+            true => {
+                if let Some(movement_information) =
+                    world.get::<CurrentMovementInformation>(self.object_moving)
+                {
+                    return if movement_information.contains_move(&self.new_pos) {
+                        remove.execute(world)?;
+                        add.execute(world)?;
 
-        let mut system_state: SystemState<EventWriter<MoveEvent>> = SystemState::new(world);
-        let mut move_event = system_state.get_mut(world);
+                        let mut system_state: SystemState<EventWriter<MoveEvent>> =
+                            SystemState::new(world);
+                        let mut move_event = system_state.get_mut(world);
 
-        move_event.send(MoveEvent::MoveComplete {
-            object_moved: self.object_moving,
-        });
+                        move_event.send(MoveEvent::MoveComplete {
+                            object_moved: self.object_moving,
+                        });
 
-        system_state.apply(world);
-        return Ok(());
-    }
-
-    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
-        let mut remove = RemoveObjectFromTile {
-            object_entity: self.object_moving,
-            tile_pos: self.new_pos,
-        };
-        let mut add = AddObjectToTile {
-            object_entity: self.object_moving,
-            tile_pos: self.current_pos,
-        };
-
-        return add
-            .execute(world)
-            .and_then(|_| remove.execute(world).and_then(|_| Ok(())));
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct TryMoveObject {
-    object_moving: Entity,
-    current_pos: TilePos,
-    new_pos: TilePos,
-}
-
-impl GameCommand for TryMoveObject {
-    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
-        let mut remove = RemoveObjectFromTile {
-            object_entity: self.object_moving,
-            tile_pos: self.current_pos,
-        };
-        let mut add = AddObjectToTile {
-            object_entity: self.object_moving,
-            tile_pos: self.new_pos,
-        };
-
-        return if let Some(movement_information) =
-            world.get::<CurrentMovementInformation>(self.object_moving)
-        {
-            return if movement_information.contains_move(&self.new_pos) {
+                        system_state.apply(world);
+                        return Ok(None);
+                    } else {
+                        info!("TilePos not in movement info");
+                        Err(String::from("Tile_pos not in movement information"))
+                    };
+                } else {
+                    info!("Object has no movemement information");
+                    Err(String::from("Object has no movemement information"))
+                }
+            }
+            false => {
                 remove.execute(world)?;
                 add.execute(world)?;
 
@@ -186,18 +148,15 @@ impl GameCommand for TryMoveObject {
                 });
 
                 system_state.apply(world);
-                return Ok(());
-            } else {
-                info!("TilePos not in movement info");
-                Err(String::from("Tile_pos not in movement information"))
-            };
-        } else {
-            info!("Object has no movemement information");
-            Err(String::from("Object has no movemement information"))
+                return Ok(None);
+            }
         };
     }
 
-    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+    fn rollback(
+        &mut self,
+        world: &mut World,
+    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut remove = RemoveObjectFromTile {
             object_entity: self.object_moving,
             tile_pos: self.new_pos,
@@ -206,10 +165,16 @@ impl GameCommand for TryMoveObject {
             object_entity: self.object_moving,
             tile_pos: self.current_pos,
         };
+        
+        remove.execute(world)?;
+        add.execute(world)?;
 
-        return remove
-            .execute(world)
-            .and_then(|_| add.execute(world).and_then(|_| Ok(())));
+        return Ok(Some(Box::new(MoveObject {
+            object_moving: self.object_moving,
+            current_pos: self.current_pos,
+            new_pos: self.new_pos,
+            attempt: false,
+        })));
     }
 }
 
@@ -456,7 +421,7 @@ pub struct TerrainMovementCosts {
 // UNIT MOVEMENT STUFF
 
 /// Basic Bundle that supplies all required movement components for an object
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct ObjectMovementBundle {
     pub object_movement: ObjectMovement,
 }

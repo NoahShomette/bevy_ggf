@@ -45,7 +45,7 @@ AddResourceOnTurn
 // ObjectClass -> (Ground, Air, Water, Building, etc)
 // ObjectGroup -> (Armor, Capital Ship, Helicopter)
 // ObjectType -> (Light Tank, Battleship, Infantry, Unit Barracks, Wall)
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct ObjectMinimalBundle {
     pub object: Object,
     pub object_info: ObjectInfo,
@@ -55,7 +55,7 @@ pub struct ObjectMinimalBundle {
 }
 
 /// Base bundle that provides all functionality for all subsystems in the crate
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct ObjectCoreBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
@@ -70,7 +70,7 @@ pub struct ObjectCoreBundle {
 }
 
 /// Base bundle that provides all functionality for all subsystems in the crate
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct UnitBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
@@ -190,7 +190,7 @@ pub struct GameObjectInfo {
 }
 
 /// The position of the Object on the Tilemap.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct ObjectGridPosition {
     pub tile_position: TilePos,
 }
