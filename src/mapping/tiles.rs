@@ -11,6 +11,7 @@ use crate::mapping::terrain::TileTerrainInfo;
 use bevy::prelude::{Bundle, Component, Entity};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::TileBundle;
+use crate::game::GameId;
 
 /// Bundle containing all the basic tile components needed for a tile.
 ///
@@ -150,22 +151,22 @@ pub struct TileObjectStacksCount {
 /// Simple Vec that holds Entities that are currently in the tile.
 #[derive(Clone, Eq, PartialEq, Default, Component)]
 pub struct TileObjects {
-    pub entities_in_tile: Vec<Entity>,
+    pub entities_in_tile: Vec<GameId>,
 }
 
 impl TileObjects {
     /// Checks if the given entity is currently in this tile
-    pub fn contains_object(&self, entity: Entity) -> bool {
+    pub fn contains_object(&self, entity: GameId) -> bool {
         self.entities_in_tile.contains(&entity)
     }
 
     /// Adds the given entity
-    pub fn add_object(&mut self, entity: Entity) {
+    pub fn add_object(&mut self, entity: GameId) {
         self.entities_in_tile.push(entity);
     }
 
     /// Removes the given entity
-    pub fn remove_object(&mut self, entity: Entity) -> bool {
+    pub fn remove_object(&mut self, entity: GameId) -> bool {
         let mut iter = self.entities_in_tile.iter();
         if let Some(position) = iter.position(|&i| i == entity) {
             self.entities_in_tile.remove(position);

@@ -2,54 +2,47 @@ pub mod object;
 pub mod terrain;
 pub mod tiles;
 
-use std::iter::Map;
-use bevy::ecs::system::SystemState;
+use std::process::id;
+use crate::game::command::{GameCommand, GameCommands};
+use crate::game::{GameId, GameIdProvider};
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
-    BggfTileBundle, BggfTileObjectBundle, ObjectStackingClass, Tile, TileObjectStackingRules,
+    BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStackingRules,
     TileObjects,
 };
 use crate::movement::TerrainMovementCosts;
-use crate::object::{Object, ObjectGridPosition};
+use bevy::ecs::system::SystemState;
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
-use bevy::utils::HashMap;
-use bevy::utils::tracing::Id;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
-use crate::game::command::{GameCommand, GameCommands};
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
 
 impl Plugin for BggfMappingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<UpdateMapTileObject>()
-            .add_system(update_map_tile_object_event)
-            .init_resource::<MapHandler>();
+        app.add_event::<MapSpawned>().add_event::<MapDeSpawned>();
     }
 }
 
-/// Master resource that holds the entities related to any tile_maps
-#[derive(Default, Resource)]
-pub struct MapHandler {
-    /// A hashmap of every tilemap entity in the game.
-    map_entities: HashMap<IVec2, Entity>,
+pub struct MapSpawned{
+    map_game_id: GameId,
 }
 
-impl MapHandler {
-    pub fn register_map_entity(&mut self, position: IVec2, entity: Entity) {
-        self.map_entities.insert(position, entity);
-    }
+pub struct MapDeSpawned{
+    map_game_id: GameId,
+}
 
-    pub fn get_map_entity(&self, position: IVec2) -> Option<Entity> {
-        let Some(map_entity) = self.map_entities.get(&position) else{
-            return None;
-        };
-        Some(*map_entity)
-    }
+/// Map struct used to keep track of the general structure of the map. Holds a reference to the tilemap_entity
+/// that this map info applies to
+#[derive(Component)]
+pub struct Map {
+    pub tilemap_type: TilemapType,
+    pub map_size: TilemapSize,
+    pub tilemap_entity: Entity,
 }
 
 pub trait MapCommandsExt {
@@ -74,8 +67,8 @@ impl MapCommandsExt for GameCommands {
         map_terrain_type_vec: Vec<TerrainType>,
         tile_stack_rules: TileObjectStackingRules,
     ) -> SpawnRandomMap {
-        self.queue.push(GameCommandMeta {
-            command: Box::new(SpawnRandomMap {
+        self.queue.push(
+            SpawnRandomMap {
                 tile_map_size,
                 tilemap_type,
                 tilemap_tile_size,
@@ -83,9 +76,7 @@ impl MapCommandsExt for GameCommands {
                 map_terrain_type_vec: map_terrain_type_vec.clone(),
                 tile_stack_rules: tile_stack_rules.clone(),
                 spawned_map_id: None,
-            }),
-            game_id: self.game_id.game_id,
-        });
+            });
         SpawnRandomMap {
             tile_map_size,
             tilemap_type,
@@ -106,7 +97,7 @@ pub struct SpawnRandomMap {
     map_texture_handle: Handle<Image>,
     map_terrain_type_vec: Vec<TerrainType>,
     tile_stack_rules: TileObjectStackingRules,
-    spawned_map_id: Option<Id>,
+    spawned_map_id: Option<GameId>,
 }
 
 impl GameCommand for SpawnRandomMap {
@@ -160,7 +151,11 @@ impl GameCommand for SpawnRandomMap {
 
         let mut object_id_provider = world.resource_mut::<GameIdProvider>();
         let id = object_id_provider.next_id_component();
-
+        
+        world.send_event::<MapSpawned>(MapSpawned{
+            map_game_id: id,
+        });
+        
         world
             .entity_mut(tilemap_entity)
             .insert(TilemapBundle {
@@ -192,7 +187,7 @@ impl GameCommand for SpawnRandomMap {
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<Option<Box<dyn GameCommand>>, String> {
-        let mut system_state: SystemState<(Query<(Entity, &Id, &TileStorage)>, Commands)> =
+        let mut system_state: SystemState<(Query<(Entity, &GameId, &TileStorage)>, Commands)> =
             SystemState::new(&mut world);
 
         let (mut object_query, mut commands) = system_state.get_mut(&mut world);
@@ -201,13 +196,25 @@ impl GameCommand for SpawnRandomMap {
             return Err(String::from("No entity found"));
         };
 
-        for entity in tile_storage.iter().filter(|option| { option.is_some() }) {
+        for entity in tile_storage.iter().filter(|option| option.is_some()) {
             commands.entity(entity.unwrap()).despawn_recursive();
         }
         system_state.apply(world);
         world.entity_mut(entity).despawn_recursive();
 
-        return Ok(None);
+        world.send_event::<MapDeSpawned>(MapDeSpawned{
+            map_game_id: self.spawned_map_id.unwrap(),
+        });
+        
+        return Ok(Some(Box::new(SpawnRandomMap {
+            tile_map_size: self.tile_map_size,
+            tilemap_type: self.tilemap_type,
+            tilemap_tile_size: self.tilemap_tile_size,
+            map_texture_handle: self.map_texture_handle.clone(),
+            map_terrain_type_vec: self.map_terrain_type_vec.clone(),
+            tile_stack_rules: self.tile_stack_rules.clone(),
+            spawned_map_id: None,
+        })));
     }
 }
 

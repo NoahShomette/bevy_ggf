@@ -1,7 +1,5 @@
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
-use crate::mapping::{
-    add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
-};
+use crate::mapping::{tile_pos_to_centered_map_world_pos, Map};
 use crate::movement::{
     AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem, ObjectMoved,
     ObjectMovement, TileMovementCosts,
@@ -276,7 +274,7 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
             });
         }
     }
-    
+
     system_state.apply(world);
 }
 

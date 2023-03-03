@@ -1,6 +1,5 @@
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
-use crate::mapping::MapHandler;
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
 use crate::movement::{
     DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, ObjectTypeMovementRules,

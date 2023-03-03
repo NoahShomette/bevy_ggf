@@ -4,6 +4,7 @@ pub mod backend;
 pub mod defaults;
 
 use crate::game::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
+use crate::game::GameId;
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::movement::backend::{
     add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
@@ -54,7 +55,8 @@ impl Default for BggfMovementPlugin {
 pub trait MoveCommandsExt {
     fn move_object(
         &mut self,
-        object_moving: Entity,
+        object_moving: GameId,
+        on_map: GameId,
         current_pos: TilePos,
         new_pos: TilePos,
         attempt: bool,
@@ -66,19 +68,22 @@ impl MoveCommandsExt for GameCommands {
     /// the [`TilePos`] that the object is moving too
     fn move_object(
         &mut self,
-        object_moving: Entity,
+        object_moving: GameId,
+        on_map: GameId,
         current_pos: TilePos,
         new_pos: TilePos,
         attempt: bool,
     ) -> MoveObject {
         self.queue.push(MoveObject {
             object_moving,
+            on_map,
             current_pos,
             new_pos,
             attempt,
         });
         MoveObject {
             object_moving,
+            on_map,
             current_pos,
             new_pos,
             attempt,
@@ -88,7 +93,8 @@ impl MoveCommandsExt for GameCommands {
 
 #[derive(Clone, Debug)]
 pub struct MoveObject {
-    object_moving: Entity,
+    object_moving: GameId,
+    on_map: GameId,
     current_pos: TilePos,
     new_pos: TilePos,
     attempt: bool,
@@ -97,21 +103,31 @@ pub struct MoveObject {
 impl GameCommand for MoveObject {
     fn execute(
         &mut self,
-        world: &mut World,
+        mut world: &mut World,
     ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut remove = RemoveObjectFromTile {
-            object_entity: self.object_moving,
+            object_game_id: self.object_moving,
+            on_map: self.on_map,
             tile_pos: self.current_pos,
         };
         let mut add = AddObjectToTile {
-            object_entity: self.object_moving,
+            object_game_id: self.object_moving,
+            on_map: self.on_map,
             tile_pos: self.new_pos,
         };
 
         return match self.attempt {
             true => {
-                if let Some(movement_information) =
-                    world.get::<CurrentMovementInformation>(self.object_moving)
+                let mut system_state: SystemState<Query<(Entity, &GameId)>> =
+                    SystemState::new(&mut world);
+
+                let mut object_query = system_state.get_mut(&mut world);
+
+                let Some((entity, id)) = object_query
+                    .iter_mut()
+                    .find(|(_, id)| id == &&self.object_moving);
+
+                if let Some(movement_information) = world.get::<CurrentMovementInformation>(entity)
                 {
                     return if movement_information.contains_move(&self.new_pos) {
                         remove.execute(world)?;
@@ -158,19 +174,22 @@ impl GameCommand for MoveObject {
         world: &mut World,
     ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut remove = RemoveObjectFromTile {
-            object_entity: self.object_moving,
+            object_game_id: self.object_moving,
+            on_map: self.on_map,
             tile_pos: self.new_pos,
         };
         let mut add = AddObjectToTile {
-            object_entity: self.object_moving,
+            object_game_id: self.object_moving,
+            on_map: self.on_map,
             tile_pos: self.current_pos,
         };
-        
+
         remove.execute(world)?;
         add.execute(world)?;
 
         return Ok(Some(Box::new(MoveObject {
             object_moving: self.object_moving,
+            on_map: self.on_map,
             current_pos: self.current_pos,
             new_pos: self.new_pos,
             attempt: false,
@@ -337,17 +356,17 @@ impl From<MoveNode> for AvailableMove {
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum MoveEvent {
     MoveBegin {
-        object_moving: Entity,
+        object_moving: GameId,
     },
     MoveCalculated {
         available_moves: Vec<TilePos>,
     },
     TryMoveObject {
-        object_moving: Entity,
+        object_moving: GameId,
         new_pos: TilePos,
     },
     MoveComplete {
-        object_moved: Entity,
+        object_moved: GameId,
     },
 }
 

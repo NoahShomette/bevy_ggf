@@ -6,7 +6,7 @@ use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult};
 use bevy_ggf::game::command::{
     execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
 };
-use bevy_ggf::game::Game;
+use bevy_ggf::game::{Game, GameId};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStackingRules, TileObjectStacksCount,
@@ -386,15 +386,18 @@ fn select_and_move_unit_to_tile_clicked(
 
 fn handle_move_complete_event(
     mut selected_object: ResMut<CurrentSelectedObject>,
+    mut object_query: Query<(Entity, &GameId)>,
     mut event_reader: EventReader<MoveEvent>,
     mut commands: Commands,
 ) {
     for event in event_reader.iter() {
         match event {
             MoveEvent::MoveComplete { object_moved } => {
+                let Some((entity, id)) =
+                    object_query.iter_mut().find(|(_, id)| id == &&object_moved);
                 selected_object.object_entity = None;
                 commands
-                    .entity(*object_moved)
+                    .entity(entity)
                     .remove::<CurrentMovementInformation>();
             }
             _ => {}
