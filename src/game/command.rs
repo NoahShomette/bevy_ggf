@@ -40,17 +40,14 @@
 //! ```
 
 use crate::game::{GameId, GameIdProvider};
-use crate::mapping::tile_pos_to_centered_map_world_pos;
+use crate::mapping::{MapId, tile_pos_to_centered_map_world_pos};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
-use bevy::math::IVec2;
 use bevy::prelude::{
-    Bundle, Component, DespawnRecursiveExt, Entity, Mut, Query, Res, Resource, Transform, With,
-    Without, World,
+    Bundle, DespawnRecursiveExt, Entity, Mut, Query, Resource, Transform, With, Without, World,
 };
-use bevy::utils::tracing::Id;
 use bevy_ecs_tilemap::prelude::{TilemapGridSize, TilemapType};
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use std::fmt::Debug;
@@ -99,6 +96,16 @@ pub fn execute_game_rollforward_buffer(world: &mut World) {
             game.history.rollforwards -= 1;
         }
     });
+}
+
+pub enum CommandType {
+    System,
+    Player,
+}
+
+pub struct GameCommandMeta {
+    command: Box<dyn GameCommand>,
+    command_type: CommandType,
 }
 
 /// A base trait defining an action that affects the game. Define your own to implement your own
@@ -287,7 +294,7 @@ impl GameCommands {
     pub fn add_object_to_tile(
         &mut self,
         object_entity: GameId,
-        on_map: GameId,
+        on_map: MapId,
         tile_pos: TilePos,
     ) -> AddObjectToTile {
         self.queue.push(AddObjectToTile {
@@ -308,7 +315,7 @@ impl GameCommands {
     pub fn remove_object_from_tile(
         &mut self,
         object_game_id: GameId,
-        on_map: GameId,
+        on_map: MapId,
         tile_pos: TilePos,
     ) -> RemoveObjectFromTile {
         self.queue.push(RemoveObjectFromTile {
@@ -327,7 +334,7 @@ impl GameCommands {
         &mut self,
         bundle: T,
         tile_pos: TilePos,
-        on_map: GameId,
+        on_map: MapId,
     ) -> SpawnObject<T>
     where
         T: Bundle + Clone,
@@ -354,7 +361,7 @@ impl GameCommands {
 #[derive(Clone, Debug)]
 pub struct RemoveObjectFromTile {
     pub object_game_id: GameId,
-    pub on_map: GameId,
+    pub on_map: MapId,
     pub tile_pos: TilePos,
 }
 
@@ -366,17 +373,21 @@ impl GameCommand for RemoveObjectFromTile {
         let mut system_state: SystemState<(
             Query<(&GameId, &ObjectStackingClass)>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-            Query<(&GameId, &TileStorage)>,
+            Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
         let Some((_, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.object_game_id);
+            .find(|(id, _)| id == &&self.object_game_id)else {
+            return Err(String::from("No object components found"));
+        };
         let Some((_, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.on_map);
+            .find(|(id, _)| id == &&self.on_map)else {
+            return Err(String::from("No tile components found"));
+        };
 
         let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
@@ -395,7 +406,7 @@ impl GameCommand for RemoveObjectFromTile {
         let mut system_state: SystemState<(
             Query<(&GameId, &mut ObjectGridPosition, &ObjectStackingClass)>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-            Query<(&GameId, &TileStorage)>,
+            Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
 
         let (mut object_query, mut tile_query, mut tile_storage_query) =
@@ -403,10 +414,14 @@ impl GameCommand for RemoveObjectFromTile {
 
         let Some((_, mut object_grid_position, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(id, _, _)| id == &&self.object_game_id);
+            .find(|(id, _, _)| id == &&self.object_game_id)else {
+            return Err(String::from("No object components found"));
+        };
         let Some((_, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.on_map);
+            .find(|(id, _)| id == &&self.on_map)else {
+            return Err(String::from("No tile components found found"));
+        };
 
         let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
 
@@ -427,7 +442,7 @@ impl GameCommand for RemoveObjectFromTile {
 #[derive(Clone, Debug)]
 pub struct AddObjectToTile {
     pub object_game_id: GameId,
-    pub on_map: GameId,
+    pub on_map: MapId,
     pub tile_pos: TilePos,
 }
 
@@ -448,7 +463,7 @@ impl GameCommand for AddObjectToTile {
             >,
             Query<(&TilemapGridSize, &TilemapType, &Transform), Without<Object>>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-            Query<(Entity, &GameId, &TileStorage)>,
+            Query<(Entity, &MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
 
         let (mut object_query, mut map_query, mut tile_query, mut tile_storage_query) =
@@ -457,10 +472,14 @@ impl GameCommand for AddObjectToTile {
         let Some((_, mut transform, mut object_grid_position, object_stacking_class)) =
             object_query
                 .iter_mut()
-                .find(|(id, _, _, _)| id == &&self.object_game_id);
+                .find(|(id, _, _, _)| id == &&self.object_game_id)else {
+            return Err(String::from(format!("No Object Components found for GameId: {:?}", self.object_game_id)));
+        };
         let Some((entity, _, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(_, id, _)| id == &&self.on_map);
+            .find(|(_, id, _)| id == &&self.on_map)else {
+            return Err(String::from(format!("No Map Components found for GameId: {:?}", self.on_map)));
+        };
 
         let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
 
@@ -491,7 +510,7 @@ impl GameCommand for AddObjectToTile {
         let mut system_state: SystemState<(
             Query<(&GameId, &ObjectStackingClass)>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-            Query<(&GameId, &TileStorage)>,
+            Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
 
         let (mut object_query, mut tile_query, mut tile_storage_query) =
@@ -499,10 +518,14 @@ impl GameCommand for AddObjectToTile {
 
         let Some((_, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.object_game_id);
+            .find(|(id, _)| id == &&self.object_game_id)else {
+            return Err(String::from("No object components found found"));
+        };
         let Some((_, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.on_map);
+            .find(|(id, _)| id == &&self.on_map)else {
+            return Err(String::from("No tile components found"));
+        };
 
         let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
 
@@ -523,7 +546,7 @@ where
 {
     pub bundle: T,
     pub tile_pos: TilePos,
-    pub on_map: GameId,
+    pub on_map: MapId,
     pub object_game_id: Option<GameId>,
 }
 
@@ -557,14 +580,15 @@ where
         mut world: &mut World,
     ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
         let mut system_state: SystemState<Query<(Entity, &GameId)>> = SystemState::new(&mut world);
-
         let mut object_query = system_state.get_mut(&mut world);
 
         let Some((entity, id)) = object_query.iter_mut().find(|(_, id)| {
             id == &&self
                 .object_game_id
                 .expect("Rollback can only be called after execute which returns an entity id")
-        });
+        })else {
+            return Err(String::from("No object components found"));
+        };
 
         let mut remove = RemoveObjectFromTile {
             object_game_id: self

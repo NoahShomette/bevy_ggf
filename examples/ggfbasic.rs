@@ -5,14 +5,15 @@ use bevy_ggf::combat::battle_resolver::BattleResolver;
 use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult};
 use bevy_ggf::game::command::{
     execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
+    GameCommands,
 };
-use bevy_ggf::game::{Game, GameId};
+use bevy_ggf::game::{GameId, GameIdProvider};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStackingRules, TileObjectStacksCount,
 };
 use bevy_ggf::mapping::{
-    tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, MapHandler, UpdateMapTileObject,
+    tile_pos_to_centered_map_world_pos, world_pos_to_tile_pos, Map, MapCommandsExt, MapId,
 };
 use bevy_ggf::movement::defaults::{
     MoveCheckAllowedTile, MoveCheckSpace, SquareMovementCalculator,
@@ -20,7 +21,8 @@ use bevy_ggf::movement::defaults::{
 use bevy_ggf::movement::{
     CurrentMovementInformation, DiagonalMovement, MoveCommandsExt, MoveEvent, MovementSystem,
     MovementType, ObjectMovement, ObjectMovementBundle, ObjectTerrainMovementRules,
-    ObjectTypeMovementRules, TerrainMovementCosts, TileMovementCosts,
+    ObjectTypeMovementRules, TerrainMovementCosts, TileMoveCheckMeta, TileMoveChecks,
+    TileMovementCosts,
 };
 use bevy_ggf::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
@@ -29,6 +31,7 @@ use bevy_ggf::selection::{
     ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
 };
 use bevy_ggf::{game, BggfDefaultPlugins};
+use iyes_loopless::prelude::AppLooplessStateExt;
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -123,13 +126,23 @@ fn main() {
                 diagonal_movement: DiagonalMovement::Disabled,
             }),
             map_type: TilemapType::Square,
-            tile_move_checks: vec![Box::new(MoveCheckSpace), Box::new(MoveCheckAllowedTile)],
+            tile_move_checks: TileMoveChecks {
+                tile_move_checks: vec![
+                    TileMoveCheckMeta {
+                        check: Box::new(MoveCheckSpace),
+                    },
+                    TileMoveCheckMeta {
+                        check: Box::new(MoveCheckAllowedTile),
+                    },
+                ],
+            },
         })
         .insert_resource(BattleResolver::<BasicBattleResult> {
             battle_calculator: Box::new(BasicBattleCalculator {}),
         })
         .add_event::<BasicBattleResult>()
-        .insert_resource(Game::default())
+        .insert_resource(GameCommands::default())
+        .insert_resource(GameIdProvider::default())
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)
         .add_system(handle_move_complete_event)
@@ -147,14 +160,10 @@ fn main() {
 }
 
 fn startup(
-    mut commands: Commands,
-    map_handler: ResMut<MapHandler>,
     asset_server: Res<AssetServer>,
     mut tile_movement_rules: ResMut<TerrainMovementCosts>,
-    mut game: ResMut<Game>,
+    mut game: ResMut<GameCommands>,
 ) {
-    game.commands.spawn_object((Object), Default::default());
-
     let tilemap_size = TilemapSize { x: 100, y: 100 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
 
@@ -225,15 +234,12 @@ fn startup(
     ]);
 
     //let map_texture_vec: Vec<Box<dyn TerrainExtensionTraitBase>> = vec![Box::new(Grassland{}), Box::new(Hill{}), Box::new(Ocean{})];
-    Map::generate_random_map(
-        &mut commands,
-        map_handler,
-        &tilemap_size,
-        &tilemap_type,
-        &tilemap_tile_size,
+    game.generate_random_map(
+        tilemap_size,
+        tilemap_type,
+        tilemap_tile_size,
         texture_handle,
-        &terrain_extension_types,
-        tile_movement_rules,
+        terrain_extension_types,
         tile_stack_rules,
     );
 
@@ -250,7 +256,7 @@ fn startup(
     let movement_rules_2 =
         ObjectTerrainMovementRules::new(vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]], vec![]);
 
-    game.commands.spawn_object(
+    game.spawn_object(
         (UnitBundle {
             object: Object,
             object_info: ObjectInfo {
@@ -282,12 +288,13 @@ fn startup(
             },
         }),
         TilePos::new(0, 0),
+        MapId { id: 0 },
     );
 
     let object_movement_rules =
         ObjectTypeMovementRules::new(vec![], vec![], vec![(&OBJECT_TYPE_BRIDGE, true)]);
 
-    game.commands.spawn_object(
+    game.spawn_object(
         (
             (UnitBundle {
                 object: Object,
@@ -322,6 +329,7 @@ fn startup(
             object_movement_rules.clone(),
         ),
         TilePos::new(1, 1),
+        MapId { id: 0 },
     );
 }
 
@@ -341,28 +349,41 @@ fn handle_right_click(
 
 fn select_and_move_unit_to_tile_clicked(
     selected_entity: Res<CurrentSelectedObject>,
-    map_transform: Query<(&Transform, &TilemapSize, &TilemapGridSize, &TilemapType), With<Map>>,
-    moving_object: Query<&ObjectGridPosition>,
-    mut move_event_writer: EventWriter<MoveEvent>,
+    map_transform: Query<
+        (
+            &MapId,
+            &Transform,
+            &TilemapSize,
+            &TilemapGridSize,
+            &TilemapType,
+        ),
+        With<Map>,
+    >,
+    moving_object: Query<(&GameId, &ObjectGridPosition)>,
     mut click_event_reader: EventReader<ClickEvent>,
     mut select_object_event_writer: EventWriter<TrySelectEvents>,
-    mut game: ResMut<Game>,
+    mut game: ResMut<GameCommands>,
 ) {
-    let (transform, map_size, grid_size, map_type) = map_transform.single();
+    let Ok((game_id, transform, map_size, grid_size, map_type)) = map_transform.get_single()else{
+        return;
+    };
 
     for event in click_event_reader.iter() {
         match event {
             ClickEvent::Click { world_pos } => {
                 info!("World Pos: {}", world_pos);
                 if let Some(selected_entity) = selected_entity.object_entity {
-                    if let Ok(object_tile_pos) = moving_object.get(selected_entity) {
+                    if let Some((_, object_grid_pos)) =
+                        moving_object.iter().find(|(id, _)| id == &&selected_entity)
+                    {
                         if let Some(tile_pos) = world_pos_to_tile_pos(
                             &world_pos, transform, map_size, grid_size, map_type,
                         ) {
-                            if object_tile_pos.tile_position != tile_pos {
-                                game.commands.move_object(
+                            if object_grid_pos.tile_position != tile_pos {
+                                game.move_object(
                                     selected_entity,
-                                    object_tile_pos.tile_position,
+                                    *game_id,
+                                    object_grid_pos.tile_position,
                                     tile_pos,
                                     true,
                                 );
@@ -394,7 +415,9 @@ fn handle_move_complete_event(
         match event {
             MoveEvent::MoveComplete { object_moved } => {
                 let Some((entity, id)) =
-                    object_query.iter_mut().find(|(_, id)| id == &&object_moved);
+                    object_query.iter_mut().find(|(_, id)| id == &object_moved)else{
+                    continue;
+                };
                 selected_object.object_entity = None;
                 commands
                     .entity(entity)
@@ -423,7 +446,9 @@ fn handle_move_sprites(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    let (_map, grid_size, map_type, _tile_storage, map_transform) = tilemap_q.single_mut();
+    let Ok((_map, grid_size, map_type, _tile_storage, map_transform)) = tilemap_q.get_single_mut()else{
+        return;
+    };
     if *sprite_handle_exists != true {
         *sprite_handle = asset_server.load("movement_sprite.png");
     }
@@ -469,7 +494,9 @@ fn show_move_path(
     if *sprite_handle_exists != true {
         *sprite_handle = asset_server.load("dot.png");
     }
-    let (transform, map_size, grid_size, map_type) = map_transform.single();
+    let Ok((transform, map_size, grid_size, map_type)) = map_transform.get_single()else{
+        return;
+    };
     if let Some(tile_pos) = world_pos_to_tile_pos(
         &cursor_world_pos.cursor_world_pos,
         transform,
@@ -535,14 +562,14 @@ fn show_move_path(
     }
 }
 
-fn rollback(keys: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
+fn rollback(keys: Res<Input<KeyCode>>, mut game: ResMut<GameCommands>) {
     if keys.just_pressed(KeyCode::Z) {
-        game.commands.rollback_one();
+        game.rollback_one();
     }
 }
 
-fn rollforward(keys: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
+fn rollforward(keys: Res<Input<KeyCode>>, mut game: ResMut<GameCommands>) {
     if keys.just_pressed(KeyCode::X) {
-        game.commands.rollforward(1);
+        game.rollforward(1);
     }
 }

@@ -9,15 +9,17 @@ use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::movement::backend::{
     add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
 };
-use crate::movement::MoveEvent::TryMoveObject;
-use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
-use bevy::ecs::system::SystemState;
+use crate::object::{Object, ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
+use bevy::ecs::query::WorldQuery;
+use bevy::ecs::system::{SystemParam, SystemParamFetch, SystemParamState, SystemState};
 use bevy::prelude::{
     info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter,
-    IntoSystemDescriptor, Plugin, Query, Res, Resource, World,
+    IntoSystemDescriptor, Plugin, Query, QueryState, Res, Resource, World,
 };
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
+use std::marker::PhantomData;
+use crate::mapping::MapId;
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
@@ -56,7 +58,7 @@ pub trait MoveCommandsExt {
     fn move_object(
         &mut self,
         object_moving: GameId,
-        on_map: GameId,
+        on_map: MapId,
         current_pos: TilePos,
         new_pos: TilePos,
         attempt: bool,
@@ -69,7 +71,7 @@ impl MoveCommandsExt for GameCommands {
     fn move_object(
         &mut self,
         object_moving: GameId,
-        on_map: GameId,
+        on_map: MapId,
         current_pos: TilePos,
         new_pos: TilePos,
         attempt: bool,
@@ -94,7 +96,7 @@ impl MoveCommandsExt for GameCommands {
 #[derive(Clone, Debug)]
 pub struct MoveObject {
     object_moving: GameId,
-    on_map: GameId,
+    on_map: MapId,
     current_pos: TilePos,
     new_pos: TilePos,
     attempt: bool,
@@ -125,7 +127,9 @@ impl GameCommand for MoveObject {
 
                 let Some((entity, id)) = object_query
                     .iter_mut()
-                    .find(|(_, id)| id == &&self.object_moving);
+                    .find(|(_, id)| id == &&self.object_moving) else{
+                    return Err(String::from("Objet not found"))
+                };
 
                 if let Some(movement_information) = world.get::<CurrentMovementInformation>(entity)
                 {
@@ -203,40 +207,21 @@ impl GameCommand for MoveObject {
 pub struct MovementSystem {
     pub movement_calculator: Box<dyn MovementCalculator>,
     pub map_type: TilemapType,
-    pub tile_move_checks: Vec<Box<dyn TileMoveCheck + Send + Sync>>,
+    pub tile_move_checks: TileMoveChecks,
 }
 
 impl MovementSystem {
-    /// Helper function that will loop through each [`TileMoveCheck`] in the movement system and return
-    /// false if any *one* was false, or true if all were true.
-    pub fn check_tile_move_checks(
-        &self,
-        entity_moving: Entity,
-        tile_entity: Entity,
-        tile_pos: &TilePos,
-        last_tile_pos: &TilePos,
-        world: &World,
-    ) -> bool {
-        for i in 0..self.tile_move_checks.len() {
-            let check = self.tile_move_checks[i].as_ref();
-            if !check.is_valid_move(entity_moving, tile_entity, tile_pos, last_tile_pos, world) {
-                return false;
-            }
-        }
-        true
-    }
-
     /// Unused currently. Kept for future reference and potential implementation
     #[allow(dead_code)]
     fn new(
         map_type: TilemapType,
         movement_calculator: Box<dyn MovementCalculator>,
-        tile_move_checks: Vec<Box<dyn TileMoveCheck + Send + Sync>>,
+        tile_move_checks: Vec<TileMoveCheckMeta>,
     ) -> MovementSystem {
         MovementSystem {
             movement_calculator,
             map_type,
-            tile_move_checks,
+            tile_move_checks: TileMoveChecks { tile_move_checks },
         }
     }
     /// Unused currently. Kept for future reference and potential implementation
@@ -245,7 +230,7 @@ impl MovementSystem {
         app: &mut App,
         map_type: TilemapType,
         movement_calculator: Box<dyn MovementCalculator>,
-        tile_move_checks: Vec<Box<dyn TileMoveCheck + Send + Sync>>,
+        tile_move_checks: Vec<TileMoveCheckMeta>,
     ) {
         let movement_system = MovementSystem::new(map_type, movement_calculator, tile_move_checks);
         app.world.insert_resource(movement_system);
@@ -260,15 +245,46 @@ impl MovementSystem {
 /// that implements Advance Wars style movement for square based maps called [`SquareMovementCalculator`](defaults::SquareMovementCalculator)
 pub trait MovementCalculator: 'static + Send + Sync {
     /// The main function of a [`MovementCalculator`]. This is called when a [`MoveEvent`] is received
-    /// and all [`MoveNode`](backend::MoveNode) with valid_move marked true will be
+    /// and all [`MoveNode`](MoveNode) with valid_move marked true will be
     /// pushed into the [`CurrentMovementInformation`] Resource automatically. Use
     /// this function to define your own movement algorithm.
     fn calculate_move(
         &self,
-        movement_system: &Res<MovementSystem>,
-        object_moving: &Entity,
-        world: &World,
+        tile_move_checks: &TileMoveChecks,
+        map_type: TilemapType,
+        on_map: MapId,
+        object_moving: Entity,
+        world: &mut World,
     ) -> MovementNodes;
+}
+
+pub struct TileMoveChecks {
+    pub tile_move_checks: Vec<TileMoveCheckMeta>,
+}
+
+impl TileMoveChecks {
+    /// Helper function that will loop through each [`TileMoveCheck`] in the movement system and return
+    /// false if any *one* was false, or true if all were true.
+    pub fn check_tile_move_checks(
+        &self,
+        entity_moving: Entity,
+        tile_entity: Entity,
+        tile_pos: &TilePos,
+        last_tile_pos: &TilePos,
+        world: &mut World,
+    ) -> bool {
+        for i in 0..self.tile_move_checks.len() {
+            let check = self.tile_move_checks[i].check.as_ref();
+            if !check.is_valid_move(entity_moving, tile_entity, tile_pos, last_tile_pos, world) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+pub struct TileMoveCheckMeta {
+    pub check: Box<dyn TileMoveCheck + Send + Sync>,
 }
 
 /// A trait used to define a new check for a tile in a [`MovementCalculator`]s pathfinding algorithm.
@@ -295,7 +311,7 @@ pub trait MovementCalculator: 'static + Send + Sync {
 ///         tile_entity: Entity,
 ///         tile_pos: &TilePos,
 ///         last_tile_pos: &TilePos,
-///         world: &World,
+///         world: &mut World,
 ///     ) -> bool {
 /// // Get the ObjectStackingClass component of our object that is trying to move
 ///         let Some(object_stack_class) = world.get::<ObjectStackingClass>(entity_moving) else {
@@ -320,7 +336,7 @@ pub trait TileMoveCheck {
         tile_entity: Entity,
         tile_pos: &TilePos,
         last_tile_pos: &TilePos,
-        world: &World,
+        world: &mut World,
     ) -> bool;
 }
 
@@ -332,13 +348,13 @@ pub struct AvailableMove {
 }
 
 impl From<MoveNode> for AvailableMove {
-    /// Converts the MoveNode to AvailableMove. It will panic if the given MoveNode does not have
-    /// a move_cost.
+    /// Converts the MoveNode to AvailableMove. It will set move_cost to zero if the given move node
+    /// does not have a move cost set.
     fn from(node: MoveNode) -> Self {
         AvailableMove {
             tile_pos: node.node_pos,
             prior_tile_pos: node.prior_node,
-            move_cost: node.move_cost.expect("move_cost cannot be None"),
+            move_cost: node.move_cost.unwrap_or(0),
         }
     }
 }
@@ -357,6 +373,7 @@ impl From<MoveNode> for AvailableMove {
 pub enum MoveEvent {
     MoveBegin {
         object_moving: GameId,
+        on_map: MapId,
     },
     MoveCalculated {
         available_moves: Vec<TilePos>,

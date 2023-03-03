@@ -1,16 +1,12 @@
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
-use crate::mapping::{tile_pos_to_centered_map_world_pos, Map};
+use crate::game::GameId;
 use crate::movement::{
-    AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem, ObjectMoved,
+    AvailableMove, CurrentMovementInformation, MoveEvent, MovementSystem, ObjectMoved,
     ObjectMovement, TileMovementCosts,
 };
-use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
-use bevy::log::info;
-use bevy::prelude::{Commands, Entity, EventReader, Query, Res, Transform, With, Without, World};
+use bevy::prelude::{Commands, Entity, EventReader, Mut, Query, Res, World};
 use bevy::utils::hashbrown::HashMap;
-use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType};
-use std::hash::Hash;
+use bevy_ecs_tilemap::prelude::{TilePos, TilemapSize};
 
 /// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific
@@ -226,35 +222,53 @@ impl MoveNode {
 
 /// Handles all MoveBegin events. Uses the MovementSystem resource to calculate the move and update
 /// the CurrentMoveInformation resource
-pub(crate) fn handle_move_begin_events(world: &mut World) {
+pub(crate) fn handle_move_begin_events(mut world: &mut World) {
     let mut move_events_vec: Vec<MoveEvent> = vec![];
     let mut system_state: SystemState<EventReader<MoveEvent>> = SystemState::new(world);
     let mut move_events = system_state.get_mut(world);
 
     for event in move_events.iter() {
-        if let MoveEvent::MoveBegin { object_moving } = event {
+        if let MoveEvent::MoveBegin {
+            object_moving,
+            on_map,
+        } = event
+        {
             move_events_vec.push(MoveEvent::MoveBegin {
                 object_moving: *object_moving,
+                on_map: *on_map,
             });
         }
     }
-
-    let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(world);
-    let movement_system = system_state.get(world);
-
     let mut moves: HashMap<Entity, MovementNodes> = HashMap::new();
 
-    for event in move_events_vec {
-        if let MoveEvent::MoveBegin { object_moving } = event {
-            let move_info = movement_system.movement_calculator.calculate_move(
-                &movement_system,
-                &object_moving,
-                world,
-            );
+    world.resource_scope(|world, movement_system: Mut<MovementSystem>| {
+        for event in move_events_vec {
+            if let MoveEvent::MoveBegin {
+                object_moving,
+                on_map,
+            } = event
+            {
+                let mut system_state: SystemState<Query<(Entity, &GameId)>> =
+                    SystemState::new(world);
+                let mut object_query = system_state.get_mut(world);
+                let Some((entity, _)) = object_query
+                    .iter_mut()
+                    .find(|(_, id)| id == &&object_moving) else {
+                    continue;
+                };
 
-            moves.insert(object_moving, move_info);
+                let move_info = movement_system.movement_calculator.calculate_move(
+                    &movement_system.tile_move_checks,
+                    movement_system.map_type,
+                    on_map,
+                    entity,
+                    world,
+                );
+
+                moves.insert(entity, move_info);
+            }
         }
-    }
+    });
 
     let mut system_state: SystemState<Commands> = SystemState::new(world);
     let mut commands = system_state.get_mut(world);
@@ -278,93 +292,19 @@ pub(crate) fn handle_move_begin_events(world: &mut World) {
     system_state.apply(world);
 }
 
-/// this is an unchecked move of an object. It adds the object to the tile at new_pos,
-/// it removes the object from the old tile, and then it moves the object transform and updates the
-/// object tile_pos.
-/// it does not provide any sort of movement validation
-///
-/// currently only works for one map entity. If there are more than one it will panic
-//TODO update this to use the MapHandler resource
-pub fn move_object(
-    object_moving: &Entity,
-    new_pos: &TilePos,
-    object_query: &mut Query<
-        (
-            &mut Transform,
-            &mut ObjectGridPosition,
-            &ObjectStackingClass,
-        ),
-        With<Object>,
-    >,
-    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-    tilemap_q: &mut Query<
-        (
-            &mut Map,
-            &TilemapGridSize,
-            &TilemapType,
-            &mut TileStorage,
-            &Transform,
-        ),
-        Without<Object>,
-    >,
-) -> Result<MoveEvent, MoveError> {
-    // gets the components needed to move the object
-    let (mut transform, mut object_grid_position, object_stack_class) =
-        object_query.get_mut(*object_moving).unwrap();
-
-    // gets the map components
-    let (_map, grid_size, map_type, mut tile_storage, map_transform) = tilemap_q.single_mut();
-
-    // if a tile exists at the selected point
-    return if let Some(tile_entity) = tile_storage.get(new_pos) {
-        // if the tile has the needed components
-        if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
-            remove_object_from_tile(
-                *object_moving,
-                object_stack_class,
-                &mut tile_storage,
-                tile_query,
-                object_grid_position.tile_position,
-            );
-            add_object_to_tile(
-                *object_moving,
-                &mut object_grid_position,
-                object_stack_class,
-                &mut tile_storage,
-                tile_query,
-                *new_pos,
-            );
-
-            // have to transform the tiles position to the transformed position to place the object at the right point
-            let tile_world_pos =
-                tile_pos_to_centered_map_world_pos(new_pos, map_transform, grid_size, map_type);
-
-            transform.translation = tile_world_pos.extend(5.0);
-
-            Ok(MoveEvent::MoveComplete {
-                object_moved: *object_moving,
-            })
-        } else {
-            Err(MoveError::InvalidMove(String::from(
-                "Tile does not have needed components",
-            )))
-        }
-    } else {
-        Err(MoveError::InvalidMove(String::from(
-            "Move Position not valid",
-        )))
-    };
-}
-
 /// Adds the [`ObjectMoved`] component to any entity that is sent through the [`MoveEvent::MoveComplete`]
 /// event.
 pub fn add_object_moved_component_on_moves(
     mut move_events: EventReader<MoveEvent>,
+    mut object_query: Query<(Entity, &GameId)>,
     mut commands: Commands,
 ) {
     for event in move_events.iter() {
         if let MoveEvent::MoveComplete { object_moved } = event {
-            commands.entity(*object_moved).insert(ObjectMoved);
+            let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| id == &object_moved) else{
+                continue;
+            };
+            commands.entity(entity).insert(ObjectMoved);
         }
     }
 }

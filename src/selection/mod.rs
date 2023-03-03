@@ -1,5 +1,6 @@
 //!
 
+use crate::game::{GameId, GameIdProvider};
 use crate::mapping::tiles::TileObjects;
 use crate::movement::{CurrentMovementInformation, MoveEvent};
 use bevy::app::App;
@@ -8,6 +9,7 @@ use bevy::prelude::{
     Component, Entity, EventReader, EventWriter, Local, Plugin, Query, ResMut, Resource,
 };
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage};
+use crate::mapping::MapId;
 
 //TODO: Update this to actually use the Selection Component
 pub struct BggfSelectionPlugin;
@@ -34,7 +36,7 @@ pub struct SelectableEntity;
 
 #[derive(Resource, Default)]
 pub struct CurrentSelectedObject {
-    pub object_entity: Option<Entity>,
+    pub object_entity: Option<GameId>,
 }
 
 impl CurrentSelectedObject {
@@ -42,7 +44,7 @@ impl CurrentSelectedObject {
     pub fn deselect_object() {}
 }
 
-pub fn select_object(object_to_select: Entity, mut select_object: ResMut<CurrentSelectedObject>) {
+pub fn select_object(object_to_select: GameId, mut select_object: ResMut<CurrentSelectedObject>) {
     select_object.object_entity = Some(object_to_select);
 }
 
@@ -52,10 +54,9 @@ pub struct ClearSelectedObject;
 fn clear_selected_object(
     mut clear_selected_object_reader: EventReader<ClearSelectedObject>,
     mut selected_object: ResMut<CurrentSelectedObject>,
-    mut current_movement_information: Query<&mut CurrentMovementInformation>,
 ) {
     for _event in clear_selected_object_reader.iter() {
-            selected_object.object_entity = None;
+        selected_object.object_entity = None;
     }
 }
 
@@ -66,24 +67,27 @@ pub enum TrySelectEvents {
 
 /// Sent when a selection is valid.
 pub enum SelectionEvents {
-    ObjectSelected(Entity),
+    ObjectSelected(GameId, MapId),
 }
 
 #[derive(Default, Clone)]
 pub struct LastSelectedTileInfo {
     tile_pos: TilePos,
-    selected_entities: Vec<Entity>,
+    selected_entities: Vec<GameId>,
 }
 
+/// Todo update try select events to select on a map and make this get that maps stuff
 pub(crate) fn handle_select_object_event(
     mut try_select_events: EventReader<TrySelectEvents>,
     mut selection_events: EventWriter<SelectionEvents>,
     mut selected_object: ResMut<CurrentSelectedObject>,
-    mut tile_storage: Query<&mut TileStorage>,
+    mut tile_storage: Query<(&MapId, &mut TileStorage)>,
     mut tile_query: Query<&mut TileObjects>,
     mut tile_selected_info: Local<LastSelectedTileInfo>,
 ) {
-    let mut tile_storage = tile_storage.single_mut();
+    let Ok((map_id, mut tile_storage)) = tile_storage.get_single_mut()else{
+        return;
+    };
     for event in try_select_events.iter() {
         match event {
             TrySelectEvents::TilePos(tile_pos) => {
@@ -93,6 +97,7 @@ pub(crate) fn handle_select_object_event(
                     tile_pos,
                     &mut selected_object,
                     &mut tile_storage,
+                    *map_id,
                     &mut tile_query,
                     &mut selection_events,
                     &mut tile_selected_info,
@@ -106,6 +111,7 @@ pub fn select_object_at_tile_pos(
     tile_pos: &TilePos,
     selected_object: &mut ResMut<CurrentSelectedObject>,
     tile_storage: &mut TileStorage,
+    on_map: MapId,
     tile_query: &mut Query<&mut TileObjects>,
     selection_events: &mut EventWriter<SelectionEvents>,
     tile_selected_info: &mut Local<LastSelectedTileInfo>,
@@ -121,17 +127,14 @@ pub fn select_object_at_tile_pos(
         let mut entity_selected = false;
 
         for i in 0..tile_objects.entities_in_tile.len() {
-            if let Some(entity_in_tile) = tile_objects.entities_in_tile.get(i) {
-                if tile_selected_info
-                    .selected_entities
-                    .contains(entity_in_tile)
-                {
+            if let Some(object_id) = tile_objects.entities_in_tile.get(i) {
+                if tile_selected_info.selected_entities.contains(object_id) {
                     continue;
                 }
                 info!("Object Selected");
-                selected_object.object_entity = Some(*entity_in_tile);
-                selection_events.send(SelectionEvents::ObjectSelected(*entity_in_tile));
-                tile_selected_info.selected_entities.push(*entity_in_tile);
+                selected_object.object_entity = Some(*object_id);
+                selection_events.send(SelectionEvents::ObjectSelected(*object_id, on_map));
+                tile_selected_info.selected_entities.push(*object_id);
                 entity_selected = true;
                 break;
             }
@@ -142,7 +145,7 @@ pub fn select_object_at_tile_pos(
                 selected_object.object_entity = Some(*entity_in_tile);
                 tile_selected_info.selected_entities.clear();
                 tile_selected_info.selected_entities.push(*entity_in_tile);
-                selection_events.send(SelectionEvents::ObjectSelected(*entity_in_tile));
+                selection_events.send(SelectionEvents::ObjectSelected(*entity_in_tile, on_map));
             }
         }
     }
@@ -154,9 +157,12 @@ fn handle_selection_events(
 ) {
     for event in selection_events.iter() {
         match event {
-            SelectionEvents::ObjectSelected(entity) => move_events.send(MoveEvent::MoveBegin {
-                object_moving: *entity,
-            }),
+            SelectionEvents::ObjectSelected(entity, map_id) => {
+                move_events.send(MoveEvent::MoveBegin {
+                    object_moving: *entity,
+                    on_map: *map_id,
+                })
+            }
         }
     }
 }
