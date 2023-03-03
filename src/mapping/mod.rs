@@ -177,8 +177,11 @@ impl GameCommand for SpawnRandomMap {
         let grid_size: TilemapGridSize = tile_size.into();
         let map_type = TilemapType::default();
 
-        let mut map_id_provider = world.resource_mut::<MapIdProvider>();
-        let id = map_id_provider.next_id_component();
+        // If we have already spawned this map in then just use that
+        let id = self.spawned_map_id.unwrap_or_else(|| {
+            let mut map_id_provider = world.resource_mut::<MapIdProvider>();
+            map_id_provider.next_id_component()
+        });
 
         world.send_event::<MapSpawned>(MapSpawned { map_id: id });
 
@@ -201,6 +204,7 @@ impl GameCommand for SpawnRandomMap {
                 tilemap_entity,
             })
             .insert(id);
+
         Ok(Some(Box::new(SpawnRandomMap {
             tile_map_size: self.tile_map_size,
             tilemap_type,
@@ -232,15 +236,7 @@ impl GameCommand for SpawnRandomMap {
             map_id: self.spawned_map_id.unwrap(),
         });
 
-        return Ok(Some(Box::new(SpawnRandomMap {
-            tile_map_size: self.tile_map_size,
-            tilemap_type: self.tilemap_type,
-            tilemap_tile_size: self.tilemap_tile_size,
-            map_texture_handle: self.map_texture_handle.clone(),
-            map_terrain_type_vec: self.map_terrain_type_vec.clone(),
-            tile_stack_rules: self.tile_stack_rules.clone(),
-            spawned_map_id: None,
-        })));
+        return Ok(None);
     }
 }
 

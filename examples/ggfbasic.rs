@@ -288,7 +288,7 @@ fn startup(
             },
         }),
         TilePos::new(0, 0),
-        MapId { id: 0 },
+        MapId { id: 1 },
     );
 
     let object_movement_rules =
@@ -329,7 +329,7 @@ fn startup(
             object_movement_rules.clone(),
         ),
         TilePos::new(1, 1),
-        MapId { id: 0 },
+        MapId { id: 1 },
     );
 }
 

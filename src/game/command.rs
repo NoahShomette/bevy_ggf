@@ -40,8 +40,8 @@
 //! ```
 
 use crate::game::{GameId, GameIdProvider};
-use crate::mapping::{MapId, tile_pos_to_centered_map_world_pos};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
+use crate::mapping::{tile_pos_to_centered_map_world_pos, MapId};
 use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
@@ -330,12 +330,7 @@ impl GameCommands {
         }
     }
 
-    pub fn spawn_object<T>(
-        &mut self,
-        bundle: T,
-        tile_pos: TilePos,
-        on_map: MapId,
-    ) -> SpawnObject<T>
+    pub fn spawn_object<T>(&mut self, bundle: T, tile_pos: TilePos, on_map: MapId) -> SpawnObject<T>
     where
         T: Bundle + Clone,
     {
@@ -461,23 +456,30 @@ impl GameCommand for AddObjectToTile {
                 ),
                 With<Object>,
             >,
-            Query<(&TilemapGridSize, &TilemapType, &Transform), Without<Object>>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-            Query<(Entity, &MapId, &TileStorage)>,
+            Query<(
+                Entity,
+                &MapId,
+                &TileStorage,
+                &TilemapGridSize,
+                &TilemapType,
+                &Transform,
+                Without<Object>,
+            )>,
         )> = SystemState::new(&mut world);
 
-        let (mut object_query, mut map_query, mut tile_query, mut tile_storage_query) =
+        let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
         let Some((_, mut transform, mut object_grid_position, object_stacking_class)) =
             object_query
                 .iter_mut()
-                .find(|(id, _, _, _)| id == &&self.object_game_id)else {
+                .find(|(id, _, _, _)| id == &&self.object_game_id) else {
             return Err(String::from(format!("No Object Components found for GameId: {:?}", self.object_game_id)));
         };
-        let Some((entity, _, tile_storage)) = tile_storage_query
+        let Some((entity, _, tile_storage, grid_size, map_type, map_transform, _)) = tile_storage_query
             .iter_mut()
-            .find(|(_, id, _)| id == &&self.on_map)else {
+            .find(|(_, id, _, _, _,_, _)| id == &&self.on_map) else {
             return Err(String::from(format!("No Map Components found for GameId: {:?}", self.on_map)));
         };
 
@@ -485,10 +487,6 @@ impl GameCommand for AddObjectToTile {
 
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
             return Err(String::from("No tile components found"));
-        };
-
-        let Ok((grid_size, map_type, map_transform)) = map_query.get(entity) else {
-            return Err(String::from("No map components found"));
         };
 
         tile_objects.add_object(self.object_game_id);
@@ -558,9 +556,13 @@ where
         &mut self,
         world: &mut World,
     ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
-        let id = world.resource_mut::<GameIdProvider>().next_id_component();
+        
+        let id = self
+            .object_game_id
+            .unwrap_or_else(|| world.resource_mut::<GameIdProvider>().next_id_component());
 
         world.spawn(self.bundle.clone()).insert(id);
+
         let mut add = AddObjectToTile {
             object_game_id: id,
             on_map: self.on_map,
