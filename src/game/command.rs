@@ -39,7 +39,6 @@
 //!
 //! ```
 
-use crate::game::Game;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::mapping::{tile_pos_to_centered_map_world_pos, MapHandler};
 use crate::object::{Object, ObjectGridPosition};

@@ -2,6 +2,8 @@ pub mod object;
 pub mod terrain;
 pub mod tiles;
 
+use std::iter::Map;
+use bevy::ecs::system::SystemState;
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, ObjectStackingClass, Tile, TileObjectStackingRules,
@@ -12,10 +14,12 @@ use crate::object::{Object, ObjectGridPosition};
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
 use bevy::utils::HashMap;
+use bevy::utils::tracing::Id;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
+use crate::game::command::{GameCommand, GameCommands};
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -48,46 +52,85 @@ impl MapHandler {
     }
 }
 
-/// Map struct used to keep track of the general structure of the map. Holds a reference to the tilemap_entity
-/// that this map info applies to
-#[derive(Component)]
-pub struct Map {
-    pub tilemap_type: TilemapType,
-    pub map_size: TilemapSize,
-    pub tilemap_entity: Entity,
+pub trait MapCommandsExt {
+    fn generate_random_map(
+        &mut self,
+        tile_map_size: TilemapSize,
+        tilemap_type: TilemapType,
+        tilemap_tile_size: TilemapTileSize,
+        map_texture_handle: Handle<Image>,
+        map_terrain_vec: Vec<TerrainType>,
+        tile_stack_rules: TileObjectStackingRules,
+    ) -> SpawnRandomMap;
 }
 
-impl Map {
-    #[allow(clippy::too_many_arguments)]
-    pub fn generate_random_map(
-        commands: &mut Commands,
-        mut map_handler: ResMut<MapHandler>,
-        tile_map_size: &TilemapSize,
-        tilemap_type: &TilemapType,
-        tilemap_tile_size: &TilemapTileSize,
+impl MapCommandsExt for GameCommands {
+    fn generate_random_map(
+        &mut self,
+        tile_map_size: TilemapSize,
+        tilemap_type: TilemapType,
+        tilemap_tile_size: TilemapTileSize,
         map_texture_handle: Handle<Image>,
-        map_terrain_vec: &Vec<TerrainType>,
-        tile_movement_rules: ResMut<TerrainMovementCosts>,
+        map_terrain_type_vec: Vec<TerrainType>,
         tile_stack_rules: TileObjectStackingRules,
-    ) -> Entity {
-        let map_size = *tile_map_size;
+    ) -> SpawnRandomMap {
+        self.queue.push(GameCommandMeta {
+            command: Box::new(SpawnRandomMap {
+                tile_map_size,
+                tilemap_type,
+                tilemap_tile_size,
+                map_texture_handle: map_texture_handle.clone(),
+                map_terrain_type_vec: map_terrain_type_vec.clone(),
+                tile_stack_rules: tile_stack_rules.clone(),
+                spawned_map_id: None,
+            }),
+            game_id: self.game_id.game_id,
+        });
+        SpawnRandomMap {
+            tile_map_size,
+            tilemap_type,
+            tilemap_tile_size,
+            map_texture_handle,
+            map_terrain_type_vec,
+            tile_stack_rules,
+            spawned_map_id: None,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SpawnRandomMap {
+    tile_map_size: TilemapSize,
+    tilemap_type: TilemapType,
+    tilemap_tile_size: TilemapTileSize,
+    map_texture_handle: Handle<Image>,
+    map_terrain_type_vec: Vec<TerrainType>,
+    tile_stack_rules: TileObjectStackingRules,
+    spawned_map_id: Option<Id>,
+}
+
+impl GameCommand for SpawnRandomMap {
+    fn execute(&mut self, world: &mut World) -> Result<Option<Box<dyn GameCommand>>, String> {
+        let terrain_movement_costs = world.resource::<TerrainMovementCosts>();
+        let terrain_movement_costs = terrain_movement_costs.clone();
+
+        let map_size = self.tile_map_size;
         let mut tile_storage = TileStorage::empty(map_size);
-        let tilemap_type = *tilemap_type;
-        let tilemap_entity = commands.spawn_empty().id();
-        info!("{:?}", tile_movement_rules.movement_cost_rules);
+        let tilemap_type = self.tilemap_type;
+        let tilemap_entity = world.spawn_empty().id();
 
         for x in 0..map_size.x {
             for y in 0..map_size.y {
                 let tile_pos = TilePos { x, y };
                 let mut rng = rand::thread_rng();
-                let tile_texture_index = rng.gen_range(0..map_terrain_vec.len());
-                let texture_index = &map_terrain_vec[tile_texture_index];
-                let tile_movement_costs = tile_movement_rules
+                let tile_texture_index = rng.gen_range(0..self.map_terrain_type_vec.len());
+                let texture_index = self.map_terrain_type_vec[tile_texture_index];
+                let tile_movement_costs = terrain_movement_costs
                     .movement_cost_rules
-                    .get(&map_terrain_vec[tile_texture_index])
+                    .get(&self.map_terrain_type_vec[tile_texture_index])
                     .unwrap();
 
-                let tile_entity = commands
+                let tile_entity = world
                     .spawn(BggfTileBundle {
                         tile_bundle: TileBundle {
                             position: tile_pos,
@@ -97,11 +140,11 @@ impl Map {
                         },
                         tile: Tile,
                         tile_terrain_info: TileTerrainInfo {
-                            terrain_type: map_terrain_vec[tile_texture_index],
+                            terrain_type: self.map_terrain_type_vec[tile_texture_index],
                         },
                     })
                     .insert(BggfTileObjectBundle {
-                        tile_stack_rules: tile_stack_rules.clone(),
+                        tile_stack_rules: self.tile_stack_rules.clone(),
                         tile_objects: TileObjects::default(),
                     })
                     .insert(tile_movement_costs.clone())
@@ -111,20 +154,21 @@ impl Map {
             }
         }
 
-        let tile_size = *tilemap_tile_size;
+        let tile_size = self.tilemap_tile_size;
         let grid_size: TilemapGridSize = tile_size.into();
         let map_type = TilemapType::default();
 
-        map_handler.register_map_entity(IVec2 { x: 0, y: 0 }, tilemap_entity);
+        let mut object_id_provider = world.resource_mut::<GameIdProvider>();
+        let id = object_id_provider.next_id_component();
 
-        commands
-            .entity(tilemap_entity)
+        world
+            .entity_mut(tilemap_entity)
             .insert(TilemapBundle {
                 grid_size,
                 map_type,
                 size: map_size,
                 storage: tile_storage,
-                texture: TilemapTexture::Single(map_texture_handle),
+                texture: TilemapTexture::Single(self.map_texture_handle.clone_weak()),
                 tile_size,
                 transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
                 frustum_culling: FrustumCulling(true),
@@ -135,133 +179,35 @@ impl Map {
                 map_size,
                 tilemap_entity,
             })
-            .id()
+            .insert(id);
+        Ok(Some(Box::new(SpawnRandomMap {
+            tile_map_size: self.tile_map_size,
+            tilemap_type,
+            tilemap_tile_size: self.tilemap_tile_size,
+            map_texture_handle: self.map_texture_handle.clone(),
+            map_terrain_type_vec: self.map_terrain_type_vec.clone(),
+            tile_stack_rules: self.tile_stack_rules.clone(),
+            spawned_map_id: Some(id),
+        })))
     }
-}
 
-/// Adds the given object to a tile while keeping the TileObjectStacks component of the tile up to date
-///
-/// Will Panic if tile_pos isn't a valid tile position in [`TileStorage`]
-//TODO: Remove unwrap() usage here - keep it crashing if there isnt the right stack rules. Unless we
-// switch to loading all this stuff from files. Then have someway to recover -- Only crashing because
-// of the info stuff here. Wouldnt crash without it
+    fn rollback(&mut self, mut world: &mut World) -> Result<Option<Box<dyn GameCommand>>, String> {
+        let mut system_state: SystemState<(Query<(Entity, &Id, &TileStorage)>, Commands)> =
+            SystemState::new(&mut world);
 
-// Look at having this return a result with an error message
-pub fn add_object_to_tile(
-    object_to_add: Entity,
-    object_grid_position: &mut ObjectGridPosition,
-    object_stack_class: &ObjectStackingClass,
-    tile_storage: &mut TileStorage,
-    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-    tile_pos_to_add: TilePos,
-) {
-    let tile_entity = tile_storage.get(&tile_pos_to_add).unwrap();
-    if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
-        tile_objects.add_object(object_to_add);
-        object_grid_position.tile_position = tile_pos_to_add;
-        tile_stack_rules.increment_object_class_count(object_stack_class);
+        let (mut object_query, mut commands) = system_state.get_mut(&mut world);
 
-        info!("entities in tile: {}", tile_objects.entities_in_tile.len());
-        info!(
-            "tile_stacks_rules_count: {:?}",
-            tile_stack_rules
-                .tile_object_stacking_rules
-                .get(&object_stack_class.stack_class)
-                .expect("Tile does not have the requested ObjectStackClass information")
-        );
-    }
-}
+        let Some((entity, _, tile_storage)) = object_query.iter_mut().find(|(_, id, _)| id == &&self.spawned_map_id.expect("Rollback can only be called after execute which returns an entity id")) else {
+            return Err(String::from("No entity found"));
+        };
 
-/// Will Panic if object_to_add isn't an entity in the given [`TileStorage`]
-pub fn remove_object_from_tile(
-    object_to_remove: Entity,
-    object_stack_class: &ObjectStackingClass,
-    tile_storage: &mut TileStorage,
-    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-    tile_pos_to_remove: TilePos,
-) {
-    let tile_entity = tile_storage.get(&tile_pos_to_remove).unwrap();
-    if let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) {
-        tile_objects.remove_object(object_to_remove);
-        tile_stack_rules.decrement_object_class_count(object_stack_class);
-
-        info!("entities in tile: {}", tile_objects.entities_in_tile.len());
-        info!(
-            "tile_stacks_rules_count: {:?}",
-            tile_stack_rules
-                .tile_object_stacking_rules
-                .get(&object_stack_class.stack_class)
-                .unwrap()
-        );
-    }
-}
-
-//TODO Decide if this enum is actually needed. Might be helpful sometimes but the move unit function can probably serve the same use mostly. Except it cant just remove a unit from the tile by events
-pub enum UpdateMapTileObject {
-    Add {
-        object_entity: Entity,
-        tile_pos: TilePos,
-    },
-    Remove {
-        object_entity: Entity,
-        tile_pos: TilePos,
-    },
-}
-
-fn update_map_tile_object_event(
-    mut update_event: EventReader<UpdateMapTileObject>,
-    mut object_query: Query<(&mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
-    mut tile_query: Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-    mut tilemap_q: Query<&mut TileStorage, Without<Object>>,
-) {
-    for event in update_event.iter() {
-        // gets the map components
-        let mut tile_storage = tilemap_q.single_mut();
-
-        match event {
-            UpdateMapTileObject::Add {
-                object_entity,
-                tile_pos,
-            } => {
-                // gets the components needed to move the object
-                let (mut object_grid_position, object_stack_class) =
-                    object_query.get_mut(*object_entity).unwrap();
-                // if a tile exists at the selected point
-                if let Some(tile_entity) = tile_storage.get(tile_pos) {
-                    // if the tile has the needed components
-                    if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
-                        add_object_to_tile(
-                            *object_entity,
-                            &mut object_grid_position,
-                            object_stack_class,
-                            &mut tile_storage,
-                            &mut tile_query,
-                            *tile_pos,
-                        );
-                    }
-                }
-            }
-            UpdateMapTileObject::Remove {
-                object_entity,
-                tile_pos,
-            } => {
-                let (object_grid_position, object_stack_class) =
-                    object_query.get_mut(*object_entity).unwrap();
-                // if a tile exists at the selected point
-                if let Some(tile_entity) = tile_storage.get(tile_pos) {
-                    // if the tile has the needed components
-                    if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
-                        remove_object_from_tile(
-                            *object_entity,
-                            object_stack_class,
-                            &mut tile_storage,
-                            &mut tile_query,
-                            object_grid_position.tile_position,
-                        );
-                    }
-                }
-            }
+        for entity in tile_storage.iter().filter(|option| { option.is_some() }) {
+            commands.entity(entity.unwrap()).despawn_recursive();
         }
+        system_state.apply(world);
+        world.entity_mut(entity).despawn_recursive();
+
+        return Ok(None);
     }
 }
 
