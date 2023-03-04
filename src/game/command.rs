@@ -1,39 +1,50 @@
 ﻿//! Any actions that affect the game world should be specified as a [`GameCommand`] and submitted to
 //! through the [`Game`] to enable saving, rollback, and more.
 //!
-//! To use in a system request the [`Game`] Resource, get the commands field, and call a defined
+//! To use in a system request the [`GameCommands`] Resource, get the commands field, and call a defined
 //! command or submit a custom command using commands.add().
 //! ```rust
-//! use bevy::prelude::{Commands, ResMut, World};
+//! use bevy::prelude::{Bundle, ResMut, World};
 //! use bevy_ecs_tilemap::prelude::TilePos;
-//! use bevy_ggf::game::command::GameCommand;
-//! use bevy_ggf::game::Game;
+//! use bevy_ggf::game::command::{GameCommand, GameCommands};
+//! use bevy_ggf::mapping::MapId;
+//!
+//! #[derive(Bundle)]
+//! pub struct CustomBundle{
+//!     // Whatever components you want in your bundle 
+//! }
 //!     
 //! fn spawn_object_built_in_command(
-//!     mut game: ResMut<Game>,
-//!     mut commands: Commands,
+//!     // Request the GameCommands Resource - all actions in the game should be communicated through
+//!     // this
+//!     mut game_commands: ResMut<GameCommands>,
 //! ){
-//!     let entity = commands.spawn_empty().id();
-//!     game.commands.add_object_to_tile(entity, TilePos::new(1, 1));
+//!     // Call whatever command on GameCommands - Add your own commands by writing an extension trait
+//!     // and implementing that for GameCommands//! 
+//!
+//!     game_commands.spawn_object(CustomBundle, TilePos::new(1, 1), MapId{id: 0});
 //! }
 //!
+//! // Create a struct for your custom command, use this to store whatever data you need to execute
+//! // and rollback the commands
 //! #[derive(Clone, Debug)]
 //! struct MyCustomCommand;
 //!
-//! impl GameCommand for MyCustomCommand{fn execute(&mut self, world: &mut World) -> Result<(), String> {
+//! // Impl GameCommand for your struct
+//! impl GameCommand for MyCustomCommand{
+//!     fn execute(&mut self, world: &mut World) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
 //!         todo!() // Implement whatever your custom command should do here
 //!     }
 //!
-//! fn rollback(&mut self, world: &mut World) -> Result<(), String> {
-//!         todo!() // Implement how to reverse your custom command
+//!     fn rollback(&mut self, world: &mut World) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
+//!         todo!() // Implement how to reverse your custom command - you can use your struct to save
+//!                 // any data you might need, like the GameId of an entity spawned
 //!     }
 //! }
 //!
 //! fn spawn_object_custom_command(
-//!    mut game: ResMut<Game>,
-//!     mut commands: Commands,
+//!    mut game: ResMut<GameCommands>,
 //! ){
-//!     let entity = commands.spawn_empty().id();
 //!     game.commands.add(MyCustomCommand);
 //! }
 //!
