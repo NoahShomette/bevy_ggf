@@ -30,8 +30,12 @@ impl GameIdProvider {
     }
 
     pub fn next_id(&mut self) -> usize {
-        self.last_id = self.last_id.saturating_add_signed(1);
+        self.last_id = self.last_id.saturating_add(1);
         self.last_id
+    }
+
+    pub fn remove_last_id(&mut self) {
+        self.last_id = self.last_id.saturating_sub(1);
     }
 }
 

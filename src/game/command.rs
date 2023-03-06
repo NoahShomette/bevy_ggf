@@ -1,5 +1,5 @@
 ﻿//! Any actions that affect the game world should be specified as a [`GameCommand`] and submitted to
-//! through the [`Game`] to enable saving, rollback, and more.
+//! through the [`GameCommands`] to enable saving, rollback, and more.
 //!
 //! To use in a system request the [`GameCommands`] Resource, get the commands field, and call a defined
 //! command or submit a custom command using commands.add().
@@ -11,7 +11,7 @@
 //!
 //! #[derive(Bundle)]
 //! pub struct CustomBundle{
-//!     // Whatever components you want in your bundle 
+//!     // Whatever components you want in your bundle
 //! }
 //!     
 //! fn spawn_object_built_in_command(
@@ -20,7 +20,7 @@
 //!     mut game_commands: ResMut<GameCommands>,
 //! ){
 //!     // Call whatever command on GameCommands - Add your own commands by writing an extension trait
-//!     // and implementing that for GameCommands//! 
+//!     // and implementing that for GameCommands//!
 //!
 //!     game_commands.spawn_object(CustomBundle, TilePos::new(1, 1), MapId{id: 0});
 //! }
@@ -62,6 +62,7 @@ use bevy::prelude::{
 use bevy_ecs_tilemap::prelude::{TilemapGridSize, TilemapType};
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use std::fmt::Debug;
+use chrono::{DateTime, Utc};
 
 /// Executes all stored game commands by calling the command queue execute buffer function
 pub fn execute_game_commands_buffer(world: &mut World) {
@@ -116,7 +117,8 @@ pub enum CommandType {
 
 pub struct GameCommandMeta {
     command: Box<dyn GameCommand>,
-    command_type: CommandType,
+    command_time: DateTime<Utc>,
+    //command_type: CommandType,
 }
 
 /// A base trait defining an action that affects the game. Define your own to implement your own
@@ -567,10 +569,8 @@ where
         &mut self,
         world: &mut World,
     ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
-        
-        let id = self
-            .object_game_id
-            .unwrap_or_else(|| world.resource_mut::<GameIdProvider>().next_id_component());
+        // Assign a new id as we un assign the id when we rollback
+        let id = world.resource_mut::<GameIdProvider>().next_id_component();
 
         world.spawn(self.bundle.clone()).insert(id);
 
@@ -595,7 +595,7 @@ where
         let mut system_state: SystemState<Query<(Entity, &GameId)>> = SystemState::new(&mut world);
         let mut object_query = system_state.get_mut(&mut world);
 
-        let Some((entity, id)) = object_query.iter_mut().find(|(_, id)| {
+        let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| {
             id == &&self
                 .object_game_id
                 .expect("Rollback can only be called after execute which returns an entity id")
@@ -612,6 +612,7 @@ where
         };
         let _ = remove.execute(world);
         world.entity_mut(entity).despawn_recursive();
+        world.resource_mut::<GameIdProvider>().remove_last_id();
 
         return Ok(None);
     }

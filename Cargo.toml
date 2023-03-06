@@ -32,3 +32,4 @@ leafwing-input-manager = "0.7.0"
 iyes_loopless = { version = "0.9.1", features = ["states", "fixedtimestep", "app"] }
 serde = { version = "1.0.125", features = ["derive"] }
 rand = "0.8.5"
+chrono = { version = "0.4.23", features = ["std", "serde"] }

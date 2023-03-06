@@ -6,20 +6,18 @@ pub mod defaults;
 use crate::game::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
 use crate::game::GameId;
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
+use crate::mapping::MapId;
 use crate::movement::backend::{
     add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
 };
-use crate::object::{Object, ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
-use bevy::ecs::query::WorldQuery;
-use bevy::ecs::system::{SystemParam, SystemParamFetch, SystemParamState, SystemState};
+use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
+use bevy::ecs::system::{SystemParamFetch, SystemParamState, SystemState};
 use bevy::prelude::{
     info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter,
-    IntoSystemDescriptor, Plugin, Query, QueryState, Res, Resource, World,
+    IntoSystemDescriptor, Mut, Plugin, Query, Resource, World,
 };
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
-use std::marker::PhantomData;
-use crate::mapping::MapId;
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
@@ -127,33 +125,45 @@ impl GameCommand for MoveObject {
 
                 let Some((entity, id)) = object_query
                     .iter_mut()
-                    .find(|(_, id)| id == &&self.object_moving) else{
+                    .find(|(_, id)| id == &&self.object_moving) else {
                     return Err(String::from("Objet not found"))
                 };
 
-                if let Some(movement_information) = world.get::<CurrentMovementInformation>(entity)
-                {
-                    return if movement_information.contains_move(&self.new_pos) {
-                        remove.execute(world)?;
-                        add.execute(world)?;
+                let mut moves: HashMap<TilePos, AvailableMove> = HashMap::new();
 
-                        let mut system_state: SystemState<EventWriter<MoveEvent>> =
-                            SystemState::new(world);
-                        let mut move_event = system_state.get_mut(world);
+                world.resource_scope(|world, movement_system: Mut<MovementSystem>| {
+                    let moves_info = movement_system.movement_calculator.calculate_move(
+                        &movement_system.tile_move_checks,
+                        movement_system.map_type,
+                        self.on_map,
+                        entity,
+                        world,
+                    );
 
-                        move_event.send(MoveEvent::MoveComplete {
-                            object_moved: self.object_moving,
-                        });
+                    for (tile_pos, move_node) in moves_info.move_nodes.iter() {
+                        if move_node.valid_move {
+                            moves.insert(*tile_pos, AvailableMove::from(*move_node));
+                        }
+                    }
+                });
 
-                        system_state.apply(world);
-                        return Ok(None);
-                    } else {
-                        info!("TilePos not in movement info");
-                        Err(String::from("Tile_pos not in movement information"))
-                    };
+                if moves.contains_key(&self.new_pos) {
+                    remove.execute(world)?;
+                    add.execute(world)?;
+
+                    let mut system_state: SystemState<EventWriter<MoveEvent>> =
+                        SystemState::new(world);
+                    let mut move_event = system_state.get_mut(world);
+
+                    move_event.send(MoveEvent::MoveComplete {
+                        object_moved: self.object_moving,
+                    });
+
+                    system_state.apply(world);
+                    Ok(None)
                 } else {
-                    info!("Object has no movemement information");
-                    Err(String::from("Object has no movemement information"))
+                    info!("Tile_pos not a valid move");
+                    Err(String::from("Tile_pos not a valid move"))
                 }
             }
             false => {
@@ -168,7 +178,7 @@ impl GameCommand for MoveObject {
                 });
 
                 system_state.apply(world);
-                return Ok(None);
+                Ok(None)
             }
         };
     }
