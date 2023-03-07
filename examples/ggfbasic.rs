@@ -7,7 +7,7 @@ use bevy_ggf::game::command::{
     execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
     GameCommands,
 };
-use bevy_ggf::game::{GameId, GameIdProvider};
+use bevy_ggf::game::{GameAppExt, GameId, GameType};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStackingRules, TileObjectStacksCount,
@@ -31,7 +31,6 @@ use bevy_ggf::selection::{
     ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
 };
 use bevy_ggf::{game, BggfDefaultPlugins};
-use iyes_loopless::prelude::AppLooplessStateExt;
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -141,8 +140,7 @@ fn main() {
             battle_calculator: Box::new(BasicBattleCalculator {}),
         })
         .add_event::<BasicBattleResult>()
-        .insert_resource(GameCommands::default())
-        .insert_resource(GameIdProvider::default())
+        .new_game(GameType::Local)
         .add_startup_system(startup)
         .add_system(select_and_move_unit_to_tile_clicked)
         .add_system(handle_move_complete_event)

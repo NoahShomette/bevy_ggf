@@ -1,6 +1,7 @@
-﻿use crate::game::command::{GameCommand, GameCommands};
+﻿use crate::game::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use bevy::app::{App, Plugin};
-use bevy::prelude::{Bundle, Component, Resource};
+use bevy::prelude::{Component, Resource};
+use chrono::{DateTime, Utc};
 
 pub mod command;
 pub mod runner;
@@ -9,6 +10,62 @@ pub struct BggfGamePlugin {}
 
 impl Plugin for BggfGamePlugin {
     fn build(&self, app: &mut App) {}
+}
+
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
+pub enum GameType {
+    Networked,
+    Local,
+}
+
+pub trait GameAppExt {
+    fn new_game(&mut self, game_type: GameType) -> &mut Self;
+    fn new_game_with_commands(
+        &mut self,
+        game_type: GameType,
+        commands: Vec<Box<dyn GameCommand>>,
+    ) -> &mut Self;
+}
+
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Resource)]
+pub struct Game {
+    pub game_type: GameType,
+}
+
+impl GameAppExt for App {
+    fn new_game(&mut self, game_type: GameType) -> &mut Self {
+        self.insert_resource(GameCommands::default())
+            .insert_resource(GameIdProvider::default())
+            .insert_resource(Game { game_type });
+
+        self
+    }
+    fn new_game_with_commands(
+        &mut self,
+        game_type: GameType,
+        commands: Vec<Box<dyn GameCommand>>,
+    ) -> &mut Self {
+        let mut game_command_queue: Vec<GameCommandMeta> = vec![];
+
+        for command in commands.into_iter() {
+            let utc: DateTime<Utc> = Utc::now();
+            game_command_queue.push(GameCommandMeta {
+                command,
+                command_time: utc,
+            })
+        }
+
+        self.insert_resource(GameCommands {
+            queue: GameCommandQueue {
+                queue: game_command_queue,
+            },
+            history: Default::default(),
+        })
+        .insert_resource(GameIdProvider::default())
+        .insert_resource(Game { game_type });
+
+        self
+    }
 }
 
 /// A resource inserted into the world to provide consistent unique ids to keep track of game

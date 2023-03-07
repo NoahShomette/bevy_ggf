@@ -33,3 +33,6 @@ iyes_loopless = { version = "0.9.1", features = ["states", "fixedtimestep", "app
 serde = { version = "1.0.125", features = ["derive"] }
 rand = "0.8.5"
 chrono = { version = "0.4.23", features = ["std", "serde"] }
+
+[dev-dependencies]
+bevy = { version = "0.9.*", features = ["bevy_asset", "bevy_scene", "bevy_gilrs", "bevy_winit", "animation", "x11", "png", "filesystem_watcher", "render", "serialize", "trace_chrome", "trace" ], default-features = false }

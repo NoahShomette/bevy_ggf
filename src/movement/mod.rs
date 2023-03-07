@@ -104,7 +104,7 @@ impl GameCommand for MoveObject {
     fn execute(
         &mut self,
         mut world: &mut World,
-    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
+    ) -> Result<(), String> {
         let mut remove = RemoveObjectFromTile {
             object_game_id: self.object_moving,
             on_map: self.on_map,
@@ -160,7 +160,7 @@ impl GameCommand for MoveObject {
                     });
 
                     system_state.apply(world);
-                    Ok(None)
+                    Ok(())
                 } else {
                     info!("Tile_pos not a valid move");
                     Err(String::from("Tile_pos not a valid move"))
@@ -178,7 +178,7 @@ impl GameCommand for MoveObject {
                 });
 
                 system_state.apply(world);
-                Ok(None)
+                Ok(())
             }
         };
     }
@@ -186,7 +186,7 @@ impl GameCommand for MoveObject {
     fn rollback(
         &mut self,
         world: &mut World,
-    ) -> Result<Option<Box<(dyn GameCommand + 'static)>>, String> {
+    ) -> Result<(), String> {
         let mut remove = RemoveObjectFromTile {
             object_game_id: self.object_moving,
             on_map: self.on_map,
@@ -200,14 +200,8 @@ impl GameCommand for MoveObject {
 
         remove.execute(world)?;
         add.execute(world)?;
-
-        return Ok(Some(Box::new(MoveObject {
-            object_moving: self.object_moving,
-            on_map: self.on_map,
-            current_pos: self.current_pos,
-            new_pos: self.new_pos,
-            attempt: false,
-        })));
+        
+        return Ok(());
     }
 }
 

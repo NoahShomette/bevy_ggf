@@ -3,7 +3,6 @@ pub mod terrain;
 pub mod tiles;
 
 use crate::game::command::{GameCommand, GameCommands};
-use crate::game::{GameId, GameIdProvider};
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStackingRules, TileObjects,
@@ -16,7 +15,6 @@ use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand;
 use rand::Rng;
-use std::process::id;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -50,6 +48,10 @@ impl MapIdProvider {
     pub fn next_id(&mut self) -> usize {
         self.last_id = self.last_id.saturating_add_signed(1);
         self.last_id
+    }
+
+    pub fn remove_last_id(&mut self) {
+        self.last_id = self.last_id.saturating_sub(1);
     }
 }
 
@@ -130,7 +132,7 @@ pub struct SpawnRandomMap {
 }
 
 impl GameCommand for SpawnRandomMap {
-    fn execute(&mut self, world: &mut World) -> Result<Option<Box<dyn GameCommand>>, String> {
+    fn execute(&mut self, world: &mut World) -> Result<(), String> {
         let map_size = self.tile_map_size;
         let mut tile_storage = TileStorage::empty(map_size);
         let tilemap_type = self.tilemap_type;
@@ -205,18 +207,12 @@ impl GameCommand for SpawnRandomMap {
             })
             .insert(id);
 
-        Ok(Some(Box::new(SpawnRandomMap {
-            tile_map_size: self.tile_map_size,
-            tilemap_type,
-            tilemap_tile_size: self.tilemap_tile_size,
-            map_texture_handle: self.map_texture_handle.clone(),
-            map_terrain_type_vec: self.map_terrain_type_vec.clone(),
-            tile_stack_rules: self.tile_stack_rules.clone(),
-            spawned_map_id: Some(id),
-        })))
+        self.spawned_map_id = Some(id);
+
+        Ok(())
     }
 
-    fn rollback(&mut self, mut world: &mut World) -> Result<Option<Box<dyn GameCommand>>, String> {
+    fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(Query<(Entity, &MapId, &TileStorage)>, Commands)> =
             SystemState::new(&mut world);
 
@@ -236,7 +232,9 @@ impl GameCommand for SpawnRandomMap {
             map_id: self.spawned_map_id.unwrap(),
         });
 
-        return Ok(None);
+        world.resource_mut::<MapIdProvider>().remove_last_id();
+
+        return Ok(());
     }
 }
 
