@@ -1,5 +1,9 @@
 ﻿//! Any actions that affect the game world should be specified as a [`GameCommand`] and submitted to
-//! through the [`GameCommands`] to enable saving, rollback, and more.
+//! through the [`GameCommands`] to enable saving, rollback, and more. A command should be entirely
+//! self contained, everything needed to accurately recreate the command should be included. A command
+//! **cannot** rely on any actions outside of it, only data. Eg, for MoveObject, you can't rely on
+//! the moving object having an up to date [`CurrentMovementInformation`](crate::movement::CurrentMovementInformation)
+//! component, you must calculate the move in the command
 //!
 //! To use in a system, request the [`GameCommands`] Resource, get the commands field, and call a defined
 //! command or submit a custom command using commands.add().
@@ -58,13 +62,12 @@ use crate::mapping::{tile_pos_to_centered_map_world_pos, MapId};
 use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
-use bevy::prelude::{
-    Bundle, DespawnRecursiveExt, Entity, Mut, Query, Resource, Transform, With, Without, World,
-};
+use bevy::prelude::{Bundle, Component, DespawnRecursiveExt, Entity, Mut, Query, Reflect, ReflectComponent, Resource, Transform, With, Without, World};
 use bevy_ecs_tilemap::prelude::{TilemapGridSize, TilemapType};
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;
+use std::process::id;
 
 /// Executes all stored game commands by calling the command queue execute buffer function
 pub fn execute_game_commands_buffer(world: &mut World) {
@@ -257,8 +260,8 @@ impl GameCommands {
 
     /// Drains the command buffer and attempts to execute each command. Will only push commands that
     /// succeed to the history. If commands dont succeed they are silently failed.
-    /// If [`Game`].game_type is set to Networked: Automatically checks if the new commands occured 
-    /// before any old commands and will rollback the world and then replay commands to ensure proper 
+    /// If [`Game`].game_type is set to Networked: Automatically checks if the new commands occured
+    /// before any old commands and will rollback the world and then replay commands to ensure proper
     /// timeline
     pub fn execute_buffer(&mut self, world: &mut World) {
         let mut temp_rb_commands: Vec<GameCommandMeta> = vec![];
@@ -404,7 +407,18 @@ impl GameCommands {
             object_game_id: None,
         }
     }
-    pub fn despawn_object(&mut self) {}
+    pub fn despawn_object(&mut self, on_map: MapId, object_game_id: GameId) -> DespawnObject {
+        self.queue.push(DespawnObject {
+            on_map,
+            object_game_id,
+            tile_pos: None,
+        });
+        DespawnObject {
+            object_game_id,
+            on_map,
+            tile_pos: None,
+        }
+    }
 }
 
 /// Removes the given entity from the given tile if the tile exists and the entity has the required components.
@@ -635,6 +649,66 @@ where
                 .expect("Rollback can only be called after execute which returns an entity id"),
             on_map: self.on_map,
             tile_pos: self.tile_pos,
+        };
+        let _ = remove.execute(world);
+        world.entity_mut(entity).despawn_recursive();
+        world.resource_mut::<GameIdProvider>().remove_last_id();
+
+        return Ok(());
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DespawnObject {
+    pub on_map: MapId,
+    pub object_game_id: GameId,
+    pub tile_pos: Option<TilePos>,
+    pub object_components: Option<Vec<>>
+}
+
+impl GameCommand for DespawnObject {
+    fn execute(&mut self, world: &mut World) -> Result<(), String> {
+        let mut system_state: SystemState<Query<(Entity, &GameId, &TilePos)>> =
+            SystemState::new(world);
+        let mut object_query = system_state.get_mut(world);
+
+        let Some((entity, _, tile_pos)) = object_query.iter_mut().find(|(_, id, _)| {
+            id == &&self
+                .object_game_id
+        })else {
+            return Err(String::from("No object components found"));
+        };
+
+        let tile_pos = *tile_pos;
+
+        world.despawn(entity);
+
+        let mut remove = RemoveObjectFromTile {
+            object_game_id: self.object_game_id,
+            on_map: self.on_map,
+            tile_pos,
+        };
+        let _ = remove.execute(world);
+
+        self.tile_pos = Some(tile_pos);
+        return Ok(());
+    }
+
+    fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
+        let mut system_state: SystemState<Query<(Entity, &GameId)>> = SystemState::new(&mut world);
+        let mut object_query = system_state.get_mut(&mut world);
+
+        let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| {
+            id == &&self
+                .object_game_id
+        })else {
+            return Err(String::from("No object components found"));
+        };
+
+        let mut remove = RemoveObjectFromTile {
+            object_game_id: self.object_game_id,
+            on_map: self.on_map,
+            tile_pos: self.tile_pos.expect("Tile Pos must be set on execution"),
         };
         let _ = remove.execute(world);
         world.entity_mut(entity).despawn_recursive();

@@ -6,6 +6,7 @@ use bevy_ecs_tilemap::tiles::TilePos;
 
 pub mod backend;
 pub mod battle_resolver;
+pub mod commands;
 pub mod defaults;
 
 pub struct BggfCombatPlugin {}
@@ -25,14 +26,7 @@ impl Default for BggfCombatPlugin {
 /// Command events. Send an event to conduct the specified action correlating to the event.
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum CombatEvent {
-    CalculateAttacks {
-        attacking_entity: Entity,
-    },
-    Attack {
-        attacking_entity: Entity,
-        defending_entity: Entity,
-        attack_info: ValidAttack,
-    },
+    CalculateAttacks { attacking_entity: Entity },
 }
 
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
@@ -42,7 +36,6 @@ pub struct AvailableAttacks {}
 pub struct ValidAttack {
     pub target_entity: Entity,
     pub target_tile_position: TilePos,
-    pub requires_move: Option<Vec<TilePos>>,
 }
 
 /// The health of an object. Without a Health component an object is not able to be attacked or killed.
@@ -57,7 +50,7 @@ pub struct Health {
 
 impl Health {
     /// Reduces current_health by the specified amount, down to a maximum of 0
-    pub fn take_damage(&mut self, damage_amount: u32) {
+    pub fn damage(&mut self, damage_amount: u32) {
         self.current_health = self.current_health.saturating_sub(damage_amount);
     }
 
