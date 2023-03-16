@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::combat::battle_resolver::Combat;
-use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult};
+use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult, BasicObjectAPCalculator};
 use bevy_ggf::game::command::{
     execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
     GameCommands,
@@ -137,6 +137,7 @@ fn main() {
             },
         })
         .insert_resource(Combat::<BasicBattleResult> {
+            attack_power_calculator: Box::new(BasicObjectAPCalculator),
             battle_calculator: Box::new(BasicBattleCalculator {}),
         })
         .add_event::<BasicBattleResult>()

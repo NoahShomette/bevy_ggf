@@ -663,7 +663,7 @@ pub struct DespawnObject {
     pub on_map: MapId,
     pub object_game_id: GameId,
     pub tile_pos: Option<TilePos>,
-    pub object_components: Option<Vec<>>
+    //pub object_components: Option<Vec<>>
 }
 
 impl GameCommand for DespawnObject {

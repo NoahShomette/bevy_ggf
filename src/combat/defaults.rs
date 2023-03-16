@@ -137,7 +137,7 @@ impl BattleCalculator for BasicBattleCalculator {
         if attacking_health.current_health <= 0 {
             match attacking_health.on_death {
                 OnDeath::Destroy => {
-                    game_commands.despawn_object();
+                    //game_commands.despawn_object(/* MapId */, /* GameId */);
                 }
                 OnDeath::Capture { .. } => {}
             }
