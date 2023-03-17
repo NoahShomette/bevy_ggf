@@ -22,7 +22,7 @@ pub mod movement;
 pub mod object;
 pub mod selection;
 pub mod team;
-pub mod game;
+pub mod game_core;
 
 pub struct BggfCorePlugin;
 

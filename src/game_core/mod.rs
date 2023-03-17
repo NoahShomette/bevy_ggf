@@ -1,6 +1,6 @@
-﻿use crate::game::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
+﻿use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use bevy::app::{App, Plugin};
-use bevy::prelude::{Component, Resource};
+use bevy::prelude::{Component, Resource, Schedule, World};
 use chrono::{DateTime, Utc};
 
 pub mod command;
@@ -28,15 +28,21 @@ pub trait GameAppExt {
 }
 
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Resource)]
-pub struct Game {
+pub struct Game<T> {
     pub game_type: GameType,
+    pub game_runner: T,
+    pub game_world: World,
 }
 
 impl GameAppExt for App {
     fn new_game(&mut self, game_type: GameType) -> &mut Self {
         self.insert_resource(GameCommands::default())
             .insert_resource(GameIdProvider::default())
-            .insert_resource(Game { game_type });
+            .insert_resource(Game {
+                game_type,
+                tick_schedule: Default::default(),
+                game_world: Default::default(),
+            });
 
         self
     }

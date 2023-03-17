@@ -10,7 +10,7 @@
 //! ```rust
 //! use bevy::prelude::{Bundle, ResMut, World};
 //! use bevy_ecs_tilemap::prelude::TilePos;
-//! use bevy_ggf::game::command::{GameCommand, GameCommands};
+//! use bevy_ggf::game_core::command::{GameCommand, GameCommands};
 //! use bevy_ggf::mapping::MapId;
 //!
 //! #[derive(Bundle, Default)]
@@ -56,7 +56,6 @@
 //!
 //! ```
 
-use crate::game::{Game, GameId, GameIdProvider, GameType};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::mapping::{tile_pos_to_centered_map_world_pos, MapId};
 use crate::object::{Object, ObjectGridPosition};
@@ -68,6 +67,7 @@ use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;
 use std::process::id;
+use crate::game_core::{Game, GameId, GameIdProvider, GameType};
 
 /// Executes all stored game commands by calling the command queue execute buffer function
 pub fn execute_game_commands_buffer(world: &mut World) {
@@ -123,7 +123,7 @@ pub struct GameCommandMeta {
 /// **MUST** exactly roll the world back to as it was, excluding entity IDs.
 /// ```rust
 /// use bevy::prelude::World;
-/// use bevy_ggf::game::command::GameCommand;
+/// use bevy_ggf::game_core::command::GameCommand;
 /// #[derive(Clone, Debug)]
 ///  struct MyCustomCommand;
 ///
@@ -140,6 +140,8 @@ pub struct GameCommandMeta {
 pub trait GameCommand: Send + GameCommandClone + Sync + 'static {
     /// Execute the command
     fn execute(&mut self, world: &mut World) -> Result<(), String>;
+    
+    #[cfg(feature = "command_rollback")]
     fn rollback(&mut self, world: &mut World) -> Result<(), String>;
 }
 

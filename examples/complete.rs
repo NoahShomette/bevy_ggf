@@ -3,7 +3,7 @@ use bevy_ecs_tilemap::prelude::*;
 use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::combat::battle_resolver::Combat;
 use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult, BasicObjectAPCalculator};
-use bevy_ggf::game::command::{
+use bevy_ggf::game_core::command::{
     execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
     GameCommands,
 };
@@ -31,6 +31,7 @@ use bevy_ggf::selection::{
     ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
 };
 use bevy_ggf::{game, BggfDefaultPlugins};
+use bevy_ggf::game_core::{GameAppExt, GameId, GameType};
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
