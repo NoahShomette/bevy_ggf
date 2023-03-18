@@ -4,7 +4,6 @@
 
 use crate::mapping::tiles::ObjectStackingClass;
 use crate::movement::ObjectMovementBundle;
-use crate::selection::SelectableEntity;
 use bevy::prelude::{Bundle, Component, Resource, SpriteBundle};
 use bevy_ecs_tilemap::prelude::TilePos;
 
@@ -51,7 +50,6 @@ pub struct ObjectMinimalBundle {
     pub object_info: ObjectInfo,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
-    pub sprite_bundle: SpriteBundle,
 }
 
 /// Base bundle that provides all functionality for all subsystems in the crate
@@ -62,10 +60,8 @@ pub struct ObjectCoreBundle {
     pub object_info: ObjectInfo,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
-    pub sprite_bundle: SpriteBundle,
 
     //
-    pub selectable: SelectableEntity,
     //pub unit_movement_bundle: UnitMovementBundle,
 }
 
@@ -77,11 +73,44 @@ pub struct UnitBundle {
     pub object_info: ObjectInfo,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
-    pub sprite_bundle: SpriteBundle,
 
     //
     pub unit_movement_bundle: ObjectMovementBundle,
-    pub selectable: SelectableEntity,
+}
+
+/// A resource inserted into the world to provide consistent unique ids to keep track of game
+/// entities through potential spawns, despawns, and other shenanigans.
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Resource)]
+pub struct ObjectIdProvider {
+    pub last_id: usize,
+}
+
+impl Default for ObjectIdProvider {
+    fn default() -> Self {
+        ObjectIdProvider { last_id: 0 }
+    }
+}
+
+impl ObjectIdProvider {
+    pub fn next_id_component(&mut self) -> ObjectId {
+        ObjectId { id: self.next_id() }
+    }
+
+    pub fn next_id(&mut self) -> usize {
+        self.last_id = self.last_id.saturating_add(1);
+        self.last_id
+    }
+
+    pub fn remove_last_id(&mut self) {
+        self.last_id = self.last_id.saturating_sub(1);
+    }
+}
+
+/// Provides a way to track entities through potential despawns, spawns, and other shenanigans. Use
+/// this to reference entities and then query for the entity that it is attached to.
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
+pub struct ObjectId {
+    id: usize,
 }
 
 ///Marker component for an entity signifying it as an Object

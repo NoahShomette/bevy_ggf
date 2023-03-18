@@ -1,4 +1,3 @@
-use crate::game::GameId;
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
@@ -6,7 +5,7 @@ use crate::movement::{
     DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, ObjectTypeMovementRules,
     TileMoveCheck, TileMoveCheckMeta, TileMoveChecks,
 };
-use crate::object::{Object, ObjectGridPosition, ObjectInfo};
+use crate::object::{Object, ObjectGridPosition, ObjectId, ObjectInfo};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{Entity, IVec2, Query, Res, Transform, With, Without, World};
 use bevy::utils::hashbrown::HashMap;
@@ -201,7 +200,7 @@ impl TileMoveCheck for MoveCheckAllowedTile {
         let mut system_state: SystemState<(
             Query<(
                 Entity,
-                &GameId,
+                &ObjectId,
                 Option<&ObjectTypeMovementRules>,
                 Option<&ObjectMovement>,
                 Option<&ObjectInfo>,

@@ -1,7 +1,22 @@
-﻿use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
+﻿//!
+
+use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
+use crate::game_core::runner::GameRunner;
+use crate::mapping::tiles::Tile;
+use crate::movement::defaults::{MoveCheckAllowedTile, MoveCheckSpace, SquareMovementCalculator};
+use crate::movement::{
+    DiagonalMovement, MovementCalculator, MovementSystem, TileMoveCheckMeta, TileMoveChecks,
+};
+use crate::object::ObjectIdProvider;
 use bevy::app::{App, Plugin};
-use bevy::prelude::{Component, Resource, Schedule, World};
+use bevy::prelude::{
+    Children, Component, Parent, ReflectComponent, ReflectResource, Resource, Schedule, World,
+};
+use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRegistryInternal};
+use bevy_ecs_tilemap::prelude::TilemapType;
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
+use std::sync::Arc;
 
 pub mod command;
 pub mod runner;
@@ -18,39 +33,67 @@ pub enum GameType {
     Local,
 }
 
-pub trait GameAppExt {
-    fn new_game(&mut self, game_type: GameType) -> &mut Self;
-    fn new_game_with_commands(
-        &mut self,
-        game_type: GameType,
-        commands: Vec<Box<dyn GameCommand>>,
-    ) -> &mut Self;
+#[derive(Debug, Resource)]
+pub struct GameInfo {
+    pub game_type: GameType,
+    pub type_registry: TypeRegistry,
+    pub systems_schedule: Schedule,
 }
 
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Resource)]
-pub struct Game<T> {
-    pub game_type: GameType,
-    pub game_runner: T,
+impl GameInfo {}
+
+#[derive(Debug, Resource)]
+pub struct GameData {
     pub game_world: World,
 }
 
-impl GameAppExt for App {
-    fn new_game(&mut self, game_type: GameType) -> &mut Self {
-        self.insert_resource(GameCommands::default())
-            .insert_resource(GameIdProvider::default())
-            .insert_resource(Game {
-                game_type,
-                tick_schedule: Default::default(),
-                game_world: Default::default(),
-            });
+impl GameData {}
 
-        self
+#[derive(Debug, Resource)]
+pub struct GameRuntime<T>
+where
+    T: GameRunner,
+{
+    pub game_runner: T,
+}
+
+impl<T> GameRuntime<T> where T: GameRunner {}
+
+#[derive(Debug, Resource)]
+pub struct GameBuilder<GR>
+where
+    GR: GameRunner + 'static,
+{
+    game_type: GameType,
+    game_runner: GR,
+    game_world: World,
+    setup_schedule: Schedule,
+    type_registry: TypeRegistry,
+}
+
+impl<GR> GameBuilder<GR>
+where
+    GR: GameRunner,
+{
+    pub fn new_game(game_type: GameType, game_runner: GR) -> GameBuilder<GR> {
+        let mut game_world = World::new();
+
+        game_world.insert_resource(GameCommands::default());
+        game_world.insert_resource(ObjectIdProvider::default());
+
+        GameBuilder {
+            game_type,
+            game_runner,
+            game_world,
+            setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
+            type_registry: GameBuilder::<GR>::default_registry(),
+        }
     }
-    fn new_game_with_commands(
-        &mut self,
+    pub fn new_game_with_commands(
         game_type: GameType,
         commands: Vec<Box<dyn GameCommand>>,
-    ) -> &mut Self {
+        game_runner: GR,
+    ) -> GameBuilder<GR> {
         let mut game_command_queue: Vec<GameCommandMeta> = vec![];
 
         for command in commands.into_iter() {
@@ -61,50 +104,104 @@ impl GameAppExt for App {
             })
         }
 
-        self.insert_resource(GameCommands {
+        let mut game_world = World::new();
+
+        game_world.insert_resource(GameCommands {
             queue: GameCommandQueue {
                 queue: game_command_queue,
             },
             history: Default::default(),
-        })
-        .insert_resource(GameIdProvider::default())
-        .insert_resource(Game { game_type });
+        });
+        game_world.insert_resource(ObjectIdProvider::default());
 
+        GameBuilder {
+            game_type,
+            game_runner,
+            game_world,
+            setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
+            type_registry: GameBuilder::<GR>::default_registry(),
+        }
+    }
+
+    pub fn default_registry() -> TypeRegistry {
+        TypeRegistry {
+            internal: Arc::new(RwLock::new({
+                let mut r = TypeRegistryInternal::empty();
+                // `Parent` and `Children` must be registered so that their `ReflectMapEntities`
+                // data may be used.
+                //
+                // While this is a little bit of a weird spot to register these, are the only
+                // Bevy core types implementing `MapEntities`, so for now it's probably fine to
+                // just manually register these here.
+                //
+                // The user can still register any custom types with `register_rollback_type()`.
+                r.register::<Parent>();
+                r.register::<Children>();
+                r
+            })),
+        }
+    }
+
+    pub fn register_component<Type>(mut self) -> Self
+    where
+        Type: GetTypeRegistration + Reflect + Default + Component,
+    {
+        let mut registry = self.type_registry.write();
+        registry.register::<Type>();
+
+        let registration = registry.get_mut(std::any::TypeId::of::<Type>()).unwrap();
+        registration.insert(<ReflectComponent as FromType<Type>>::from_type());
+        drop(registry);
         self
     }
-}
 
-/// A resource inserted into the world to provide consistent unique ids to keep track of game
-/// entities through potential spawns, despawns, and other shenanigans.
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Resource)]
-pub struct GameIdProvider {
-    pub last_id: usize,
-}
+    pub fn register_resource<Type>(mut self) -> Self
+    where
+        Type: GetTypeRegistration + Reflect + Default + Resource,
+    {
+        let mut registry = self.type_registry.write();
+        registry.register::<Type>();
 
-impl Default for GameIdProvider {
-    fn default() -> Self {
-        GameIdProvider { last_id: 0 }
-    }
-}
-
-impl GameIdProvider {
-    pub fn next_id_component(&mut self) -> GameId {
-        GameId { id: self.next_id() }
+        let registration = registry.get_mut(std::any::TypeId::of::<Type>()).unwrap();
+        registration.insert(<ReflectResource as FromType<Type>>::from_type());
+        drop(registry);
+        self
     }
 
-    pub fn next_id(&mut self) -> usize {
-        self.last_id = self.last_id.saturating_add(1);
-        self.last_id
+    pub fn with_movement_calculator<MC>(
+        mut self,
+        movement_calculator: MC,
+        tile_move_checks: Vec<TileMoveCheckMeta>,
+        map_type: TilemapType,
+    ) -> Self
+    where
+        MC: MovementCalculator,
+    {
+        self.game_world.insert_resource(MovementSystem {
+            movement_calculator: Box::new(movement_calculator),
+            map_type,
+            tile_move_checks: TileMoveChecks { tile_move_checks },
+        });
+        self
     }
 
-    pub fn remove_last_id(&mut self) {
-        self.last_id = self.last_id.saturating_sub(1);
+    pub fn default_setup_schedule() -> Schedule {
+        Schedule::default()
     }
-}
 
-/// Provides a way to track entities through potential despawns, spawns, and other shenanigans. Use
-/// this to reference entities and then query for the entity that it is attached to.
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
-pub struct GameId {
-    id: usize,
+    pub fn build(mut self, mut app: &mut App) {
+        self.setup_schedule.run_once(&mut self.game_world);
+
+        app.insert_resource::<GameRuntime<GR>>(GameRuntime {
+            game_runner: self.game_runner,
+        });
+        app.insert_resource::<GameData>(GameData {
+            game_world: self.game_world,
+        });
+        app.insert_resource::<GameInfo>(GameInfo {
+            game_type: self.game_type,
+            type_registry: self.type_registry,
+            systems_schedule: Default::default(),
+        });
+    }
 }

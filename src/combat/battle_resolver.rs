@@ -1,5 +1,5 @@
 use bevy::prelude::{Resource, World};
-use crate::game::GameId;
+use crate::object::ObjectId;
 
 /// A battle resolver, this takes
 #[derive(Resource)]
@@ -16,7 +16,7 @@ pub enum BattleError {
 pub trait AttackPowerCalculator {
     /// Calculate and return the final object attack power to be applied to the opponent object
     /// - must return a number, even if its 0 in case of failure
-    fn calculate_object_attack_power(&self, object_to_calculate: GameId, opponent_object: GameId, world: &mut World) -> u32;
+    fn calculate_object_attack_power(&self, object_to_calculate: ObjectId, opponent_object: ObjectId, world: &mut World) -> u32;
 }
 
 pub trait BattleCalculator {
@@ -25,14 +25,14 @@ pub trait BattleCalculator {
     fn resolve_combat(
         &mut self,
         world: &mut World,
-        attacking_entity: GameId,
-        defending_entity: GameId,
+        attacking_entity: ObjectId,
+        defending_entity: ObjectId,
     ) -> Result<Self::Result, BattleError>;
 }
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub struct BattleResult<T> {
-    attacking_object: GameId,
-    defending_object: GameId,
+    attacking_object: ObjectId,
+    defending_object: ObjectId,
     result: T,
 }

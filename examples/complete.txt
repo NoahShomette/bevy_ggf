@@ -1,13 +1,11 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::combat::battle_resolver::Combat;
 use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult, BasicObjectAPCalculator};
 use bevy_ggf::game_core::command::{
     execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
     GameCommands,
 };
-use bevy_ggf::game::{GameAppExt, GameId, GameType};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStackingRules, TileObjectStacksCount,
@@ -24,14 +22,12 @@ use bevy_ggf::movement::{
     ObjectTypeMovementRules, TerrainMovementCosts, TileMoveCheckMeta, TileMoveChecks,
     TileMovementCosts,
 };
-use bevy_ggf::object::{
-    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
-};
+use bevy_ggf::object::{Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectInfo, ObjectType, UnitBundle};
 use bevy_ggf::selection::{
     ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
 };
 use bevy_ggf::{game, BggfDefaultPlugins};
-use bevy_ggf::game_core::{GameAppExt, GameId, GameType};
+use bevy_ggf::game_core::{GameAppExt, ObjectId, GameType};
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -359,7 +355,7 @@ fn select_and_move_unit_to_tile_clicked(
         ),
         With<Map>,
     >,
-    moving_object: Query<(&GameId, &ObjectGridPosition)>,
+    moving_object: Query<(&ObjectId, &ObjectGridPosition)>,
     mut click_event_reader: EventReader<ClickEvent>,
     mut select_object_event_writer: EventWriter<TrySelectEvents>,
     mut game: ResMut<GameCommands>,
@@ -407,7 +403,7 @@ fn select_and_move_unit_to_tile_clicked(
 
 fn handle_move_complete_event(
     mut selected_object: ResMut<CurrentSelectedObject>,
-    mut object_query: Query<(Entity, &GameId)>,
+    mut object_query: Query<(Entity, &ObjectId)>,
     mut event_reader: EventReader<MoveEvent>,
     mut commands: Commands,
 ) {

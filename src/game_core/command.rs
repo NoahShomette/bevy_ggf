@@ -56,18 +56,21 @@
 //!
 //! ```
 
+use crate::game_core::runner::GameRunner;
+use crate::game_core::{GameInfo, GameType, ObjectIdProvider};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
 use crate::mapping::{tile_pos_to_centered_map_world_pos, MapId};
-use crate::object::{Object, ObjectGridPosition};
+use crate::object::{Object, ObjectGridPosition, ObjectId};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
-use bevy::prelude::{Bundle, Component, DespawnRecursiveExt, Entity, Mut, Query, Reflect, ReflectComponent, Resource, Transform, With, Without, World};
+use bevy::prelude::{
+    Bundle, Component, DespawnRecursiveExt, Entity, Mut, Query, Reflect, ReflectComponent,
+    Resource, Transform, With, Without, World,
+};
 use bevy_ecs_tilemap::prelude::{TilemapGridSize, TilemapType};
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;
-use std::process::id;
-use crate::game_core::{Game, GameId, GameIdProvider, GameType};
 
 /// Executes all stored game commands by calling the command queue execute buffer function
 pub fn execute_game_commands_buffer(world: &mut World) {
@@ -140,9 +143,17 @@ pub struct GameCommandMeta {
 pub trait GameCommand: Send + GameCommandClone + Sync + 'static {
     /// Execute the command
     fn execute(&mut self, world: &mut World) -> Result<(), String>;
-    
-    #[cfg(feature = "command_rollback")]
-    fn rollback(&mut self, world: &mut World) -> Result<(), String>;
+
+    /// Command to rollback a given command. Must undo exactly what execute did to return the game state
+    /// to exactly the same state as before the execute was done.
+    ///
+    /// NOTE: This has a default implementation that does nothing but return Ok. This is so that if you
+    /// dont want to use rollback you aren't required to implement it for your commands. However if
+    /// you **do** want to use it make sure you implement it correctly.
+    //#[cfg(feature = "command_rollback")]
+    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /* TODO: Figure out if a closure is possible. Probably not since we have two functions, but either way
@@ -268,7 +279,7 @@ impl GameCommands {
     pub fn execute_buffer(&mut self, world: &mut World) {
         let mut temp_rb_commands: Vec<GameCommandMeta> = vec![];
         for mut command in self.queue.queue.drain(..).into_iter() {
-            match world.resource::<Game>().game_type {
+            match world.resource::<GameInfo>().game_type {
                 GameType::Networked => {
                     let mut amount_to_rollback = 0;
                     'old_check: for old_command in self.history.history.iter().rev() {
@@ -355,7 +366,7 @@ impl GameCommands {
     /// if the move is invalid. It is the callers responsibility to ensure that it is valid
     pub fn add_object_to_tile(
         &mut self,
-        object_entity: GameId,
+        object_entity: ObjectId,
         on_map: MapId,
         tile_pos: TilePos,
     ) -> AddObjectToTile {
@@ -376,7 +387,7 @@ impl GameCommands {
     /// Execute will *not* set the objects grid position - Rollback will
     pub fn remove_object_from_tile(
         &mut self,
-        object_game_id: GameId,
+        object_game_id: ObjectId,
         on_map: MapId,
         tile_pos: TilePos,
     ) -> RemoveObjectFromTile {
@@ -409,7 +420,7 @@ impl GameCommands {
             object_game_id: None,
         }
     }
-    pub fn despawn_object(&mut self, on_map: MapId, object_game_id: GameId) -> DespawnObject {
+    pub fn despawn_object(&mut self, on_map: MapId, object_game_id: ObjectId) -> DespawnObject {
         self.queue.push(DespawnObject {
             on_map,
             object_game_id,
@@ -430,7 +441,7 @@ impl GameCommands {
 ///  at [SpawnObject] as an example of how to do this.
 #[derive(Clone, Debug)]
 pub struct RemoveObjectFromTile {
-    pub object_game_id: GameId,
+    pub object_game_id: ObjectId,
     pub on_map: MapId,
     pub tile_pos: TilePos,
 }
@@ -438,7 +449,7 @@ pub struct RemoveObjectFromTile {
 impl GameCommand for RemoveObjectFromTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
-            Query<(&GameId, &ObjectStackingClass)>,
+            Query<(&ObjectId, &ObjectStackingClass)>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
@@ -468,7 +479,7 @@ impl GameCommand for RemoveObjectFromTile {
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
-            Query<(&GameId, &mut ObjectGridPosition, &ObjectStackingClass)>,
+            Query<(&ObjectId, &mut ObjectGridPosition, &ObjectStackingClass)>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
@@ -507,7 +518,7 @@ impl GameCommand for RemoveObjectFromTile {
 /// at [SpawnObject] as an example of how to do this.
 #[derive(Clone, Debug)]
 pub struct AddObjectToTile {
-    pub object_game_id: GameId,
+    pub object_game_id: ObjectId,
     pub on_map: MapId,
     pub tile_pos: TilePos,
 }
@@ -515,39 +526,23 @@ pub struct AddObjectToTile {
 impl GameCommand for AddObjectToTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
-            Query<
-                (
-                    &GameId,
-                    &mut Transform,
-                    &mut ObjectGridPosition,
-                    &ObjectStackingClass,
-                ),
-                With<Object>,
-            >,
+            Query<(&ObjectId, &mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-            Query<(
-                Entity,
-                &MapId,
-                &TileStorage,
-                &TilemapGridSize,
-                &TilemapType,
-                &Transform,
-                Without<Object>,
-            )>,
+            Query<(Entity, &MapId, &TileStorage, Without<Object>)>,
         )> = SystemState::new(&mut world);
 
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
-        let Some((_, mut transform, mut object_grid_position, object_stacking_class)) =
+        let Some((_, mut object_grid_position, object_stacking_class)) =
             object_query
                 .iter_mut()
-                .find(|(id, _, _, _)| id == &&self.object_game_id) else {
+                .find(|(id, _, _)| id == &&self.object_game_id) else {
             return Err(String::from(format!("No Object Components found for GameId: {:?}", self.object_game_id)));
         };
-        let Some((entity, _, tile_storage, grid_size, map_type, map_transform, _)) = tile_storage_query
+        let Some((entity, _, tile_storage, _)) = tile_storage_query
             .iter_mut()
-            .find(|(_, id, _, _, _,_, _)| id == &&self.on_map) else {
+            .find(|(_, id, _, _)| id == &&self.on_map) else {
             return Err(String::from(format!("No Map Components found for GameId: {:?}", self.on_map)));
         };
 
@@ -561,17 +556,12 @@ impl GameCommand for AddObjectToTile {
         object_grid_position.tile_position = self.tile_pos;
         tile_stack_rules.increment_object_class_count(object_stacking_class);
 
-        // have to transform the tiles position to the transformed position to place the object at the right point
-        let tile_world_pos =
-            tile_pos_to_centered_map_world_pos(&self.tile_pos, map_transform, grid_size, map_type);
-
-        transform.translation = tile_world_pos.extend(5.0);
         Ok(())
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
-            Query<(&GameId, &ObjectStackingClass)>,
+            Query<(&ObjectId, &ObjectStackingClass)>,
             Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
@@ -610,7 +600,7 @@ where
     pub bundle: T,
     pub tile_pos: TilePos,
     pub on_map: MapId,
-    pub object_game_id: Option<GameId>,
+    pub object_game_id: Option<ObjectId>,
 }
 
 impl<T> GameCommand for SpawnObject<T>
@@ -619,7 +609,7 @@ where
 {
     fn execute(&mut self, world: &mut World) -> Result<(), String> {
         // Assign a new id as we un assign the id when we rollback
-        let id = world.resource_mut::<GameIdProvider>().next_id_component();
+        let id = world.resource_mut::<ObjectIdProvider>().next_id_component();
 
         world.spawn(self.bundle.clone()).insert(id);
 
@@ -634,7 +624,8 @@ where
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
-        let mut system_state: SystemState<Query<(Entity, &GameId)>> = SystemState::new(&mut world);
+        let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
+            SystemState::new(&mut world);
         let mut object_query = system_state.get_mut(&mut world);
 
         let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| {
@@ -654,7 +645,7 @@ where
         };
         let _ = remove.execute(world);
         world.entity_mut(entity).despawn_recursive();
-        world.resource_mut::<GameIdProvider>().remove_last_id();
+        world.resource_mut::<ObjectIdProvider>().remove_last_id();
 
         return Ok(());
     }
@@ -663,14 +654,14 @@ where
 #[derive(Clone, Debug)]
 pub struct DespawnObject {
     pub on_map: MapId,
-    pub object_game_id: GameId,
+    pub object_game_id: ObjectId,
     pub tile_pos: Option<TilePos>,
     //pub object_components: Option<Vec<>>
 }
 
 impl GameCommand for DespawnObject {
     fn execute(&mut self, world: &mut World) -> Result<(), String> {
-        let mut system_state: SystemState<Query<(Entity, &GameId, &TilePos)>> =
+        let mut system_state: SystemState<Query<(Entity, &ObjectId, &TilePos)>> =
             SystemState::new(world);
         let mut object_query = system_state.get_mut(world);
 
@@ -697,7 +688,8 @@ impl GameCommand for DespawnObject {
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
-        let mut system_state: SystemState<Query<(Entity, &GameId)>> = SystemState::new(&mut world);
+        let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
+            SystemState::new(&mut world);
         let mut object_query = system_state.get_mut(&mut world);
 
         let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| {
@@ -714,7 +706,7 @@ impl GameCommand for DespawnObject {
         };
         let _ = remove.execute(world);
         world.entity_mut(entity).despawn_recursive();
-        world.resource_mut::<GameIdProvider>().remove_last_id();
+        world.resource_mut::<ObjectIdProvider>().remove_last_id();
 
         return Ok(());
     }

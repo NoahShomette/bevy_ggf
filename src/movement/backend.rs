@@ -1,4 +1,3 @@
-use crate::game::GameId;
 use crate::movement::{
     AvailableMove, CurrentMovementInformation, MoveEvent, MovementSystem, ObjectMoved,
     ObjectMovement, TileMovementCosts,
@@ -7,6 +6,7 @@ use bevy::ecs::system::SystemState;
 use bevy::prelude::{Commands, Entity, EventReader, Mut, Query, Res, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapSize};
+use crate::object::ObjectId;
 
 /// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific
@@ -248,7 +248,7 @@ pub(crate) fn handle_move_begin_events(mut world: &mut World) {
                 on_map,
             } = event
             {
-                let mut system_state: SystemState<Query<(Entity, &GameId)>> =
+                let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
                     SystemState::new(world);
                 let mut object_query = system_state.get_mut(world);
                 let Some((entity, _)) = object_query
@@ -296,7 +296,7 @@ pub(crate) fn handle_move_begin_events(mut world: &mut World) {
 /// event.
 pub fn add_object_moved_component_on_moves(
     mut move_events: EventReader<MoveEvent>,
-    mut object_query: Query<(Entity, &GameId)>,
+    mut object_query: Query<(Entity, &ObjectId)>,
     mut commands: Commands,
 ) {
     for event in move_events.iter() {

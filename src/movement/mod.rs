@@ -3,19 +3,16 @@
 pub mod backend;
 pub mod defaults;
 
-use crate::game::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
-use crate::game::GameId;
+use crate::game_core::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
+use crate::game_core::{GameData, GameInfo, GameRuntime};
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
 use crate::movement::backend::{
     add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
 };
-use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
+use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::{SystemParamFetch, SystemParamState, SystemState};
-use bevy::prelude::{
-    info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter,
-    IntoSystemDescriptor, Mut, Plugin, Query, Resource, World,
-};
+use bevy::prelude::{info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter, IntoSystemDescriptor, Mut, Plugin, Query, Resource, StageLabel, World, SystemStage};
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
 
@@ -29,16 +26,31 @@ pub struct BggfMovementPlugin {
 
 impl Plugin for BggfMovementPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<TerrainMovementCosts>()
-            .add_event::<ClearObjectAvailableMoves>()
+        app.world
+            .resource_scope(|world, mut game_data: Mut<GameData>| {
+                game_data.game_world.init_resource::<TerrainMovementCosts>();
+            });
+
+        app.world
+            .resource_scope(|world, mut game_info: Mut<GameInfo>| {
+                game_info
+                    .systems_schedule
+                    .add_stage(MovementSystems, SystemStage::parallel());
+                if self.add_defaults_core {
+                    game_info
+                        .systems_schedule
+                        .add_system_to_stage(MovementSystems, handle_move_begin_events.at_end());
+                }
+                if self.add_defaults_extra {
+                    game_info
+                        .systems_schedule
+                        .add_system_to_stage(MovementSystems, add_object_moved_component_on_moves);
+                }
+            });
+
+        app.add_event::<ClearObjectAvailableMoves>()
             .add_event::<MoveEvent>()
             .add_event::<MoveError>();
-        if self.add_defaults_core {
-            app.add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end());
-        }
-        if self.add_defaults_extra {
-            app.add_system(add_object_moved_component_on_moves);
-        }
     }
 }
 
@@ -51,11 +63,14 @@ impl Default for BggfMovementPlugin {
     }
 }
 
+#[derive(StageLabel)]
+pub struct MovementSystems;
+
 /// An extension trait for [GameCommands] with movement related commands.
 pub trait MoveCommandsExt {
     fn move_object(
         &mut self,
-        object_moving: GameId,
+        object_moving: ObjectId,
         on_map: MapId,
         current_pos: TilePos,
         new_pos: TilePos,
@@ -68,7 +83,7 @@ impl MoveCommandsExt for GameCommands {
     /// the [`TilePos`] that the object is moving too
     fn move_object(
         &mut self,
-        object_moving: GameId,
+        object_moving: ObjectId,
         on_map: MapId,
         current_pos: TilePos,
         new_pos: TilePos,
@@ -93,7 +108,7 @@ impl MoveCommandsExt for GameCommands {
 
 #[derive(Clone, Debug)]
 pub struct MoveObject {
-    object_moving: GameId,
+    object_moving: ObjectId,
     on_map: MapId,
     current_pos: TilePos,
     new_pos: TilePos,
@@ -101,10 +116,7 @@ pub struct MoveObject {
 }
 
 impl GameCommand for MoveObject {
-    fn execute(
-        &mut self,
-        mut world: &mut World,
-    ) -> Result<(), String> {
+    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut remove = RemoveObjectFromTile {
             object_game_id: self.object_moving,
             on_map: self.on_map,
@@ -118,7 +130,7 @@ impl GameCommand for MoveObject {
 
         return match self.attempt {
             true => {
-                let mut system_state: SystemState<Query<(Entity, &GameId)>> =
+                let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
                     SystemState::new(&mut world);
 
                 let mut object_query = system_state.get_mut(&mut world);
@@ -183,10 +195,7 @@ impl GameCommand for MoveObject {
         };
     }
 
-    fn rollback(
-        &mut self,
-        world: &mut World,
-    ) -> Result<(), String> {
+    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
         let mut remove = RemoveObjectFromTile {
             object_game_id: self.object_moving,
             on_map: self.on_map,
@@ -200,7 +209,7 @@ impl GameCommand for MoveObject {
 
         remove.execute(world)?;
         add.execute(world)?;
-        
+
         return Ok(());
     }
 }
@@ -376,18 +385,18 @@ impl From<MoveNode> for AvailableMove {
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum MoveEvent {
     MoveBegin {
-        object_moving: GameId,
+        object_moving: ObjectId,
         on_map: MapId,
     },
     MoveCalculated {
         available_moves: Vec<TilePos>,
     },
     TryMoveObject {
-        object_moving: GameId,
+        object_moving: ObjectId,
         new_pos: TilePos,
     },
     MoveComplete {
-        object_moved: GameId,
+        object_moved: ObjectId,
     },
 }
 
