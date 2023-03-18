@@ -64,10 +64,8 @@ use crate::object::{Object, ObjectGridPosition, ObjectId};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
 use bevy::prelude::{
-    Bundle, Component, DespawnRecursiveExt, Entity, Mut, Query, Reflect, ReflectComponent,
-    Resource, Transform, With, Without, World,
+    Bundle, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without, World,
 };
-use bevy_ecs_tilemap::prelude::{TilemapGridSize, TilemapType};
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;

@@ -1,10 +1,10 @@
-use bevy::prelude::{Schedule, Stage, World};
+use bevy::prelude::{Schedule, World};
 
-pub trait GameRunner: Send + Sync{
+pub trait GameRunner: Send + Sync {
     fn simulate_game(&mut self, world: &mut World);
 }
 
-pub struct TurnBasedGameRunner{
+pub struct TurnBasedGameRunner {
     turn_schedule: Schedule,
 }
 

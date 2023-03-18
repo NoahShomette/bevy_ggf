@@ -2,6 +2,7 @@ pub mod object;
 pub mod terrain;
 pub mod tiles;
 
+use crate::game_core::command::{GameCommand, GameCommands};
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStackingRules, TileObjects,
@@ -13,7 +14,6 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
 use rand::Rng;
-use crate::game_core::command::{GameCommand, GameCommands};
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -141,26 +141,19 @@ impl GameCommand for SpawnRandomMap {
             for x in 0..map_size.x {
                 for y in 0..map_size.y {
                     let tile_pos = TilePos { x, y };
-                    let mut rng = rand::thread_rng();
-                    let tile_texture_index = rng.gen_range(0..self.map_terrain_type_vec.len());
-                    let texture_index = self.map_terrain_type_vec[tile_texture_index];
                     let tile_movement_costs = terrain_movement_costs
                         .movement_cost_rules
-                        .get(&self.map_terrain_type_vec[tile_texture_index])
+                        .get(&self.map_terrain_type_vec[0])
                         .unwrap();
 
                     let tile_entity = world
                         .spawn(BggfTileBundle {
-                            tile_bundle: TileBundle {
-                                position: tile_pos,
-                                texture_index: TileTextureIndex(texture_index.texture_index),
-                                tilemap_id: TilemapId(tilemap_entity),
-                                ..Default::default()
-                            },
                             tile: Tile,
                             tile_terrain_info: TileTerrainInfo {
-                                terrain_type: self.map_terrain_type_vec[tile_texture_index],
+                                terrain_type: self.map_terrain_type_vec[0],
                             },
+                            tile_pos,
+                            tilemap_id: TilemapId(tilemap_entity),
                         })
                         .insert(BggfTileObjectBundle {
                             tile_stack_rules: self.tile_stack_rules.clone(),

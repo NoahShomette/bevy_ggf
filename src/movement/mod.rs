@@ -4,62 +4,80 @@ pub mod backend;
 pub mod defaults;
 
 use crate::game_core::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
-use crate::game_core::{GameData, GameInfo, GameRuntime};
+use crate::game_core::runner::GameRunner;
+use crate::game_core::{GameBuilder, GameData, GameInfo};
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
-use crate::movement::backend::{
-    add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
-};
+use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
-use bevy::ecs::system::{SystemParamFetch, SystemParamState, SystemState};
-use bevy::prelude::{info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter, IntoSystemDescriptor, Mut, Plugin, Query, Resource, StageLabel, World, SystemStage};
+use bevy::ecs::system::SystemState;
+use bevy::prelude::{
+    info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter,
+    IntoSystemDescriptor, Mut, Plugin, Query, ResMut, Resource, StageLabel, SystemStage, World,
+};
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
 ///
-pub struct BggfMovementPlugin {
-    pub add_defaults_core: bool,
-    pub add_defaults_extra: bool,
-}
+pub struct BggfMovementPlugin;
 
 impl Plugin for BggfMovementPlugin {
     fn build(&self, app: &mut App) {
-        app.world
-            .resource_scope(|world, mut game_data: Mut<GameData>| {
-                game_data.game_world.init_resource::<TerrainMovementCosts>();
-            });
-
-        app.world
-            .resource_scope(|world, mut game_info: Mut<GameInfo>| {
-                game_info
-                    .systems_schedule
-                    .add_stage(MovementSystems, SystemStage::parallel());
-                if self.add_defaults_core {
-                    game_info
-                        .systems_schedule
-                        .add_system_to_stage(MovementSystems, handle_move_begin_events.at_end());
-                }
-                if self.add_defaults_extra {
-                    game_info
-                        .systems_schedule
-                        .add_system_to_stage(MovementSystems, add_object_moved_component_on_moves);
-                }
-            });
-
-        app.add_event::<ClearObjectAvailableMoves>()
-            .add_event::<MoveEvent>()
-            .add_event::<MoveError>();
+        app.add_event::<MoveEvent>().add_event::<MoveError>();
     }
 }
 
 impl Default for BggfMovementPlugin {
     fn default() -> Self {
-        Self {
-            add_defaults_core: true,
-            add_defaults_extra: true,
-        }
+        Self
+    }
+}
+
+pub trait GameBuilderMovementExt {
+    fn with_movement_calculator<MC>(
+        &mut self,
+        movement_calculator: MC,
+        tile_move_checks: Vec<TileMoveCheckMeta>,
+        map_type: TilemapType,
+    ) where
+        MC: MovementCalculator,
+        Self: Sized;
+
+    fn setup_movement(&mut self, tile_movement_costs: Vec<(TerrainType, TileMovementCosts)>)
+    where
+        Self: Sized;
+}
+
+impl<T: GameRunner + 'static> GameBuilderMovementExt for GameBuilder<T>
+where
+    T: GameRunner + 'static,
+{
+    fn with_movement_calculator<MC>(
+        &mut self,
+        movement_calculator: MC,
+        tile_move_checks: Vec<TileMoveCheckMeta>,
+        map_type: TilemapType,
+    ) where
+        MC: MovementCalculator,
+        Self: Sized,
+    {
+        self.game_world.insert_resource(MovementSystem {
+            movement_calculator: Box::new(movement_calculator),
+            map_type,
+            tile_move_checks: TileMoveChecks { tile_move_checks },
+        });
+    }
+
+    fn setup_movement(&mut self, tile_movement_costs: Vec<(TerrainType, TileMovementCosts)>)
+    where
+        Self: Sized,
+    {
+        self.game_world
+            .insert_resource(TerrainMovementCosts::from_vec(tile_movement_costs));
+        self.systems_schedule
+            .add_stage(MovementSystems, SystemStage::parallel());
     }
 }
 
@@ -430,6 +448,27 @@ impl DiagonalMovement {
     }
 }
 
+/// A resource that holds all the [`MovementType`]s in the game. The types are stored in a hashmap
+/// with the key being the name given to the MovementType
+#[derive(Clone, Eq, PartialEq, Debug, Resource)]
+pub struct MovementTypes {
+    pub movement_types: HashMap<&'static str, MovementType>,
+}
+
+impl MovementTypes {
+    pub fn insert(&mut self, movement_type: MovementType) {
+        self.movement_types
+            .insert(movement_type.name, movement_type);
+    }
+
+    pub fn insert_vec(&mut self, movement_types: Vec<MovementType>) {
+        for movement_type in movement_types {
+            self.movement_types
+                .insert(movement_type.name, movement_type);
+        }
+    }
+}
+
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
@@ -467,6 +506,22 @@ pub struct TerrainMovementCosts {
     pub movement_cost_rules: HashMap<TerrainType, TileMovementCosts>,
 }
 
+impl TerrainMovementCosts {
+    /// Creates a new [`TerrainMovementCosts`] struct from a vec of [`TerrainType`] and [`TileMovementCosts`]
+    pub fn from_vec(
+        terrain_movement_costs: Vec<(TerrainType, TileMovementCosts)>,
+    ) -> TerrainMovementCosts {
+        let mut hashmap: HashMap<TerrainType, TileMovementCosts> = HashMap::new();
+        for (terrain_type, tile_movement_costs) in terrain_movement_costs {
+            hashmap.insert(terrain_type, tile_movement_costs);
+        }
+
+        Self {
+            movement_cost_rules: hashmap,
+        }
+    }
+}
+
 // UNIT MOVEMENT STUFF
 
 /// Basic Bundle that supplies all required movement components for an object
@@ -487,41 +542,6 @@ pub struct ObjectMovement {
     pub move_points: i32,
     pub movement_type: &'static MovementType,
     pub object_terrain_movement_rules: ObjectTerrainMovementRules,
-}
-
-//TODO: Update this to just a guaranteed ordered vec - ordered meaning the first element
-/// Resource that holds a Hashmap of [`AvailableMove`] structs. These structs should represent verified
-/// valid moves and are updated when the [`MoveEvent::MoveBegin`] event is processed.
-#[derive(Clone, Eq, PartialEq, Default, Debug, Component)]
-pub struct CurrentMovementInformation {
-    pub available_moves: HashMap<TilePos, AvailableMove>,
-}
-
-impl CurrentMovementInformation {
-    /// Returns true or false if CurrentMovementInformation contains a move at the assigned TilePos
-    pub fn contains_move(&self, new_pos: &TilePos) -> bool {
-        self.available_moves.contains_key(new_pos)
-    }
-
-    /// Clears the moves from the collection
-    pub fn clear_moves(&mut self) {
-        self.available_moves.clear();
-    }
-}
-
-pub struct ClearObjectAvailableMoves {
-    object: Entity,
-}
-
-fn clear_selected_object(
-    mut clear_object_reader: EventReader<ClearObjectAvailableMoves>,
-    mut current_movement_information: Query<&mut CurrentMovementInformation>,
-) {
-    for event in clear_object_reader.iter() {
-        if let Ok(mut info) = current_movement_information.get_mut(event.object) {
-            info.clear_moves();
-        }
-    }
 }
 
 /// Optional component that can be attached to an object to define rules related to that objects movement

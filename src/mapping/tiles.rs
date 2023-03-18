@@ -10,7 +10,8 @@
 use crate::mapping::terrain::TileTerrainInfo;
 use bevy::prelude::{Bundle, Component, Entity};
 use bevy::utils::hashbrown::HashMap;
-use bevy_ecs_tilemap::prelude::TileBundle;
+use bevy_ecs_tilemap::prelude::{TileBundle, TilemapId};
+use bevy_ecs_tilemap::tiles::TilePos;
 use crate::object::ObjectId;
 
 /// Bundle containing all the basic tile components needed for a tile.
@@ -23,9 +24,10 @@ use crate::object::ObjectId;
 #[derive(Bundle)]
 pub struct BggfTileBundle {
     /// Bevy_ecs_tilemap tile bundle
-    pub tile_bundle: TileBundle,
     pub tile: Tile,
     pub tile_terrain_info: TileTerrainInfo,
+    pub tile_pos: TilePos,
+    pub tilemap_id: TilemapId,
     //pub tile_texture_index: TileTextureIndex,
 }
 

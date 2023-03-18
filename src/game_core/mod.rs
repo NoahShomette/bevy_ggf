@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 pub mod command;
 pub mod runner;
+pub mod state;
 
 pub struct BggfGamePlugin {}
 
@@ -64,11 +65,12 @@ pub struct GameBuilder<GR>
 where
     GR: GameRunner + 'static,
 {
-    game_type: GameType,
-    game_runner: GR,
-    game_world: World,
-    setup_schedule: Schedule,
-    type_registry: TypeRegistry,
+    pub game_type: GameType,
+    pub game_runner: GR,
+    pub game_world: World,
+    pub setup_schedule: Schedule,
+    pub systems_schedule: Schedule,
+    pub type_registry: TypeRegistry,
 }
 
 impl<GR> GameBuilder<GR>
@@ -86,6 +88,7 @@ where
             game_runner,
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
+            systems_schedule: Default::default(),
             type_registry: GameBuilder::<GR>::default_registry(),
         }
     }
@@ -119,6 +122,7 @@ where
             game_runner,
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
+            systems_schedule: Default::default(),
             type_registry: GameBuilder::<GR>::default_registry(),
         }
     }
@@ -168,40 +172,23 @@ where
         self
     }
 
-    pub fn with_movement_calculator<MC>(
-        mut self,
-        movement_calculator: MC,
-        tile_move_checks: Vec<TileMoveCheckMeta>,
-        map_type: TilemapType,
-    ) -> Self
-    where
-        MC: MovementCalculator,
-    {
-        self.game_world.insert_resource(MovementSystem {
-            movement_calculator: Box::new(movement_calculator),
-            map_type,
-            tile_move_checks: TileMoveChecks { tile_move_checks },
-        });
-        self
-    }
-
     pub fn default_setup_schedule() -> Schedule {
         Schedule::default()
     }
 
-    pub fn build(mut self, mut app: &mut App) {
+    pub fn build(mut self, mut world: &mut World) {
         self.setup_schedule.run_once(&mut self.game_world);
 
-        app.insert_resource::<GameRuntime<GR>>(GameRuntime {
+        world.insert_resource::<GameRuntime<GR>>(GameRuntime {
             game_runner: self.game_runner,
         });
-        app.insert_resource::<GameData>(GameData {
+        world.insert_resource::<GameData>(GameData {
             game_world: self.game_world,
         });
-        app.insert_resource::<GameInfo>(GameInfo {
+        world.insert_resource::<GameInfo>(GameInfo {
             game_type: self.game_type,
             type_registry: self.type_registry,
-            systems_schedule: Default::default(),
+            systems_schedule: self.systems_schedule,
         });
     }
 }
