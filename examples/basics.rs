@@ -1,4 +1,4 @@
-﻿use bevy::prelude::{App, World};
+﻿use bevy::prelude::{App, Schedule, World};
 use bevy::MinimalPlugins;
 use bevy_ggf::game_core::runner::GameRunner;
 use bevy_ggf::game_core::{GameBuilder, GameType};
@@ -16,12 +16,15 @@ fn main() {
 }
 
 #[derive(Default)]
-pub struct TestRunner {}
+pub struct TestRunner {
+    schedule: Schedule,
+}
 impl GameRunner for TestRunner {
     fn simulate_game(&mut self, world: &mut World) {
-        todo!()
+        self.schedule.run_once(world);
     }
 }
+
 /*
 TerrainType {
 name: "Forest",

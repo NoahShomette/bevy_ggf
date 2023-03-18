@@ -5,15 +5,15 @@ pub mod defaults;
 
 use crate::game_core::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
 use crate::game_core::runner::GameRunner;
-use crate::game_core::{GameBuilder, GameData, GameInfo};
+use crate::game_core::GameBuilder;
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
 use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter,
-    IntoSystemDescriptor, Mut, Plugin, Query, ResMut, Resource, StageLabel, SystemStage, World,
+    info, App, Bundle, Component, Entity, EventWriter, IntoSystemDescriptor, Mut, Plugin, Query,
+    Resource, StageLabel, SystemStage, World,
 };
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
