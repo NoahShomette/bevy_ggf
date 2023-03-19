@@ -40,7 +40,7 @@ impl BaseAttackPower for ObjectAP {
         let Some(object_info) = world.get::<ObjectInfo>(opponent_entity) else {
             return self.default_attack_power;
         };
-        let Some(ap) = self.attack_power.get(object_info.object_type) else {
+        let Some(ap) = self.attack_power.get(&object_info.object_type) else {
             return self.default_attack_power;
         };
         return *ap;

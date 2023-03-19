@@ -11,7 +11,6 @@ use crate::mapping::BggfMappingPlugin;
 use crate::movement::BggfMovementPlugin;
 use bevy::app::{App, Plugin, PluginGroupBuilder};
 use bevy::prelude::PluginGroup;
-use iyes_loopless::prelude::AppLooplessStateExt;
 
 pub mod combat;
 pub mod mapping;
