@@ -82,7 +82,6 @@ pub trait MapCommandsExt {
         tile_map_size: TilemapSize,
         tilemap_type: TilemapType,
         tilemap_tile_size: TilemapTileSize,
-        map_texture_handle: Handle<Image>,
         map_terrain_vec: Vec<TerrainType>,
         tile_stack_rules: TileObjectStackingRules,
     ) -> SpawnRandomMap;
@@ -94,7 +93,6 @@ impl MapCommandsExt for GameCommands {
         tile_map_size: TilemapSize,
         tilemap_type: TilemapType,
         tilemap_tile_size: TilemapTileSize,
-        map_texture_handle: Handle<Image>,
         map_terrain_type_vec: Vec<TerrainType>,
         tile_stack_rules: TileObjectStackingRules,
     ) -> SpawnRandomMap {
@@ -102,7 +100,6 @@ impl MapCommandsExt for GameCommands {
             tile_map_size,
             tilemap_type,
             tilemap_tile_size,
-            map_texture_handle: map_texture_handle.clone(),
             map_terrain_type_vec: map_terrain_type_vec.clone(),
             tile_stack_rules: tile_stack_rules.clone(),
             spawned_map_id: None,
@@ -111,7 +108,6 @@ impl MapCommandsExt for GameCommands {
             tile_map_size,
             tilemap_type,
             tilemap_tile_size,
-            map_texture_handle,
             map_terrain_type_vec,
             tile_stack_rules,
             spawned_map_id: None,
@@ -124,7 +120,6 @@ pub struct SpawnRandomMap {
     tile_map_size: TilemapSize,
     tilemap_type: TilemapType,
     tilemap_tile_size: TilemapTileSize,
-    map_texture_handle: Handle<Image>,
     map_terrain_type_vec: Vec<TerrainType>,
     tile_stack_rules: TileObjectStackingRules,
     spawned_map_id: Option<MapId>,
@@ -181,17 +176,7 @@ impl GameCommand for SpawnRandomMap {
 
         world
             .entity_mut(tilemap_entity)
-            .insert(TilemapBundle {
-                grid_size,
-                map_type,
-                size: map_size,
-                storage: tile_storage,
-                texture: TilemapTexture::Single(self.map_texture_handle.clone_weak()),
-                tile_size,
-                transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
-                frustum_culling: FrustumCulling(true),
-                ..Default::default()
-            })
+            .insert((grid_size, map_type, map_size, tile_storage, tile_size))
             .insert(Map {
                 tilemap_type,
                 map_size,
@@ -227,6 +212,31 @@ impl GameCommand for SpawnRandomMap {
         world.resource_mut::<MapIdProvider>().remove_last_id();
 
         return Ok(());
+    }
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Component,
+    Debug,
+    Default,
+    Hash,
+    Eq,
+    PartialOrd,
+    PartialEq,
+    Ord,
+    Reflect,
+    FromReflect,
+)]
+pub struct GridPos {
+    pub x: u32,
+    pub y: u32,
+}
+
+impl From<TilePos> for GridPos {
+    fn from(value: TilePos) -> Self {
+        todo!()
     }
 }
 

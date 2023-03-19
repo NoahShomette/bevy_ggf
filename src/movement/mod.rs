@@ -5,6 +5,7 @@ pub mod defaults;
 
 use crate::game_core::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
 use crate::game_core::runner::GameRunner;
+use crate::game_core::state::StateSystems;
 use crate::game_core::GameBuilder;
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
@@ -12,8 +13,8 @@ use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    info, App, Bundle, Component, Entity, EventWriter, IntoSystemDescriptor, Mut, Plugin, Query,
-    Resource, StageLabel, SystemStage, World,
+    apply_system_buffers, info, App, Bundle, Component, Entity, EventWriter, IntoSystemConfig,
+    IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Resource, SystemSet, World,
 };
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
@@ -77,12 +78,16 @@ where
         self.game_world
             .insert_resource(TerrainMovementCosts::from_vec(tile_movement_costs));
         self.systems_schedule
-            .add_stage(MovementSystems, SystemStage::parallel());
+            .configure_sets((MovementSystems::Parallel, MovementSystems::CommandFlush).chain())
+            .add_system(apply_system_buffers.in_set(MovementSystems::CommandFlush));
     }
 }
 
-#[derive(StageLabel)]
-pub struct MovementSystems;
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+pub enum MovementSystems {
+    Parallel,
+    CommandFlush,
+}
 
 /// An extension trait for [GameCommands] with movement related commands.
 pub trait MoveCommandsExt {
@@ -727,17 +732,14 @@ fn test_terrain_rules() {
     const TERRAIN_TYPES: &'static [TerrainType] = &[
         TerrainType {
             name: "Grassland",
-            texture_index: 0,
             terrain_class: &TERRAIN_CLASSES[0],
         },
         TerrainType {
             name: "Forest",
-            texture_index: 1,
             terrain_class: &TERRAIN_CLASSES[0],
         },
         TerrainType {
             name: "Mountain",
-            texture_index: 2,
             terrain_class: &TERRAIN_CLASSES[0],
         },
     ];

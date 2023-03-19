@@ -2,20 +2,16 @@
 
 use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use crate::game_core::runner::GameRunner;
-use crate::mapping::tiles::Tile;
-use crate::movement::defaults::{MoveCheckAllowedTile, MoveCheckSpace, SquareMovementCalculator};
-use crate::movement::{
-    DiagonalMovement, MovementCalculator, MovementSystem, TileMoveCheckMeta, TileMoveChecks,
-};
-use crate::object::ObjectIdProvider;
+use crate::game_core::state::{GameStateHandler, get_state_diff, StateEvents, StateSystems};
+use crate::movement::MovementSystems;
+use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType};
 use bevy::app::{App, Plugin};
-use bevy::prelude::{
-    Children, Component, Parent, ReflectComponent, ReflectResource, Resource, Schedule, World,
-};
+use bevy::prelude::{apply_system_buffers, Children, Component, IntoSystemSetConfig, IntoSystemConfig, Parent, ReflectComponent, ReflectResource, Resource, Schedule, World};
 use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRegistryInternal};
-use bevy_ecs_tilemap::prelude::TilemapType;
+use bevy_ecs_tilemap::tiles::TilePos;
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
+use std::default::Default;
 use std::sync::Arc;
 
 pub mod command;
@@ -34,18 +30,21 @@ pub enum GameType {
     Local,
 }
 
-#[derive(Debug, Resource)]
+/// Meta information on the game.
+#[derive(Resource)]
 pub struct GameInfo {
     pub game_type: GameType,
     pub type_registry: TypeRegistry,
+    /// Holds
     pub systems_schedule: Schedule,
 }
 
 impl GameInfo {}
 
-#[derive(Debug, Resource)]
+#[derive(Resource)]
 pub struct GameData {
     pub game_world: World,
+    pub game_state_handler: GameStateHandler,
 }
 
 impl GameData {}
@@ -58,9 +57,16 @@ where
     pub game_runner: T,
 }
 
-impl<T> GameRuntime<T> where T: GameRunner {}
+impl<T> GameRuntime<T>
+where
+    T: GameRunner,
+{
+    pub fn simulate(&mut self, mut game_data: &mut GameData) {
+        self.game_runner.simulate_game(&mut game_data.game_world);
+    }
+}
 
-#[derive(Debug, Resource)]
+#[derive(Resource)]
 pub struct GameBuilder<GR>
 where
     GR: GameRunner + 'static,
@@ -141,12 +147,21 @@ where
                 // The user can still register any custom types with `register_rollback_type()`.
                 r.register::<Parent>();
                 r.register::<Children>();
+
+                r.register::<TilePos>();
+
+                //defaults
+                r.register::<ObjectId>();
+                r.register::<ObjectClass>();
+                r.register::<ObjectGroup>();
+                r.register::<ObjectType>();
+
                 r
             })),
         }
     }
 
-    pub fn register_component<Type>(mut self) -> Self
+    pub fn register_component<Type>(self) -> Self
     where
         Type: GetTypeRegistration + Reflect + Default + Component,
     {
@@ -159,7 +174,7 @@ where
         self
     }
 
-    pub fn register_resource<Type>(mut self) -> Self
+    pub fn register_resource<Type>(self) -> Self
     where
         Type: GetTypeRegistration + Reflect + Default + Resource,
     {
@@ -173,17 +188,26 @@ where
     }
 
     pub fn default_setup_schedule() -> Schedule {
-        Schedule::default()
+        let mut schedule = Schedule::default();
+        
+        
+        schedule
+            .configure_sets((StateSystems::CommandFlush, StateSystems::State))
+            .add_system(apply_system_buffers.in_set(StateSystems::CommandFlush))
+            .add_system(get_state_diff.after(StateSystems::State));
+
+        schedule
     }
 
     pub fn build(mut self, mut world: &mut World) {
-        self.setup_schedule.run_once(&mut self.game_world);
+        self.setup_schedule.run(&mut self.game_world);
 
         world.insert_resource::<GameRuntime<GR>>(GameRuntime {
             game_runner: self.game_runner,
         });
         world.insert_resource::<GameData>(GameData {
             game_world: self.game_world,
+            game_state_handler: Default::default(),
         });
         world.insert_resource::<GameInfo>(GameInfo {
             game_type: self.game_type,
