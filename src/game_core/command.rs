@@ -277,10 +277,15 @@ impl GameCommands {
     /// succeed to the history. If commands dont succeed they are silently failed.
     pub fn execute_buffer(&mut self, world: &mut World) {
         for mut command in self.queue.queue.drain(..).into_iter() {
-            if let Ok(_) = command.command.execute(world) {
-                self.history.push(command);
-            } else {
-                info!("execution failed ");
+            match command.command.execute(world) {
+                Ok(_) => {
+                    self.history.push(command);
+
+                }
+                Err(error) => {
+                    info!("execution failed with: {:?}", error);
+
+                }
             }
             self.history.clear_rollback_history();
         }
@@ -556,12 +561,12 @@ impl GameCommand for AddObjectToTile {
             object_query
                 .iter_mut()
                 .find(|(id, _, _)| id == &&self.object_game_id) else {
-            return Err(String::from(format!("No Object Components found for GameId: {:?}", self.object_game_id)));
+            return Err(String::from(format!("No Object Components found for ObjectId: {:?}", self.object_game_id)));
         };
         let Some((entity, _, tile_storage, _)) = tile_storage_query
             .iter_mut()
             .find(|(_, id, _, _)| id == &&self.on_map) else {
-            return Err(String::from(format!("No Map Components found for GameId: {:?}", self.on_map)));
+            return Err(String::from(format!("No Map Components found for ObjectId: {:?}", self.on_map)));
         };
 
         let tile_entity = tile_storage.get(&self.tile_pos).unwrap();

@@ -11,7 +11,11 @@ use crate::mapping::MapId;
 use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{ReflectComponent, info, App, Bundle, Component, Entity, EventWriter, IntoSystemConfig, IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Resource, SystemSet, World, Reflect};
+use bevy::prelude::{
+    info, App, Bundle, Component, Entity, EventWriter, Events, IntoSystemConfig,
+    IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Reflect, ReflectComponent,
+    Resource, SystemSet, World,
+};
 use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
@@ -66,6 +70,8 @@ where
             map_type,
             tile_move_checks: TileMoveChecks { tile_move_checks },
         });
+
+      
     }
 
     fn setup_movement(&mut self, tile_movement_costs: Vec<(TerrainType, TileMovementCosts)>)
@@ -74,12 +80,9 @@ where
     {
         self.game_world
             .insert_resource(TerrainMovementCosts::from_vec(tile_movement_costs));
-        /*
-        self.systems_schedule
-            .configure_sets((MovementSystems::Parallel, MovementSystems::CommandFlush).chain())
-            .add_system(apply_system_buffers.in_set(MovementSystems::CommandFlush));
-            
-         */
+        
+        self.game_world.init_resource::<Events<MoveEvent>>();
+        self.game_world.init_resource::<Events<MoveError>>();
     }
 }
 
@@ -625,7 +628,7 @@ impl ObjectTypeMovementRules {
     /// Helper function to create a hashmap of [`ObjectType`] rules for Object Movement.
     pub fn new_type_rules_hashmaps(
         type_rules: Vec<(ObjectType, bool)>,
-    ) -> HashMap< ObjectType, bool> {
+    ) -> HashMap<ObjectType, bool> {
         let mut type_hashmap: HashMap<ObjectType, bool> = HashMap::new();
 
         for rule in type_rules.iter() {
@@ -714,9 +717,7 @@ impl ObjectTerrainMovementRules {
     }
 
     /// Helper function to create a hashmap of [`TerrainType`] rules for Object Movement.
-    pub fn new_terrain_type_rules(
-        rules: Vec<(TerrainType, bool)>,
-    ) -> HashMap<TerrainType, bool> {
+    pub fn new_terrain_type_rules(rules: Vec<(TerrainType, bool)>) -> HashMap<TerrainType, bool> {
         let mut hashmap: HashMap<TerrainType, bool> = HashMap::new();
         for rule in rules.iter() {
             hashmap.insert(rule.0.clone(), rule.1);
@@ -728,8 +729,12 @@ impl ObjectTerrainMovementRules {
 #[test]
 fn test_terrain_rules() {
     let TERRAIN_CLASSES: Vec<TerrainClass> = vec![
-        TerrainClass { name: String::from("Ground") },
-        TerrainClass { name: String::from("Water") },
+        TerrainClass {
+            name: String::from("Ground"),
+        },
+        TerrainClass {
+            name: String::from("Water"),
+        },
     ];
 
     let TERRAIN_TYPES: Vec<TerrainType> = vec![

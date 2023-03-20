@@ -220,7 +220,7 @@ pub struct GameObjectInfo {
 }
 
 /// The position of the Object on the Tilemap.
-#[derive(Component, Clone, Reflect)]
+#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect)]
 pub struct ObjectGridPosition {
     pub tile_position: TilePos,
 }

@@ -1,5 +1,5 @@
 ﻿use crate::mapping::tiles::Tile;
-use crate::object::{Object, ObjectId};
+use crate::object::{Object, ObjectGridPosition, ObjectId};
 use crate::team::PlayerId;
 use bevy::prelude::{
     apply_system_buffers, FromReflect, Reflect, ReflectComponent, Schedule, SystemSet, World,
@@ -37,7 +37,7 @@ impl GameStateHandler {
         for archetype in world.archetypes().iter() {
             for entity in archetype.entities() {
                 let entity_id = entity.entity();
-                
+
                 // tiles
                 if let Some(tile) = world.get::<Tile>(entity_id) {
                     let mut components: Vec<Box<dyn Reflect>> = vec![];
@@ -63,16 +63,15 @@ impl GameStateHandler {
                             tile_pos: *tile_pos,
                             components,
                         })
-                    } else{
+                    } else {
                         state.push(StateThing::Tile {
                             change_type: ChangeType::NoChange,
                             tile_pos: Default::default(),
                             components,
                         })
                     }
-                      
                 }
-                
+
                 if let Some(object_id) = world.get::<ObjectId>(entity_id) {
                     let mut components: Vec<Box<dyn Reflect>> = vec![];
                     // fill the component vectors of rollback entities
@@ -91,22 +90,21 @@ impl GameStateHandler {
                         }
                     }
 
-                    if let Some(tile_pos) = world.get::<TilePos>(entity_id) {
+                    if let Some(tile_pos) = world.get::<ObjectGridPosition>(entity_id) {
                         state.push(StateThing::Object {
                             change_type: ChangeType::NoChange,
                             object_id: *object_id,
-                            tile_pos: *tile_pos,
                             components,
+                            object_grid_position: *tile_pos,
                         })
-                    } else{
+                    } else {
                         state.push(StateThing::Object {
                             change_type: ChangeType::NoChange,
                             object_id: *object_id,
-                            tile_pos: Default::default(),
                             components,
+                            object_grid_position: Default::default(),
                         })
                     }
-
                 }
             }
         }
@@ -137,7 +135,7 @@ pub enum StateThing {
     Object {
         change_type: ChangeType,
         object_id: ObjectId,
-        tile_pos: TilePos,
+        object_grid_position: ObjectGridPosition,
         components: Vec<Box<dyn Reflect>>,
     },
     Tile {

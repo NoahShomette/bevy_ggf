@@ -7,11 +7,13 @@ use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStacks, TileObjects,
 };
-use crate::movement::TerrainMovementCosts;
+use crate::movement::{MoveError, MoveEvent, MovementCalculator, MovementSystem, TerrainMovementCosts, TileMoveCheckMeta, TileMoveChecks, TileMovementCosts};
 use bevy::ecs::system::SystemState;
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
+use crate::game_core::GameBuilder;
+use crate::game_core::runner::GameRunner;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -21,6 +23,26 @@ impl Plugin for BggfMappingPlugin {
         app.add_event::<MapSpawned>()
             .add_event::<MapDeSpawned>()
             .insert_resource(MapIdProvider::default());
+    }
+}
+
+pub trait GameBuilderMappingExt {
+    fn setup_mapping(&mut self)
+        where
+            Self: Sized;
+}
+
+impl<T: GameRunner + 'static> GameBuilderMappingExt for GameBuilder<T>
+    where
+        T: GameRunner + 'static,
+{
+    
+    fn setup_mapping(&mut self)
+        where
+            Self: Sized,
+    {
+        self.game_world.init_resource::<Events<MapSpawned>>();
+        self.game_world.init_resource::<Events<MapDeSpawned>>();
     }
 }
 
@@ -170,7 +192,7 @@ impl GameCommand for SpawnRandomMap {
             map_id_provider.next_id_component()
         });
 
-        //world.send_event::<MapSpawned>(MapSpawned { map_id: id });
+        world.send_event::<MapSpawned>(MapSpawned { map_id: id });
 
         world
             .entity_mut(tilemap_entity)
