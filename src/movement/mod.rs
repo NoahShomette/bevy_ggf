@@ -5,17 +5,14 @@ pub mod defaults;
 
 use crate::game_core::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
 use crate::game_core::runner::GameRunner;
-use crate::game_core::state::StateSystems;
 use crate::game_core::GameBuilder;
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
 use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{
-    apply_system_buffers, info, App, Bundle, Component, Entity, EventWriter, IntoSystemConfig,
-    IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Resource, SystemSet, World,
-};
+use bevy::prelude::{ReflectComponent, info, App, Bundle, Component, Entity, EventWriter, IntoSystemConfig, IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Resource, SystemSet, World, Reflect};
+use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
 
@@ -77,9 +74,12 @@ where
     {
         self.game_world
             .insert_resource(TerrainMovementCosts::from_vec(tile_movement_costs));
+        /*
         self.systems_schedule
             .configure_sets((MovementSystems::Parallel, MovementSystems::CommandFlush).chain())
             .add_system(apply_system_buffers.in_set(MovementSystems::CommandFlush));
+            
+         */
     }
 }
 
@@ -457,45 +457,46 @@ impl DiagonalMovement {
 /// with the key being the name given to the MovementType
 #[derive(Clone, Eq, PartialEq, Debug, Resource)]
 pub struct MovementTypes {
-    pub movement_types: HashMap<&'static str, MovementType>,
+    pub movement_types: HashMap<String, MovementType>,
 }
 
 impl MovementTypes {
     pub fn insert(&mut self, movement_type: MovementType) {
         self.movement_types
-            .insert(movement_type.name, movement_type);
+            .insert(movement_type.name.clone(), movement_type.clone());
     }
 
     pub fn insert_vec(&mut self, movement_types: Vec<MovementType>) {
         for movement_type in movement_types {
             self.movement_types
-                .insert(movement_type.name, movement_type);
+                .insert(movement_type.name.clone(), movement_type.clone());
         }
     }
 }
 
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
+#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
 pub struct MovementType {
-    pub name: &'static str,
+    pub name: String,
 }
 
 /// Component that must be added to a tile in order to define that tiles movement cost.
 ///
 /// Contains a hashmap that holds a reference to a [`MovementType`] as a key and a u32 as the value. The u32 is used
 /// in pathfinding as the cost to move into that tile.
-#[derive(Clone, Eq, PartialEq, Debug, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct TileMovementCosts {
-    pub movement_type_cost: HashMap<&'static MovementType, u32>,
+    pub movement_type_cost: HashMap<MovementType, u32>,
 }
 
 impl TileMovementCosts {
     /// Helper function to create a hashmap of TerrainType rules for Object Movement.
-    pub fn new(rules: Vec<(&'static MovementType, u32)>) -> TileMovementCosts {
-        let mut hashmap: HashMap<&'static MovementType, u32> = HashMap::new();
+    pub fn new(rules: Vec<(MovementType, u32)>) -> TileMovementCosts {
+        let mut hashmap: HashMap<MovementType, u32> = HashMap::new();
         for rule in rules.iter() {
-            hashmap.insert(rule.0, rule.1);
+            hashmap.insert(rule.0.clone(), rule.1);
         }
         TileMovementCosts {
             movement_type_cost: hashmap,
@@ -542,10 +543,11 @@ pub struct ObjectMovementBundle {
 /// **object_terrain_movement_rules** - defines a list of rules based on TerrainType and TerrainClass
 /// that the object follows. If you want to declare movement rules based on the type of object that
 /// is in the tile that is getting checked, use ObjectTypeMovementRules
-#[derive(Clone, Eq, PartialEq, Debug, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
-    pub movement_type: &'static MovementType,
+    pub movement_type: MovementType,
     pub object_terrain_movement_rules: ObjectTerrainMovementRules,
 }
 
@@ -561,11 +563,12 @@ pub struct ObjectMovement {
 /// If using the built in [`MoveCheckAllowedTile`](defaults::MoveCheckAllowedTile) implementation,
 /// these rules ignore [`ObjectStackingClass`](crate::mapping::tiles::ObjectStackingClass).
 ///
-#[derive(Clone, Eq, PartialEq, Debug, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct ObjectTypeMovementRules {
-    object_class_rules: HashMap<&'static ObjectClass, bool>,
-    object_group_rules: HashMap<&'static ObjectGroup, bool>,
-    object_type_rules: HashMap<&'static ObjectType, bool>,
+    object_class_rules: HashMap<ObjectClass, bool>,
+    object_group_rules: HashMap<ObjectGroup, bool>,
+    object_type_rules: HashMap<ObjectType, bool>,
 }
 
 impl ObjectTypeMovementRules {
@@ -574,16 +577,16 @@ impl ObjectTypeMovementRules {
     /// bool fed in with the corresponding object info controls whether the object that has this component
     /// is allowed to move onto the given tile.
     pub fn new(
-        object_class_rules: Vec<(&'static ObjectClass, bool)>,
-        object_group_rules: Vec<(&'static ObjectGroup, bool)>,
-        object_type_rules: Vec<(&'static ObjectType, bool)>,
+        object_class_rules: Vec<(ObjectClass, bool)>,
+        object_group_rules: Vec<(ObjectGroup, bool)>,
+        object_type_rules: Vec<(ObjectType, bool)>,
     ) -> ObjectTypeMovementRules {
         ObjectTypeMovementRules {
             object_class_rules: ObjectTypeMovementRules::new_class_rules_hashmaps(
-                object_class_rules,
+                object_class_rules.clone(),
             ),
             object_group_rules: ObjectTypeMovementRules::new_group_rules_hashmaps(
-                object_group_rules,
+                object_group_rules.clone(),
             ),
             object_type_rules: ObjectTypeMovementRules::new_type_rules_hashmaps(object_type_rules),
         }
@@ -621,36 +624,36 @@ impl ObjectTypeMovementRules {
 
     /// Helper function to create a hashmap of [`ObjectType`] rules for Object Movement.
     pub fn new_type_rules_hashmaps(
-        type_rules: Vec<(&'static ObjectType, bool)>,
-    ) -> HashMap<&'static ObjectType, bool> {
-        let mut type_hashmap: HashMap<&'static ObjectType, bool> = HashMap::new();
+        type_rules: Vec<(ObjectType, bool)>,
+    ) -> HashMap< ObjectType, bool> {
+        let mut type_hashmap: HashMap<ObjectType, bool> = HashMap::new();
 
         for rule in type_rules.iter() {
-            type_hashmap.insert(rule.0, rule.1);
+            type_hashmap.insert(rule.0.clone(), rule.1);
         }
         type_hashmap
     }
 
     /// Helper function to create a hashmap of [`ObjectGroup`] rules for Object Movement.
     pub fn new_group_rules_hashmaps(
-        group_rules: Vec<(&'static ObjectGroup, bool)>,
-    ) -> HashMap<&'static ObjectGroup, bool> {
-        let mut group_hashmap: HashMap<&'static ObjectGroup, bool> = HashMap::new();
+        group_rules: Vec<(ObjectGroup, bool)>,
+    ) -> HashMap<ObjectGroup, bool> {
+        let mut group_hashmap: HashMap<ObjectGroup, bool> = HashMap::new();
 
         for rule in group_rules.iter() {
-            group_hashmap.insert(rule.0, rule.1);
+            group_hashmap.insert(rule.0.clone(), rule.1);
         }
         group_hashmap
     }
 
     /// Helper function to create a hashmap of [`ObjectClass`] rules for Object Movement.
     pub fn new_class_rules_hashmaps(
-        class_rules: Vec<(&'static ObjectClass, bool)>,
-    ) -> HashMap<&'static ObjectClass, bool> {
-        let mut class_hashmap: HashMap<&'static ObjectClass, bool> = HashMap::new();
+        class_rules: Vec<(ObjectClass, bool)>,
+    ) -> HashMap<ObjectClass, bool> {
+        let mut class_hashmap: HashMap<ObjectClass, bool> = HashMap::new();
 
         for rule in class_rules.iter() {
-            class_hashmap.insert(rule.0, rule.1);
+            class_hashmap.insert(rule.0.clone(), rule.1);
         }
 
         class_hashmap
@@ -672,17 +675,17 @@ impl ObjectTypeMovementRules {
 /// added to terrain_class_rules denotes that the object can move onto any TerrainTypes that has a reference
 /// to that TerrainClass.
 ///
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Reflect, FromReflect)]
 pub struct ObjectTerrainMovementRules {
-    terrain_class_rules: Vec<&'static TerrainClass>,
-    terrain_type_rules: HashMap<&'static TerrainType, bool>,
+    terrain_class_rules: Vec<TerrainClass>,
+    terrain_type_rules: HashMap<TerrainType, bool>,
 }
 
 impl ObjectTerrainMovementRules {
     /// Creates a new [`ObjectTerrainMovementRules`] from the provided [`TerrainClass`] vec and [`TerrainType`] rules
     pub fn new(
-        terrain_classes: Vec<&'static TerrainClass>,
-        terrain_type_rules: Vec<(&'static TerrainType, bool)>,
+        terrain_classes: Vec<TerrainClass>,
+        terrain_type_rules: Vec<(TerrainType, bool)>,
     ) -> ObjectTerrainMovementRules {
         ObjectTerrainMovementRules {
             terrain_class_rules: terrain_classes,
@@ -707,16 +710,16 @@ impl ObjectTerrainMovementRules {
         }
 
         self.terrain_class_rules
-            .contains(&tile_terrain_info.terrain_type.terrain_class)
+            .contains(&&tile_terrain_info.terrain_type.terrain_class)
     }
 
     /// Helper function to create a hashmap of [`TerrainType`] rules for Object Movement.
     pub fn new_terrain_type_rules(
-        rules: Vec<(&'static TerrainType, bool)>,
-    ) -> HashMap<&'static TerrainType, bool> {
-        let mut hashmap: HashMap<&'static TerrainType, bool> = HashMap::new();
+        rules: Vec<(TerrainType, bool)>,
+    ) -> HashMap<TerrainType, bool> {
+        let mut hashmap: HashMap<TerrainType, bool> = HashMap::new();
         for rule in rules.iter() {
-            hashmap.insert(rule.0, rule.1);
+            hashmap.insert(rule.0.clone(), rule.1);
         }
         hashmap
     }
@@ -724,32 +727,32 @@ impl ObjectTerrainMovementRules {
 
 #[test]
 fn test_terrain_rules() {
-    const TERRAIN_CLASSES: &'static [TerrainClass] = &[
-        TerrainClass { name: "Ground" },
-        TerrainClass { name: "Water" },
+    let TERRAIN_CLASSES: Vec<TerrainClass> = vec![
+        TerrainClass { name: String::from("Ground") },
+        TerrainClass { name: String::from("Water") },
     ];
 
-    const TERRAIN_TYPES: &'static [TerrainType] = &[
+    let TERRAIN_TYPES: Vec<TerrainType> = vec![
         TerrainType {
-            name: "Grassland",
-            terrain_class: &TERRAIN_CLASSES[0],
+            name: String::from("Grassland"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
         },
         TerrainType {
-            name: "Forest",
-            terrain_class: &TERRAIN_CLASSES[0],
+            name: String::from("Forest"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
         },
         TerrainType {
-            name: "Mountain",
-            terrain_class: &TERRAIN_CLASSES[0],
+            name: String::from("Mountain"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
         },
     ];
     let movement_rules = ObjectTerrainMovementRules::new(
-        vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
-        vec![(&TERRAIN_TYPES[2], false)],
+        vec![TERRAIN_CLASSES[0].clone(), TERRAIN_CLASSES[1].clone()],
+        vec![(TERRAIN_TYPES[2].clone(), false)],
     );
 
     let tile_terrain_info = TileTerrainInfo {
-        terrain_type: TERRAIN_TYPES[2],
+        terrain_type: TERRAIN_TYPES[2].clone(),
     };
 
     // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2]

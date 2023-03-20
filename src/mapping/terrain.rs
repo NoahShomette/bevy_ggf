@@ -17,25 +17,27 @@
 //
 //
 
-use bevy::prelude::Component;
+use bevy::prelude::{Component, ReflectComponent};
+use bevy::reflect::{FromReflect, Reflect};
 
 /// Component holding the tile terrain info needed by any built in logic.
 /// Terrain type
-#[derive(Component)]
+#[derive(Default, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct TileTerrainInfo {
     pub terrain_type: TerrainType,
 }
 
 /// Defines a new TerrainClass representing a category of [`TerrainType`]s. Used to specify different
 /// class or categories of terrain. Eg Ground, Water, Etc
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
 pub struct TerrainClass {
-    pub name: &'static str,
+    pub name: String,
 }
 
 /// Defines a new TerrainType that is considered a derivative of the assigned terrain_class
-#[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
+#[derive(Default, Clone, Hash, Eq, PartialEq, Debug, Reflect, FromReflect)]
 pub struct TerrainType {
-    pub name: &'static str,
-    pub terrain_class: &'static TerrainClass,
+    pub name: String,
+    pub terrain_class: TerrainClass,
 }

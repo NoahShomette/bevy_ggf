@@ -34,7 +34,7 @@ pub fn tile_movement_cost_check(
         if (move_from_tile_node.move_cost.unwrap()
             + *tile_movement_costs
                 .movement_type_cost
-                .get(object_movement.movement_type)
+                .get(&object_movement.movement_type)
                 .unwrap_or(&1) as i32)
             < (tile_node.move_cost.unwrap())
         {
@@ -42,7 +42,7 @@ pub fn tile_movement_cost_check(
                 move_from_tile_node.move_cost.unwrap()
                     + *tile_movement_costs
                         .movement_type_cost
-                        .get(object_movement.movement_type)
+                        .get(&object_movement.movement_type)
                         .unwrap_or(&1) as i32,
             );
             tile_node.prior_node = move_from_tile_node.node_pos;
@@ -53,7 +53,7 @@ pub fn tile_movement_cost_check(
     } else if (move_from_tile_node.move_cost.unwrap()
         + *tile_movement_costs
             .movement_type_cost
-            .get(object_movement.movement_type)
+            .get(&object_movement.movement_type)
             .unwrap_or(&1) as i32)
         <= object_movement.move_points
     {
@@ -61,7 +61,7 @@ pub fn tile_movement_cost_check(
             move_from_tile_node.move_cost.unwrap()
                 + *tile_movement_costs
                     .movement_type_cost
-                    .get(object_movement.movement_type)
+                    .get(&object_movement.movement_type)
                     .unwrap_or(&1) as i32,
         );
         tile_node.prior_node = move_from_tile_node.node_pos;

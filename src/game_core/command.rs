@@ -56,9 +56,9 @@
 //!
 //! ```
 
-use crate::game_core::{GameInfo, GameType, ObjectIdProvider};
+use crate::game_core::{Game, ObjectIdProvider};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
-use crate::mapping::{MapId};
+use crate::mapping::MapId;
 use crate::object::{Object, ObjectGridPosition, ObjectId};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
@@ -270,13 +270,27 @@ impl GameCommands {
 
     /// Drains the command buffer and attempts to execute each command. Will only push commands that
     /// succeed to the history. If commands dont succeed they are silently failed.
+    pub fn execute_buffer(&mut self, world: &mut World) {
+        for mut command in self.queue.queue.drain(..).into_iter() {
+            if let Ok(_) = command.command.execute(world) {
+                self.history.push(command);
+            } else {
+                info!("execution failed ");
+            }
+            self.history.clear_rollback_history();
+        }
+    }
+
+    /// Drains the command buffer and attempts to execute each command. Will only push commands that
+    /// succeed to the history. If commands dont succeed they are silently failed.
     /// If [`Game`].game_type is set to Networked: Automatically checks if the new commands occured
     /// before any old commands and will rollback the world and then replay commands to ensure proper
     /// timeline
-    pub fn execute_buffer(&mut self, world: &mut World) {
+    fn execute_buffer_options(&mut self, world: &mut World) {
         let mut temp_rb_commands: Vec<GameCommandMeta> = vec![];
         for mut command in self.queue.queue.drain(..).into_iter() {
-            match world.resource::<GameInfo>().game_type {
+            /*
+            match world.resource::<Game>().game_type {
                 GameType::Networked => {
                     let mut amount_to_rollback = 0;
                     'old_check: for old_command in self.history.history.iter().rev() {
@@ -325,6 +339,8 @@ impl GameCommands {
                     }
                 }
             }
+            
+             */
 
             self.history.clear_rollback_history();
         }

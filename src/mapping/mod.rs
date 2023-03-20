@@ -145,7 +145,7 @@ impl GameCommand for SpawnRandomMap {
                         .spawn(BggfTileBundle {
                             tile: Tile,
                             tile_terrain_info: TileTerrainInfo {
-                                terrain_type: self.map_terrain_type_vec[0],
+                                terrain_type: self.map_terrain_type_vec[0].clone(),
                             },
                             tile_pos,
                             tilemap_id: TilemapId(tilemap_entity),

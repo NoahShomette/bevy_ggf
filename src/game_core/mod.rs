@@ -2,19 +2,26 @@
 
 use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use crate::game_core::runner::GameRunner;
-use crate::game_core::state::{GameStateHandler, get_state_diff, StateEvents, StateSystems};
-use crate::movement::MovementSystems;
+use crate::game_core::state::{get_state_diff, GameStateHandler, StateEvents, StateSystems, StateThing};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType};
-use bevy::app::{App, Plugin};
-use bevy::prelude::{apply_system_buffers, Children, Component, IntoSystemSetConfig, IntoSystemConfig, Parent, ReflectComponent, ReflectResource, Resource, Schedule, World};
+use bevy::app::{App, CoreSchedule, Plugin};
+use bevy::prelude::{
+    apply_system_buffers, Children, Component, FixedTime, IntoSystemAppConfig, IntoSystemConfig,
+    Parent, ReflectComponent, ReflectResource, ResMut, Resource, Schedule, World,
+};
 use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRegistryInternal};
 use bevy_ecs_tilemap::tiles::TilePos;
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use std::default::Default;
 use std::sync::Arc;
+use crate::mapping::MapIdProvider;
+use crate::mapping::terrain::TileTerrainInfo;
+use crate::mapping::tiles::{Tile, TileObjects, TileObjectStackingRules};
+use crate::movement::TileMovementCosts;
 
 pub mod command;
+pub mod requests;
 pub mod runner;
 pub mod state;
 
@@ -24,31 +31,32 @@ impl Plugin for BggfGamePlugin {
     fn build(&self, app: &mut App) {}
 }
 
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
-pub enum GameType {
-    Networked,
-    Local,
-}
-
-/// Meta information on the game.
+/// Resource that is inserted into the game world to allow access in game systems
 #[derive(Resource)]
-pub struct GameInfo {
-    pub game_type: GameType,
+pub struct GameTypeRegistry {
     pub type_registry: TypeRegistry,
-    /// Holds
-    pub systems_schedule: Schedule,
 }
 
-impl GameInfo {}
-
+/// Holds all the actual game information
 #[derive(Resource)]
-pub struct GameData {
+pub struct Game {
+    /// A world that should hold all game state
     pub game_world: World,
+    /// Holds component and resource registrations that will be diffed and updated
+    pub type_registry: TypeRegistry,
+    /// Holds updates to the game state
     pub game_state_handler: GameStateHandler,
 }
 
-impl GameData {}
+impl Game {
+    pub fn get_new_state(&mut self) -> Vec<StateThing> {
+        self.game_state_handler.get_state(&mut self.game_world, &self.type_registry)
+    }
 
+    pub fn execute_game_commands(&mut self) {}
+}
+
+/// Runtime that is implemented by the user to drive their game
 #[derive(Debug, Resource)]
 pub struct GameRuntime<T>
 where
@@ -61,21 +69,20 @@ impl<T> GameRuntime<T>
 where
     T: GameRunner,
 {
-    pub fn simulate(&mut self, mut game_data: &mut GameData) {
+    pub fn simulate(&mut self, mut game_data: &mut Game) {
         self.game_runner.simulate_game(&mut game_data.game_world);
     }
 }
 
+/// GameBuilder that creates a new game and sets it up correctly
 #[derive(Resource)]
 pub struct GameBuilder<GR>
 where
     GR: GameRunner + 'static,
 {
-    pub game_type: GameType,
     pub game_runner: GR,
     pub game_world: World,
     pub setup_schedule: Schedule,
-    pub systems_schedule: Schedule,
     pub type_registry: TypeRegistry,
 }
 
@@ -83,23 +90,20 @@ impl<GR> GameBuilder<GR>
 where
     GR: GameRunner,
 {
-    pub fn new_game(game_type: GameType, game_runner: GR) -> GameBuilder<GR> {
+    pub fn new_game(game_runner: GR) -> GameBuilder<GR> {
         let mut game_world = World::new();
 
         game_world.insert_resource(GameCommands::default());
         game_world.insert_resource(ObjectIdProvider::default());
 
         GameBuilder {
-            game_type,
             game_runner,
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
-            systems_schedule: Default::default(),
             type_registry: GameBuilder::<GR>::default_registry(),
         }
     }
     pub fn new_game_with_commands(
-        game_type: GameType,
         commands: Vec<Box<dyn GameCommand>>,
         game_runner: GR,
     ) -> GameBuilder<GR> {
@@ -122,21 +126,32 @@ where
             history: Default::default(),
         });
         game_world.insert_resource(ObjectIdProvider::default());
+        game_world.insert_resource(MapIdProvider::default());
 
         GameBuilder {
-            game_type,
             game_runner,
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
-            systems_schedule: Default::default(),
             type_registry: GameBuilder::<GR>::default_registry(),
         }
     }
 
+    /// Removes the [`GameCommands`] from the game world and returns them. Make sure to reinsert the commands
+    /// after using them
+    pub fn remove_commands(&mut self) -> GameCommands {
+        self.game_world.remove_resource::<GameCommands>().unwrap()
+    }
+    
+    /// Inserts the given commands into the game world
+    pub fn insert_commands(&mut self, game_commands: GameCommands) {
+        self.game_world.insert_resource(game_commands);
+    }
+
+    /// Adds the default registry which has all the basic Bevy_GGF components and resources
     pub fn default_registry() -> TypeRegistry {
         TypeRegistry {
             internal: Arc::new(RwLock::new({
-                let mut r = TypeRegistryInternal::empty();
+                let mut r = TypeRegistryInternal::new();
                 // `Parent` and `Children` must be registered so that their `ReflectMapEntities`
                 // data may be used.
                 //
@@ -149,6 +164,13 @@ where
                 r.register::<Children>();
 
                 r.register::<TilePos>();
+                
+                // tiles
+                r.register::<Tile>();
+                r.register::<TileTerrainInfo>();
+                r.register::<TileObjectStackingRules>();
+                r.register::<TileObjects>();
+                r.register::<TileMovementCosts>();
 
                 //defaults
                 r.register::<ObjectId>();
@@ -161,6 +183,7 @@ where
         }
     }
 
+    /// Registers a component which will be tracked, updated, and reported in state events
     pub fn register_component<Type>(self) -> Self
     where
         Type: GetTypeRegistration + Reflect + Default + Component,
@@ -174,6 +197,7 @@ where
         self
     }
 
+    /// Registers a resource that will be tracked and reported as part of the state
     pub fn register_resource<Type>(self) -> Self
     where
         Type: GetTypeRegistration + Reflect + Default + Resource,
@@ -189,8 +213,7 @@ where
 
     pub fn default_setup_schedule() -> Schedule {
         let mut schedule = Schedule::default();
-        
-        
+
         schedule
             .configure_sets((StateSystems::CommandFlush, StateSystems::State))
             .add_system(apply_system_buffers.in_set(StateSystems::CommandFlush))
@@ -202,17 +225,20 @@ where
     pub fn build(mut self, mut world: &mut World) {
         self.setup_schedule.run(&mut self.game_world);
 
+        let mut commands = self.remove_commands();
+        commands.execute_buffer(&mut self.game_world);
+        self.insert_commands(commands);
+
         world.insert_resource::<GameRuntime<GR>>(GameRuntime {
             game_runner: self.game_runner,
         });
-        world.insert_resource::<GameData>(GameData {
-            game_world: self.game_world,
-            game_state_handler: Default::default(),
+        self.game_world.insert_resource(GameTypeRegistry {
+            type_registry: self.type_registry.clone(),
         });
-        world.insert_resource::<GameInfo>(GameInfo {
-            game_type: self.game_type,
+        world.insert_resource::<Game>(Game {
+            game_world: self.game_world,
             type_registry: self.type_registry,
-            systems_schedule: self.systems_schedule,
+            game_state_handler: Default::default(),
         });
     }
 }

@@ -49,8 +49,8 @@ pub const OBJECT_TYPE_BRIDGE: ObjectType = ObjectType {
     object_group: &OBJECT_GROUP_INFANTRY,
 };
 
-pub const STACKING_CLASS_GROUND: StackingClass = StackingClass { name: "Ground" };
-pub const STACKING_CLASS_BUILDING: StackingClass = StackingClass { name: "Building" };
+pub const stacking_class_ground: StackingClass = StackingClass { name: "Ground" };
+pub const stacking_class_building: StackingClass = StackingClass { name: "Building" };
 
 pub const MOVEMENT_TYPES: &'static [MovementType] = &[
     MovementType { name: "Infantry" },
@@ -214,14 +214,14 @@ fn startup(
 
     let tile_stack_rules = TileObjectStackingRules::new(vec![
         (
-            &STACKING_CLASS_GROUND,
+            &stacking_class_ground,
             TileObjectStacksCount {
                 current_count: 0,
                 max_count: 1,
             },
         ),
         (
-            &STACKING_CLASS_BUILDING,
+            &stacking_class_building,
             TileObjectStacksCount {
                 current_count: 0,
                 max_count: 1,
@@ -263,7 +263,7 @@ fn startup(
                 tile_position: TilePos::new(0, 0),
             },
             object_stacking_class: ObjectStackingClass {
-                stack_class: &STACKING_CLASS_BUILDING,
+                stack_class: &stacking_class_building,
             },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
@@ -302,7 +302,7 @@ fn startup(
                     tile_position: TilePos::new(1, 1),
                 },
                 object_stacking_class: ObjectStackingClass {
-                    stack_class: &STACKING_CLASS_GROUND,
+                    stack_class: &stacking_class_ground,
                 },
                 sprite_bundle: SpriteBundle {
                     transform: Transform {

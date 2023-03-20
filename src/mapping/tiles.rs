@@ -8,7 +8,8 @@
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
 use crate::mapping::terrain::TileTerrainInfo;
-use bevy::prelude::{Bundle, Component, Entity};
+use bevy::prelude::{Bundle, Component, Entity, ReflectComponent};
+use bevy::reflect::{FromReflect, Reflect};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TileBundle, TilemapId};
 use bevy_ecs_tilemap::tiles::TilePos;
@@ -38,7 +39,8 @@ pub struct BggfTileObjectBundle {
 }
 
 /// Marker component on map tiles for ease of query and accessing
-#[derive(Component)]
+#[derive(Default, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct Tile;
 
 /* TODO: Implement this
@@ -51,14 +53,15 @@ pub struct TileTextureIndex{
 
 /// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
 /// using an [`TileObjectStacksCount`] struct.
-#[derive(Clone, Eq, PartialEq, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct TileObjectStackingRules {
-    pub tile_object_stacking_rules: HashMap<&'static StackingClass, TileObjectStacksCount>,
+    pub tile_object_stacking_rules: HashMap<StackingClass, TileObjectStacksCount>,
 }
 
 impl TileObjectStackingRules {
     pub fn new(
-        stack_rules: Vec<(&'static StackingClass, TileObjectStacksCount)>,
+        stack_rules: Vec<(StackingClass, TileObjectStacksCount)>,
     ) -> TileObjectStackingRules {
         TileObjectStackingRules {
             tile_object_stacking_rules: TileObjectStackingRules::new_terrain_type_rules(
@@ -69,11 +72,11 @@ impl TileObjectStackingRules {
 
     /// Helper function to create a hashmap of TerrainType rules for Object Movement.
     pub fn new_terrain_type_rules(
-        stack_rules: Vec<(&'static StackingClass, TileObjectStacksCount)>,
-    ) -> HashMap<&'static StackingClass, TileObjectStacksCount> {
-        let mut hashmap: HashMap<&'static StackingClass, TileObjectStacksCount> = HashMap::new();
+        stack_rules: Vec<(StackingClass, TileObjectStacksCount)>,
+    ) -> HashMap<StackingClass, TileObjectStacksCount> {
+        let mut hashmap: HashMap<StackingClass, TileObjectStacksCount> = HashMap::new();
         for rule in stack_rules.iter() {
-            hashmap.insert(rule.0, rule.1);
+            hashmap.insert(rule.0.clone(), rule.1);
         }
         hashmap
     }
@@ -81,7 +84,7 @@ impl TileObjectStackingRules {
     pub fn has_space(&self, object_class: &ObjectStackingClass) -> bool {
         return if let Some(tile_stack_count_max) = self
             .tile_object_stacking_rules
-            .get(object_class.stack_class)
+            .get(&object_class.stack_class)
         {
             tile_stack_count_max.current_count < tile_stack_count_max.max_count
         } else {
@@ -92,7 +95,7 @@ impl TileObjectStackingRules {
     pub fn increment_object_class_count(&mut self, object_class: &ObjectStackingClass) {
         if let Some(tile_stack_count_max) = self
             .tile_object_stacking_rules
-            .get_mut(object_class.stack_class)
+            .get_mut(&object_class.stack_class)
         {
             tile_stack_count_max.current_count += 1;
         }
@@ -102,7 +105,7 @@ impl TileObjectStackingRules {
     pub fn decrement_object_class_count(&mut self, object_class: &ObjectStackingClass) {
         if let Some(tile_stack_count_max) = self
             .tile_object_stacking_rules
-            .get_mut(object_class.stack_class)
+            .get_mut(&object_class.stack_class)
         {
             if tile_stack_count_max.current_count == 0 {} else {
                 tile_stack_count_max.current_count -= 1;
@@ -114,10 +117,10 @@ impl TileObjectStackingRules {
 #[rustfmt::skip] // rustfmt breaking ci
 #[test] // This is kinda a useless test but whatever. new year new tests
 fn test_tile_object_stacks() {
-    const STACKING_CLASS_GROUND: StackingClass = StackingClass { name: "Ground" };
+    let stacking_class_ground: StackingClass = StackingClass { name: String::from("Ground") };
 
     let tile_object_stacking_rules = TileObjectStackingRules::new(vec![(
-        &STACKING_CLASS_GROUND,
+        stacking_class_ground.clone(),
         TileObjectStacksCount {
             current_count: 0,
             max_count: 1,
@@ -125,33 +128,36 @@ fn test_tile_object_stacks() {
     )]);
 
     assert!(tile_object_stacking_rules.has_space(&ObjectStackingClass {
-        stack_class: &STACKING_CLASS_GROUND,
+        stack_class: stacking_class_ground.clone(),
     }, ))
 }
 
 /// A StackingClass represents what kind of stack an object belongs to in a tile. This is used internally
 /// in [`TileObjectStackingRules`]
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Default, Clone, Eq, PartialEq, Hash, Debug, Reflect, FromReflect)]
+#[reflect(Hash)]
 pub struct StackingClass {
-    pub name: &'static str,
+    pub name: String,
 }
 
 /// A component to hold a [`StackingClass`].
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Hash, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct ObjectStackingClass {
-    pub stack_class: &'static StackingClass,
+    pub stack_class: StackingClass,
 }
 
 /// Wraps two u32s for use in a [`TileObjectStackingRules`] component. Used to keep track of the current_count
 /// of objects belonging to that [`ObjectStackingClass`] in the tile and the max_count allowed in the tile.
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Reflect, FromReflect)]
 pub struct TileObjectStacksCount {
     pub current_count: u32,
     pub max_count: u32,
 }
 
 /// Simple Vec that holds Entities that are currently in the tile.
-#[derive(Clone, Eq, PartialEq, Default, Component)]
+#[derive(Clone, Eq, PartialEq, Default, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct TileObjects {
     pub entities_in_tile: Vec<ObjectId>,
 }

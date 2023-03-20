@@ -1,12 +1,12 @@
-﻿use bevy::prelude::{App, Mut, Schedule, World};
+﻿use bevy::prelude::{App, IntoSystemAppConfigs, IntoSystemConfig, Mut, Schedule, World};
 use bevy::MinimalPlugins;
 use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ggf::game_core::command::GameCommands;
 use bevy_ggf::game_core::runner::GameRunner;
-use bevy_ggf::game_core::{GameBuilder, GameData, GameInfo, GameRuntime, GameType};
+use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{StackingClass, TileObjectStackingRules, TileObjectStacksCount};
-use bevy_ggf::mapping::{MapCommandsExt, SpawnRandomMap};
+use bevy_ggf::mapping::MapCommandsExt;
 use bevy_ggf::movement::{GameBuilderMovementExt, MovementType, TileMovementCosts};
 use bevy_ggf::object::{ObjectClass, ObjectGroup, ObjectType};
 use bevy_ggf::BggfDefaultPlugins;
@@ -17,7 +17,7 @@ fn main() {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(BggfDefaultPlugins);
     app.add_startup_system(setup);
-    app.add_systems(simulate);
+    app.add_system(simulate);
     app.run();
 }
 
@@ -32,100 +32,103 @@ impl GameRunner for TestRunner {
     }
 }
 
-pub const STACKING_CLASS_GROUND: StackingClass = StackingClass { name: "Ground" };
-pub const STACKING_CLASS_BUILDING: StackingClass = StackingClass { name: "Building" };
-
-pub const MOVEMENT_TYPES: &'static [MovementType] = &[
-    MovementType { name: "Infantry" },
-    MovementType { name: "Tread" },
-];
-
-pub const TERRAIN_CLASSES: &'static [TerrainClass] = &[
-    TerrainClass { name: "Ground" },
-    TerrainClass { name: "Water" },
-];
-
-pub const TERRAIN_TYPES: &'static [TerrainType] = &[
-    TerrainType {
-        name: "Grassland",
-        terrain_class: &TERRAIN_CLASSES[0],
-    },
-    TerrainType {
-        name: "Forest",
-        terrain_class: &TERRAIN_CLASSES[0],
-    },
-    TerrainType {
-        name: "Mountain",
-        terrain_class: &TERRAIN_CLASSES[0],
-    },
-    TerrainType {
-        name: "Hill",
-        terrain_class: &TERRAIN_CLASSES[0],
-    },
-    TerrainType {
-        name: "Sand",
-        terrain_class: &TERRAIN_CLASSES[0],
-    },
-    TerrainType {
-        name: "CoastWater",
-        terrain_class: &TERRAIN_CLASSES[1],
-    },
-    TerrainType {
-        name: "Ocean",
-        terrain_class: &TERRAIN_CLASSES[1],
-    },
-];
-
 fn setup(mut world: &mut World) {
-
-    let OBJECT_CLASS_GROUND: ObjectClass = ObjectClass {
+    let stacking_class_ground: StackingClass = StackingClass {
         name: String::from("Ground"),
     };
-    let OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
-        name: String::from("Infantry"),
-        object_class: OBJECT_CLASS_GROUND.clone(),
-    };
-    let OBJECT_TYPE_RIFLEMAN: ObjectType = ObjectType {
-        name: String::from("Rifleman"),
-        object_group: OBJECT_GROUP_INFANTRY.clone(),
-    };
-
-    let OBJECT_CLASS_BUILDING: ObjectClass = ObjectClass {
+    let stacking_class_building: StackingClass = StackingClass {
         name: String::from("Building"),
     };
-    let OBJECT_GROUP_IMPROVEMENTS: ObjectGroup = ObjectGroup {
-        name: String::from("OBJECT_CLASS_BUILDING"),
-        object_class: OBJECT_CLASS_GROUND,
+
+    let MOVEMENT_TYPES: Vec<MovementType> = vec![
+        MovementType { name: String::from("Infantry") },
+        MovementType { name: String::from("Tread") },
+    ];
+
+    let TERRAIN_CLASSES: Vec<TerrainClass> = vec![
+        TerrainClass { name: String::from("Ground") },
+        TerrainClass { name: String::from("Water") },
+    ];
+
+    let TERRAIN_TYPES: Vec<TerrainType> = vec![
+        TerrainType {
+            name: String::from("Grassland"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
+        },
+        TerrainType {
+            name: String::from("Forest"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
+        },
+        TerrainType {
+            name: String::from("Mountain"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
+        },
+        TerrainType {
+            name: String::from("Hill"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
+        },
+        TerrainType {
+            name: String::from("Sand"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
+        },
+        TerrainType {
+            name: String::from("CoastWater"),
+            terrain_class: TERRAIN_CLASSES[1].clone(),
+        },
+        TerrainType {
+            name: String::from("Ocean"),
+            terrain_class: TERRAIN_CLASSES[1].clone(),
+        },
+    ];
+
+    let object_class_ground: ObjectClass = ObjectClass {
+        name: String::from("Ground"),
     };
-    let OBJECT_TYPE_BRIDGE: ObjectType = ObjectType {
+    let object_group_infantry: ObjectGroup = ObjectGroup {
+        name: String::from("Infantry"),
+        object_class: object_class_ground.clone(),
+    };
+    let object_type_rifleman: ObjectType = ObjectType {
+        name: String::from("Rifleman"),
+        object_group: object_group_infantry.clone(),
+    };
+
+    let object_class_building: ObjectClass = ObjectClass {
+        name: String::from("Building"),
+    };
+    let object_group_improvements: ObjectGroup = ObjectGroup {
+        name: String::from("object_class_building"),
+        object_class: object_class_ground,
+    };
+    let object_type_bridge: ObjectType = ObjectType {
         name: String::from("Bridge"),
-        object_group: OBJECT_GROUP_INFANTRY,
+        object_group: object_group_infantry,
     };
-    
+
     let tilemap_size = TilemapSize { x: 100, y: 100 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
     let tilemap_type = TilemapType::Square;
 
     let terrain_extension_types: Vec<TerrainType> = vec![
-        TERRAIN_TYPES[0],
-        TERRAIN_TYPES[1],
-        TERRAIN_TYPES[2],
-        //TERRAIN_TYPES[3],
-        TERRAIN_TYPES[4],
-        //TERRAIN_TYPES[5],
-        //TERRAIN_TYPES[6],
+        TERRAIN_TYPES[0].clone(),
+        TERRAIN_TYPES[1].clone(),
+        TERRAIN_TYPES[2].clone(),
+        //TERRAIN_TYPES[3].clone(),
+        TERRAIN_TYPES[4].clone(),
+        //TERRAIN_TYPES[5].clone(),
+        //TERRAIN_TYPES[6].clone(),
     ];
 
     let tile_stack_rules = TileObjectStackingRules::new(vec![
         (
-            &STACKING_CLASS_GROUND,
+            stacking_class_ground,
             TileObjectStacksCount {
                 current_count: 0,
                 max_count: 1,
             },
         ),
         (
-            &STACKING_CLASS_BUILDING,
+            stacking_class_building,
             TileObjectStacksCount {
                 current_count: 0,
                 max_count: 1,
@@ -144,14 +147,14 @@ fn setup(mut world: &mut World) {
     );
 
     let mut game = GameBuilder::<TestRunner>::new_game_with_commands(
-        GameType::Networked,
         vec![Box::new(spawn_map_command)],
         TestRunner::default(),
     );
+
     game.setup_movement(vec![(
         TerrainType {
-            name: "Grassland",
-            terrain_class: &TERRAIN_CLASSES[0],
+            name: String::from("Grassland"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
         },
         TileMovementCosts {
             movement_type_cost: Default::default(),
@@ -162,11 +165,13 @@ fn setup(mut world: &mut World) {
 }
 
 fn simulate(mut world: &mut World) {
-    world.resource_scope(|world, mut game_schedule: Mut<GameData>| {
-        world.resource_scope(|world, mut game_info: Mut<GameRuntime<TestRunner>>| {
-            game_info
-                .game_runner
-                .simulate_game(&mut game_schedule.game_world);
+    world.resource_scope(|world, mut game: Mut<Game>| {
+        world.resource_scope(|world, mut game_runtime: Mut<GameRuntime<TestRunner>>| {
+            game_runtime.game_runner.simulate_game(&mut game.game_world);
         });
+        let game_state = game.get_new_state();
+        for state in game_state {
+            println!("{:?}", state);
+        }
     });
 }
