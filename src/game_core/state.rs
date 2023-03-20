@@ -1,5 +1,5 @@
 ﻿use crate::mapping::tiles::Tile;
-use crate::object::ObjectId;
+use crate::object::{Object, ObjectId};
 use crate::team::PlayerId;
 use bevy::prelude::{
     apply_system_buffers, FromReflect, Reflect, ReflectComponent, Schedule, SystemSet, World,
@@ -72,6 +72,42 @@ impl GameStateHandler {
                     }
                       
                 }
+                
+                if let Some(object_id) = world.get::<ObjectId>(entity_id) {
+                    let mut components: Vec<Box<dyn Reflect>> = vec![];
+                    // fill the component vectors of rollback entities
+                    for component_id in archetype.components() {
+                        let reflect_component = world
+                            .components()
+                            .get_info(component_id)
+                            .and_then(|info| type_registry.get(info.type_id().unwrap()))
+                            .and_then(|registration| registration.data::<ReflectComponent>());
+                        if let Some(reflect_component) = reflect_component {
+                            if let Some(component) =
+                                reflect_component.reflect(world.entity(entity_id))
+                            {
+                                components.push(component.clone_value());
+                            }
+                        }
+                    }
+
+                    if let Some(tile_pos) = world.get::<TilePos>(entity_id) {
+                        state.push(StateThing::Object {
+                            change_type: ChangeType::NoChange,
+                            object_id: *object_id,
+                            tile_pos: *tile_pos,
+                            components,
+                        })
+                    } else{
+                        state.push(StateThing::Object {
+                            change_type: ChangeType::NoChange,
+                            object_id: *object_id,
+                            tile_pos: Default::default(),
+                            components,
+                        })
+                    }
+
+                }
             }
         }
 
@@ -101,6 +137,7 @@ pub enum StateThing {
     Object {
         change_type: ChangeType,
         object_id: ObjectId,
+        tile_pos: TilePos,
         components: Vec<Box<dyn Reflect>>,
     },
     Tile {
@@ -113,8 +150,8 @@ pub enum StateThing {
         resource: Box<dyn Reflect>,
     },
     Player {
-        player_id: PlayerId,
         change_type: ChangeType,
+        player_id: PlayerId,
         components: Vec<Box<dyn Reflect>>,
     },
 }

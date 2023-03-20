@@ -5,15 +5,13 @@ pub mod tiles;
 use crate::game_core::command::{GameCommand, GameCommands};
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
-    BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStackingRules, TileObjects,
+    BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStacks, TileObjects,
 };
 use crate::movement::TerrainMovementCosts;
 use bevy::ecs::system::SystemState;
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
-use rand::Rng;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -54,7 +52,7 @@ impl MapIdProvider {
     }
 }
 
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
 pub struct MapId {
     pub id: usize,
 }
@@ -83,7 +81,7 @@ pub trait MapCommandsExt {
         tilemap_type: TilemapType,
         tilemap_tile_size: TilemapTileSize,
         map_terrain_vec: Vec<TerrainType>,
-        tile_stack_rules: TileObjectStackingRules,
+        tile_stack_rules: TileObjectStacks,
     ) -> SpawnRandomMap;
 }
 
@@ -94,7 +92,7 @@ impl MapCommandsExt for GameCommands {
         tilemap_type: TilemapType,
         tilemap_tile_size: TilemapTileSize,
         map_terrain_type_vec: Vec<TerrainType>,
-        tile_stack_rules: TileObjectStackingRules,
+        tile_stack_rules: TileObjectStacks,
     ) -> SpawnRandomMap {
         self.queue.push(SpawnRandomMap {
             tile_map_size,
@@ -115,13 +113,13 @@ impl MapCommandsExt for GameCommands {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Reflect)]
 pub struct SpawnRandomMap {
     tile_map_size: TilemapSize,
     tilemap_type: TilemapType,
     tilemap_tile_size: TilemapTileSize,
     map_terrain_type_vec: Vec<TerrainType>,
-    tile_stack_rules: TileObjectStackingRules,
+    tile_stack_rules: TileObjectStacks,
     spawned_map_id: Option<MapId>,
 }
 
@@ -172,7 +170,7 @@ impl GameCommand for SpawnRandomMap {
             map_id_provider.next_id_component()
         });
 
-        world.send_event::<MapSpawned>(MapSpawned { map_id: id });
+        //world.send_event::<MapSpawned>(MapSpawned { map_id: id });
 
         world
             .entity_mut(tilemap_entity)

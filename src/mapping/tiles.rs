@@ -24,17 +24,15 @@ use crate::object::ObjectId;
 /// own super bundles
 #[derive(Bundle)]
 pub struct BggfTileBundle {
-    /// Bevy_ecs_tilemap tile bundle
     pub tile: Tile,
     pub tile_terrain_info: TileTerrainInfo,
     pub tile_pos: TilePos,
     pub tilemap_id: TilemapId,
-    //pub tile_texture_index: TileTextureIndex,
 }
 
 #[derive(Bundle)]
 pub struct BggfTileObjectBundle {
-    pub tile_stack_rules: TileObjectStackingRules,
+    pub tile_stack_rules: TileObjectStacks,
     pub tile_objects: TileObjects,
 }
 
@@ -43,28 +41,20 @@ pub struct BggfTileObjectBundle {
 #[reflect(Component)]
 pub struct Tile;
 
-/* TODO: Implement this
-#[derive(Component)]
-pub struct TileTextureIndex{
-    pub texture_index: u32,
-}
-
- */
-
 /// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
 /// using an [`TileObjectStacksCount`] struct.
 #[derive(Default, Clone, Eq, PartialEq, Component, Reflect, FromReflect)]
 #[reflect(Component)]
-pub struct TileObjectStackingRules {
-    pub tile_object_stacking_rules: HashMap<StackingClass, TileObjectStacksCount>,
+pub struct TileObjectStacks {
+    pub tile_object_stacks: HashMap<StackingClass, TileObjectStacksCount>,
 }
 
-impl TileObjectStackingRules {
+impl TileObjectStacks {
     pub fn new(
         stack_rules: Vec<(StackingClass, TileObjectStacksCount)>,
-    ) -> TileObjectStackingRules {
-        TileObjectStackingRules {
-            tile_object_stacking_rules: TileObjectStackingRules::new_terrain_type_rules(
+    ) -> TileObjectStacks {
+        TileObjectStacks {
+            tile_object_stacks: TileObjectStacks::new_terrain_type_rules(
                 stack_rules,
             ),
         }
@@ -83,7 +73,7 @@ impl TileObjectStackingRules {
 
     pub fn has_space(&self, object_class: &ObjectStackingClass) -> bool {
         return if let Some(tile_stack_count_max) = self
-            .tile_object_stacking_rules
+            .tile_object_stacks
             .get(&object_class.stack_class)
         {
             tile_stack_count_max.current_count < tile_stack_count_max.max_count
@@ -94,7 +84,7 @@ impl TileObjectStackingRules {
 
     pub fn increment_object_class_count(&mut self, object_class: &ObjectStackingClass) {
         if let Some(tile_stack_count_max) = self
-            .tile_object_stacking_rules
+            .tile_object_stacks
             .get_mut(&object_class.stack_class)
         {
             tile_stack_count_max.current_count += 1;
@@ -104,7 +94,7 @@ impl TileObjectStackingRules {
     #[rustfmt::skip] // rustfmt breaking ci
     pub fn decrement_object_class_count(&mut self, object_class: &ObjectStackingClass) {
         if let Some(tile_stack_count_max) = self
-            .tile_object_stacking_rules
+            .tile_object_stacks
             .get_mut(&object_class.stack_class)
         {
             if tile_stack_count_max.current_count == 0 {} else {
@@ -119,7 +109,7 @@ impl TileObjectStackingRules {
 fn test_tile_object_stacks() {
     let stacking_class_ground: StackingClass = StackingClass { name: String::from("Ground") };
 
-    let tile_object_stacking_rules = TileObjectStackingRules::new(vec![(
+    let tile_object_stacking_rules = TileObjectStacks::new(vec![(
         stacking_class_ground.clone(),
         TileObjectStacksCount {
             current_count: 0,
@@ -133,9 +123,8 @@ fn test_tile_object_stacks() {
 }
 
 /// A StackingClass represents what kind of stack an object belongs to in a tile. This is used internally
-/// in [`TileObjectStackingRules`]
-#[derive(Default, Clone, Eq, PartialEq, Hash, Debug, Reflect, FromReflect)]
-#[reflect(Hash)]
+/// in [`TileObjectStacks`]
+#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
 pub struct StackingClass {
     pub name: String,
 }
@@ -147,9 +136,9 @@ pub struct ObjectStackingClass {
     pub stack_class: StackingClass,
 }
 
-/// Wraps two u32s for use in a [`TileObjectStackingRules`] component. Used to keep track of the current_count
+/// Wraps two u32s for use in a [`TileObjectStacks`] component. Used to keep track of the current_count
 /// of objects belonging to that [`ObjectStackingClass`] in the tile and the max_count allowed in the tile.
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Reflect, FromReflect)]
+#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
 pub struct TileObjectStacksCount {
     pub current_count: u32,
     pub max_count: u32,

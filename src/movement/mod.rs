@@ -129,7 +129,7 @@ impl MoveCommandsExt for GameCommands {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
 pub struct MoveObject {
     object_moving: ObjectId,
     on_map: MapId,
@@ -333,7 +333,7 @@ pub struct TileMoveCheckMeta {
 /// ```rust
 /// use bevy::prelude::{Entity, World};
 /// use bevy_ecs_tilemap::prelude::TilePos;
-/// use bevy_ggf::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules};
+/// use bevy_ggf::mapping::tiles::{ObjectStackingClass, TileObjectStacks};
 /// use bevy_ggf::movement::TileMoveCheck;
 ///
 /// // Create a new struct for our TileMoveCheck
@@ -355,7 +355,7 @@ pub struct TileMoveCheckMeta {
 ///             return false;
 ///         };
 /// // Get the TileObjectStacks component of the tile that we are checking
-///         let Some(tile_objects) = world.get::<TileObjectStackingRules>(tile_entity) else {
+///         let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
 ///             return false;
 ///         };
 /// // Use the built in function on a TileObjectStacks struct to check if the tile has space for this objects stacking class

@@ -8,7 +8,7 @@
 //! To use in a system, request the [`GameCommands`] Resource, get the commands field, and call a defined
 //! command or submit a custom command using commands.add().
 //! ```rust
-//! use bevy::prelude::{Bundle, ResMut, World};
+//! use bevy::prelude::{Bundle, Reflect, ResMut, World};
 //! use bevy_ecs_tilemap::prelude::TilePos;
 //! use bevy_ggf::game_core::command::{GameCommand, GameCommands};
 //! use bevy_ggf::mapping::MapId;
@@ -32,7 +32,7 @@
 //!
 //! // Create a struct for your custom command, use this to store whatever data you need to execute
 //! // and rollback the commands
-//! #[derive(Clone, Debug)]
+//! #[derive(Clone, Debug, Reflect)]
 //! struct MyCustomCommand;
 //!
 //! // Impl GameCommand for your struct
@@ -57,7 +57,7 @@
 //! ```
 
 use crate::game_core::{Game, ObjectIdProvider};
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::mapping::MapId;
 use crate::object::{Object, ObjectGridPosition, ObjectId};
 use bevy::ecs::system::SystemState;
@@ -65,14 +65,17 @@ use bevy::log::info;
 use bevy::prelude::{
     Bundle, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without, World,
 };
+use bevy::reflect::FromReflect;
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;
 
 /// Executes all stored game commands by calling the command queue execute buffer function
 pub fn execute_game_commands_buffer(world: &mut World) {
-    world.resource_scope(|world, mut game: Mut<GameCommands>| {
-        game.execute_buffer(world);
+    world.resource_scope(|world, mut game_commands: Mut<GameCommands>| {
+        world.resource_scope(|world, mut game: Mut<Game>| {
+            game_commands.execute_buffer(&mut game.game_world);
+        });
     });
 }
 
@@ -123,21 +126,23 @@ pub struct GameCommandMeta {
 /// **MUST** exactly roll the world back to as it was, excluding entity IDs.
 /// ```rust
 /// use bevy::prelude::World;
+/// use bevy::reflect::Reflect;
 /// use bevy_ggf::game_core::command::GameCommand;
-/// #[derive(Clone, Debug)]
+/// #[derive(Clone, Debug, Reflect)]
 ///  struct MyCustomCommand;
 ///
-///  impl GameCommand for MyCustomCommand{fn execute(&mut self, world: &mut World) -> Result<(), String> {
+///  impl GameCommand for MyCustomCommand{
+///     fn execute(&mut self, world: &mut World) -> Result<(), String> {
 ///          todo!() // Implement whatever your custom command should do here
 ///      }
 ///
-///  fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+///     fn rollback(&mut self, world: &mut World) -> Result<(), String> {
 ///          todo!() // Implement how to reverse your custom command
 ///      }
 ///  }
 ///
 /// ```
-pub trait GameCommand: Send + GameCommandClone + Sync + 'static {
+pub trait GameCommand: Send + GameCommandClone + Sync + Reflect + 'static {
     /// Execute the command
     fn execute(&mut self, world: &mut World) -> Result<(), String>;
 
@@ -339,7 +344,7 @@ impl GameCommands {
                     }
                 }
             }
-            
+
              */
 
             self.history.clear_rollback_history();
@@ -418,7 +423,7 @@ impl GameCommands {
 
     pub fn spawn_object<T>(&mut self, bundle: T, tile_pos: TilePos, on_map: MapId) -> SpawnObject<T>
     where
-        T: Bundle + Clone,
+        T: Bundle + Clone + Reflect,
     {
         self.queue.push(SpawnObject {
             bundle: bundle.clone(),
@@ -452,7 +457,7 @@ impl GameCommands {
 /// Execute will *not* set the objects grid position - Rollback will.
 /// This should be used with [AddObjectToTile] command to enable true reversing as needed. Look
 ///  at [SpawnObject] as an example of how to do this.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
 pub struct RemoveObjectFromTile {
     pub object_game_id: ObjectId,
     pub on_map: MapId,
@@ -463,7 +468,7 @@ impl GameCommand for RemoveObjectFromTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
             Query<(&ObjectId, &ObjectStackingClass)>,
-            Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
+            Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
         let (mut object_query, mut tile_query, mut tile_storage_query) =
@@ -493,7 +498,7 @@ impl GameCommand for RemoveObjectFromTile {
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
             Query<(&ObjectId, &mut ObjectGridPosition, &ObjectStackingClass)>,
-            Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
+            Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
 
@@ -529,7 +534,7 @@ impl GameCommand for RemoveObjectFromTile {
 /// Rollback will *not* set the objects grid position or change the position of the objects transform
 /// This should be used with [RemoveObjectFromTile] command to enable true reversing as needed. Look
 /// at [SpawnObject] as an example of how to do this.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
 pub struct AddObjectToTile {
     pub object_game_id: ObjectId,
     pub on_map: MapId,
@@ -540,7 +545,7 @@ impl GameCommand for AddObjectToTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
             Query<(&ObjectId, &mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
-            Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
+            Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(Entity, &MapId, &TileStorage, Without<Object>)>,
         )> = SystemState::new(&mut world);
 
@@ -575,7 +580,7 @@ impl GameCommand for AddObjectToTile {
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut system_state: SystemState<(
             Query<(&ObjectId, &ObjectStackingClass)>,
-            Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
+            Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
 
@@ -605,7 +610,7 @@ impl GameCommand for AddObjectToTile {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
 pub struct SpawnObject<T>
 where
     T: Bundle,
@@ -618,7 +623,7 @@ where
 
 impl<T> GameCommand for SpawnObject<T>
 where
-    T: Bundle + Clone,
+    T: Bundle + Clone + Reflect,
 {
     fn execute(&mut self, world: &mut World) -> Result<(), String> {
         // Assign a new id as we un assign the id when we rollback
@@ -664,7 +669,7 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
 pub struct DespawnObject {
     pub on_map: MapId,
     pub object_game_id: ObjectId,

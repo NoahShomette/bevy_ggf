@@ -111,7 +111,7 @@ impl ObjectIdProvider {
 /// this to reference entities and then query for the entity that it is attached to.
 #[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
 pub struct ObjectId {
-    id: usize,
+    pub id: usize,
 }
 
 ///Marker component for an entity signifying it as an Object

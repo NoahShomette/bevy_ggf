@@ -1,16 +1,9 @@
-﻿use bevy::input::keyboard::KeyboardInput;
-use bevy::input::Input;
-use bevy::prelude::{
-    App, ClearColor, Color, IntoSystemAppConfigs, IntoSystemConfig, KeyCode, Local, Mut, Res,
-    ResMut, Resource, Schedule, World,
+﻿use bevy::prelude::{
+    App, ClearColor, Color, IntoSystemAppConfigs, IntoSystemConfig, Mut, Schedule, World,
 };
 use bevy::{DefaultPlugins, MinimalPlugins};
-use bevy_ascii_terminal::{
-    AutoCamera, Border, Terminal, TerminalBundle, TerminalPlugin, TileFormatter,
-};
 use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
-use bevy_ggf::game_core::command::CommandType::Player;
 use bevy_ggf::game_core::command::GameCommands;
 use bevy_ggf::game_core::runner::GameRunner;
 use bevy_ggf::game_core::state::StateThing;
@@ -18,22 +11,18 @@ use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{StackingClass, TileObjectStacks, TileObjectStacksCount};
 use bevy_ggf::mapping::{MapCommandsExt, MapId};
-use bevy_ggf::movement::{
-    GameBuilderMovementExt, MoveCommandsExt, MovementType, TileMovementCosts,
-};
-use bevy_ggf::object::{ObjectClass, ObjectGroup, ObjectId, ObjectType};
+use bevy_ggf::movement::{GameBuilderMovementExt, MovementType, TileMovementCosts};
+use bevy_ggf::object::{ObjectClass, ObjectGroup, ObjectType};
 use bevy_ggf::BggfDefaultPlugins;
 
 fn main() {
     let mut app = App::new();
 
-    app.add_plugins(DefaultPlugins);
+    app.add_plugins(MinimalPlugins);
     app.add_plugins(BggfDefaultPlugins);
-    app.add_plugin(TerminalPlugin)
-        .insert_resource(ClearColor(Color::BLACK));
+
     app.add_startup_system(setup);
     app.add_system(simulate);
-    app.add_system(handle_input);
     app.run();
 }
 
@@ -45,69 +34,6 @@ impl GameRunner for TestRunner {
     fn simulate_game(&mut self, world: &mut World) {
         self.schedule.run(world);
         println!("Ran world")
-    }
-}
-
-#[derive(Resource)]
-pub struct PlayerPos {
-    pub tile_pos: TilePos,
-}
-
-fn handle_input(
-    mut game: ResMut<Game>,
-    mut game_commands: ResMut<GameCommands>,
-    mut input: ResMut<Input<KeyCode>>,
-    old_player_pos: Option<Res<PlayerPos>>,
-) {
-    if let Some(player_pos) = old_player_pos {
-        if input.just_pressed(KeyCode::A) {
-            let _ = game_commands.move_object(
-                ObjectId { id: 1 },
-                MapId { id: 1 },
-                player_pos.tile_pos,
-                TilePos {
-                    x: player_pos.tile_pos.x - 1,
-                    y: player_pos.tile_pos.y,
-                },
-                true,
-            );
-        }
-        if input.just_pressed(KeyCode::S) {
-            let _ = game_commands.move_object(
-                ObjectId { id: 1 },
-                MapId { id: 1 },
-                player_pos.tile_pos,
-                TilePos {
-                    x: player_pos.tile_pos.x,
-                    y: player_pos.tile_pos.y - 1,
-                },
-                true,
-            );
-        }
-        if input.just_pressed(KeyCode::D) {
-            let _ = game_commands.move_object(
-                ObjectId { id: 1 },
-                MapId { id: 1 },
-                player_pos.tile_pos,
-                TilePos {
-                    x: player_pos.tile_pos.x + 1,
-                    y: player_pos.tile_pos.y,
-                },
-                true,
-            );
-        }
-        if input.just_pressed(KeyCode::W) {
-            let _ = game_commands.move_object(
-                ObjectId { id: 1 },
-                MapId { id: 1 },
-                player_pos.tile_pos,
-                TilePos {
-                    x: player_pos.tile_pos.x,
-                    y: player_pos.tile_pos.y + 1,
-                },
-                true,
-            );
-        }
     }
 }
 
@@ -233,16 +159,14 @@ fn setup(mut world: &mut World) {
         tile_stack_rules,
     );
 
-    let player_spawn_pos = TilePos { x: 50, y: 50 };
-
-    let spawn_object =
-        game_commands.spawn_object((player_spawn_pos), player_spawn_pos, MapId { id: 1 });
-    world.insert_resource(PlayerPos {
-        tile_pos: player_spawn_pos,
-    });
+    let spawn_map_command = game_commands.spawn_object(
+        (TilePos { x: 50, y: 50 }),
+        TilePos { x: 50, y: 50 },
+        MapId { id: 1 },
+    );
 
     let mut game = GameBuilder::<TestRunner>::new_game_with_commands(
-        vec![Box::new(spawn_map_command), Box::new(spawn_object)],
+        vec![Box::new(spawn_map_command)],
         TestRunner::default(),
     );
 
@@ -257,51 +181,15 @@ fn setup(mut world: &mut World) {
     )]);
 
     game.build(&mut world);
-
-    let mut term =
-        Terminal::new([tilemap_size.x, tilemap_size.y]).with_border(Border::single_line());
-
-    world.spawn((TerminalBundle::from(term), AutoCamera));
 }
 
 fn simulate(mut world: &mut World) {
     world.resource_scope(|world, mut game: Mut<Game>| {
         world.resource_scope(|world, mut game_runtime: Mut<GameRuntime<TestRunner>>| {
-            world.resource_scope(|world, mut game_commands: Mut<GameCommands>| {
-                game_commands.execute_buffer(&mut game.game_world);
-            });
             game_runtime.game_runner.simulate_game(&mut game.game_world);
         });
         let game_state = game.get_new_state();
-        let mut term = world.query::<&mut Terminal>().single_mut(world);
         for state in game_state {
-            match state {
-                StateThing::Object {
-                    change_type,
-                    object_id,
-                    tile_pos,
-                    components,
-                } => {
-                    term.put_char(
-                        [tile_pos.x, tile_pos.y],
-                        'P'.fg(Color::WHITE).bg(Color::BLUE),
-                    );
-                    
-                }
-                StateThing::Tile {
-                    change_type,
-                    tile_pos,
-                    components,
-                } => {
-                    term.put_char([tile_pos.x, tile_pos.y], 'H'.fg(Color::GREEN));
-                }
-                StateThing::Resource { .. } => {}
-                StateThing::Player {
-                    change_type,
-                    player_id,
-                    components,
-                } => {}
-            }
         }
     });
 }

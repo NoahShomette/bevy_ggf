@@ -1,5 +1,5 @@
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
 use crate::movement::{
     DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, ObjectTypeMovementRules,
@@ -176,7 +176,7 @@ impl TileMoveCheck for MoveCheckSpace {
         let Some(object_stack_class) = world.get::<ObjectStackingClass>(moving_entity) else {
             return false;
         };
-        let Some(tile_objects) = world.get::<TileObjectStackingRules>(tile_entity) else {
+        let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
             return false;
         };
 
