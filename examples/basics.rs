@@ -1,30 +1,34 @@
-﻿use bevy::input::keyboard::KeyboardInput;
+﻿use bevy::ecs::system::SystemState;
+use bevy::input::keyboard::KeyboardInput;
 use bevy::input::Input;
 use bevy::prelude::{
-    App, ClearColor, Color, IntoSystemAppConfigs, IntoSystemConfig, KeyCode, Local, Mut, Res,
-    ResMut, Resource, Schedule, World,
+    info, App, ClearColor, Color, Component, Entity, IntoSystemAppConfigs, IntoSystemConfig,
+    KeyCode, Local, Mut, Query, ReflectComponent, Res, ResMut, Resource, Schedule, Without, World,
 };
+use bevy::reflect::{Reflect, TypeData};
 use bevy::{DefaultPlugins, MinimalPlugins};
 use bevy_ascii_terminal::{
     AutoCamera, Border, Terminal, TerminalBundle, TerminalPlugin, TileFormatter,
 };
 use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
-use bevy_ggf::game_core::command::CommandType::Player;
 use bevy_ggf::game_core::command::GameCommands;
 use bevy_ggf::game_core::runner::GameRunner;
 use bevy_ggf::game_core::state::StateThing;
 use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
-    ObjectStackingClass, StackingClass, TileObjectStacks, TileObjectStacksCount,
+    ObjectStackingClass, StackingClass, Tile, TileObjectStacks, TileObjectStacksCount, TileObjects,
 };
-use bevy_ggf::mapping::{MapCommandsExt, MapId};
+use bevy_ggf::mapping::{GameBuilderMappingExt, MapCommandsExt, MapId};
 use bevy_ggf::movement::defaults::SquareMovementCalculator;
-use bevy_ggf::movement::{GameBuilderMovementExt, MoveCommandsExt, MovementType, ObjectMovement, ObjectTerrainMovementRules, TileMovementCosts};
+use bevy_ggf::movement::{
+    GameBuilderMovementExt, MoveCommandsExt, MovementType, ObjectMovement,
+    ObjectTerrainMovementRules, TileMovementCosts,
+};
 use bevy_ggf::object::{ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectType};
-use bevy_ggf::BggfDefaultPlugins;
-use bevy_ggf::game_core::state::StateThing::Object;
+use bevy_ggf::{object, BggfDefaultPlugins};
+use std::any::Any;
 
 fn main() {
     let mut app = App::new();
@@ -36,6 +40,7 @@ fn main() {
     app.add_startup_system(setup);
     app.add_system(simulate);
     app.add_system(handle_input);
+    app.add_system(draw_world);
     app.run();
 }
 
@@ -43,6 +48,9 @@ fn main() {
 pub struct PlayerPos {
     pub object_grid_position: ObjectGridPosition,
 }
+
+#[derive(Default, Clone, Component, Reflect)]
+pub struct PlayerMarker;
 
 #[derive(Default)]
 pub struct TestRunner {
@@ -68,7 +76,11 @@ fn handle_input(
                 MapId { id: 1 },
                 player_pos.object_grid_position.tile_position,
                 TilePos {
-                    x: player_pos.object_grid_position.tile_position.x.saturating_sub(1),
+                    x: player_pos
+                        .object_grid_position
+                        .tile_position
+                        .x
+                        .saturating_sub(1),
                     y: player_pos.object_grid_position.tile_position.y,
                 },
                 false,
@@ -81,7 +93,11 @@ fn handle_input(
                 player_pos.object_grid_position.tile_position,
                 TilePos {
                     x: player_pos.object_grid_position.tile_position.x,
-                    y: player_pos.object_grid_position.tile_position.y.saturating_sub(1),
+                    y: player_pos
+                        .object_grid_position
+                        .tile_position
+                        .y
+                        .saturating_sub(1),
                 },
                 true,
             );
@@ -92,7 +108,11 @@ fn handle_input(
                 MapId { id: 1 },
                 player_pos.object_grid_position.tile_position,
                 TilePos {
-                    x: player_pos.object_grid_position.tile_position.x.saturating_add(1),
+                    x: player_pos
+                        .object_grid_position
+                        .tile_position
+                        .x
+                        .saturating_add(1),
                     y: player_pos.object_grid_position.tile_position.y,
                 },
                 true,
@@ -105,7 +125,11 @@ fn handle_input(
                 player_pos.object_grid_position.tile_position,
                 TilePos {
                     x: player_pos.object_grid_position.tile_position.x,
-                    y: player_pos.object_grid_position.tile_position.y.saturating_add(1),
+                    y: player_pos
+                        .object_grid_position
+                        .tile_position
+                        .y
+                        .saturating_add(1),
                 },
                 true,
             );
@@ -245,12 +269,16 @@ fn setup(mut world: &mut World) {
             ObjectMovement {
                 move_points: 5,
                 movement_type: MOVEMENT_TYPES[0].clone(),
-                object_terrain_movement_rules: ObjectTerrainMovementRules::new(vec![TERRAIN_CLASSES[0].clone()], vec![]),
+                object_terrain_movement_rules: ObjectTerrainMovementRules::new(
+                    vec![TERRAIN_CLASSES[0].clone()],
+                    vec![],
+                ),
             },
             ObjectStackingClass {
                 stack_class: stacking_class_ground,
             },
-            bevy_ggf::object::Object,
+            object::Object,
+            PlayerMarker,
         ),
         player_spawn_pos,
         MapId { id: 1 },
@@ -275,7 +303,6 @@ fn setup(mut world: &mut World) {
             movement_type_cost: Default::default(),
         },
     )]);
-
     game.with_movement_calculator(
         SquareMovementCalculator {
             diagonal_movement: Default::default(),
@@ -283,6 +310,9 @@ fn setup(mut world: &mut World) {
         vec![],
         tilemap_type,
     );
+    game.setup_mapping();
+
+    game.register_component::<PlayerMarker>();
 
     game.build(&mut world);
 
@@ -292,18 +322,21 @@ fn setup(mut world: &mut World) {
     world.spawn((TerminalBundle::from(term), AutoCamera));
 }
 
-fn simulate(mut world: &mut World) {
-    world.resource_scope(|world, mut game: Mut<Game>| {
+fn simulate(world: &mut World) {
+    world.resource_scope(|mut world, mut game: Mut<Game>| {
         world.resource_scope(|world, mut game_runtime: Mut<GameRuntime<TestRunner>>| {
             world.resource_scope(|world, mut game_commands: Mut<GameCommands>| {
                 game_commands.execute_buffer(&mut game.game_world);
             });
             game_runtime.game_runner.simulate_game(&mut game.game_world);
         });
-        let game_state = game.get_new_state();
+        let game_state = game.get_state();
         let mut player_pos = world.remove_resource::<PlayerPos>().unwrap();
-        let mut term = world.query::<&mut Terminal>().single_mut(world);
+
+        let registration = game.type_registry.read();
+
         for state in game_state {
+            //info!("{:?}", state);
             match state {
                 StateThing::Object {
                     change_type,
@@ -311,22 +344,83 @@ fn simulate(mut world: &mut World) {
                     object_grid_position,
                     components,
                 } => {
-                    term.put_char(
-                        [
-                            object_grid_position.tile_position.x,
-                            object_grid_position.tile_position.y,
-                        ],
-                        'P'.fg(Color::WHITE).bg(Color::BLUE),
-                    );
-                    player_pos.object_grid_position.tile_position =
-                        object_grid_position.tile_position;
+                    let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
+                        SystemState::new(&mut world);
+
+                    let mut object_query = system_state.get(&mut world);
+
+                    if let Some((entity, object_id)) =
+                        object_query.iter_mut().find(|(_, id)| id == &&object_id)
+                    {
+                        for component in components {
+                            let type_info = component.type_name();
+                            if let Some(type_registration) = registration.get_with_name(type_info) {
+                                if let Some(reflect_component) =
+                                    type_registration.data::<ReflectComponent>()
+                                {
+                                    reflect_component.remove(&mut world.entity_mut(entity));
+                                    reflect_component
+                                        .insert(&mut world.entity_mut(entity), &*component);
+                                }
+                            }
+                        }
+                    } else {
+                        let entity = world.spawn_empty().id();
+
+                        for component in components {
+                            let type_info = component.type_name();
+                            if let Some(type_registration) = registration.get_with_name(type_info) {
+                                if let Some(reflect_component) =
+                                    type_registration.data::<ReflectComponent>()
+                                {
+                                    reflect_component.remove(&mut world.entity_mut(entity));
+                                    reflect_component
+                                        .insert(&mut world.entity_mut(entity), &*component);
+                                }
+                            }
+                        }
+                    }
                 }
                 StateThing::Tile {
                     change_type,
                     tile_pos,
                     components,
                 } => {
-                    term.put_char([tile_pos.x, tile_pos.y], 'H'.fg(Color::GREEN));
+                    let mut system_state: SystemState<Query<(Entity, &TilePos, &Tile)>> =
+                        SystemState::new(&mut world);
+                    let mut object_query = system_state.get_mut(&mut world);
+
+                    if let Some((entity, _, _)) =
+                        object_query.iter_mut().find(|(_, id, _)| id == &&tile_pos)
+                    {
+                        for component in components {
+                            let type_info = component.type_name();
+                            if let Some(type_registration) = registration.get_with_name(type_info) {
+                                if let Some(reflect_component) =
+                                    type_registration.data::<ReflectComponent>()
+                                {
+                                    reflect_component.remove(&mut world.entity_mut(entity));
+                                    reflect_component
+                                        .insert(&mut world.entity_mut(entity), &*component);
+                                }
+                            }
+                        }
+                    } else {
+                        let mut entity = world.spawn_empty();
+
+                        for component in components {
+                            let type_info = component.type_name();
+                            if let Some(type_registration) = registration.get_with_name(type_info) {
+                                if let Some(reflect_component) =
+                                    type_registration.data::<ReflectComponent>()
+                                {
+                                    reflect_component.insert(&mut entity, &*component);
+                                }
+                            } else {
+                                //println!("Are we making it here");
+                            }
+                        }
+                    }
                 }
                 StateThing::Resource { .. } => {}
                 StateThing::Player {
@@ -339,4 +433,37 @@ fn simulate(mut world: &mut World) {
 
         world.insert_resource(player_pos);
     });
+}
+
+fn draw_world(
+    mut term_query: Query<&mut Terminal>,
+    object_queries: Query<
+        (&object::Object, &ObjectGridPosition, Option<&PlayerMarker>),
+        Without<Tile>,
+    >,
+    tile_queries: Query<(&Tile, &TilePos), Without<object::Object>>,
+    mut player_pos: Option<ResMut<PlayerPos>>,
+) {
+    let mut term = term_query.single_mut();
+    for (tile, tile_pos) in tile_queries.iter() {
+        term.put_char(
+            [tile_pos.x, tile_pos.y],
+            'G'.fg(Color::GREEN).bg(Color::BLACK),
+        );
+    }
+
+    for (object, object_pos, option_player) in object_queries.iter() {
+        if let Some(player) = option_player {
+            term.put_char(
+                [object_pos.tile_position.x, object_pos.tile_position.y],
+                'P'.fg(Color::WHITE).bg(Color::BLUE),
+            );
+            player_pos.as_mut().unwrap().object_grid_position = *object_pos;
+        } else {
+            term.put_char(
+                [object_pos.tile_position.x, object_pos.tile_position.y],
+                'M'.fg(Color::RED).bg(Color::BLACK),
+            );
+        }
+    }
 }

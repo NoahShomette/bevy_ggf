@@ -7,10 +7,10 @@ use crate::game_core::state::{
     get_state_diff, GameStateHandler, StateEvents, StateSystems, StateThing,
 };
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{Tile, TileObjectStacks, TileObjects};
+use crate::mapping::tiles::{Tile, TileObjectStacks, TileObjects, ObjectStackingClass};
 use crate::mapping::MapIdProvider;
 use crate::movement::TileMovementCosts;
-use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType};
+use crate::object::{Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType};
 use bevy::app::{App, CoreSchedule, Plugin};
 use bevy::prelude::{apply_system_buffers, Children, Commands, Component, FixedTime, IntoSystemAppConfig, IntoSystemConfig, Parent, ReflectComponent, ReflectResource, ResMut, Resource, Schedule, World};
 use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRegistryInternal};
@@ -49,7 +49,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn get_new_state(&mut self) -> Vec<StateThing> {
+    pub fn get_state(&mut self) -> Vec<StateThing> {
         self.game_state_handler
             .get_state(&mut self.game_world, &self.type_registry)
     }
@@ -166,20 +166,50 @@ where
                 r.register::<Parent>();
                 r.register::<Children>();
 
+                // Other crates
                 r.register::<TilePos>();
-
+                let registration = r.get_mut(std::any::TypeId::of::<TilePos>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<TilePos>>::from_type());
+                
                 // tiles
                 r.register::<Tile>();
+                let registration = r.get_mut(std::any::TypeId::of::<Tile>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<Tile>>::from_type());
                 r.register::<TileTerrainInfo>();
+                let registration = r.get_mut(std::any::TypeId::of::<TileTerrainInfo>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<TileTerrainInfo>>::from_type());
                 //r.register::<TileObjectStacks>();
+                //let registration = r.get_mut(std::any::TypeId::of::<TileObjectStacks>()).unwrap();
+                //registration.insert(<ReflectComponent as FromType<TileObjectStacks>>::from_type());
                 r.register::<TileObjects>();
+                let registration = r.get_mut(std::any::TypeId::of::<TileObjects>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<TileObjects>>::from_type());
                 r.register::<TileMovementCosts>();
+                let registration = r.get_mut(std::any::TypeId::of::<TileMovementCosts>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<TileMovementCosts>>::from_type());
 
-                //defaults
+                //Objects
                 r.register::<ObjectId>();
+                let registration = r.get_mut(std::any::TypeId::of::<ObjectId>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<ObjectId>>::from_type());
+                
                 r.register::<ObjectClass>();
+                
                 r.register::<ObjectGroup>();
+                
                 r.register::<ObjectType>();
+                
+                r.register::<ObjectGridPosition>();
+                let registration = r.get_mut(std::any::TypeId::of::<ObjectGridPosition>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<ObjectGridPosition>>::from_type());
+                
+                r.register::<Object>();
+                let registration = r.get_mut(std::any::TypeId::of::<Object>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<Object>>::from_type());
+
+                r.register::<ObjectStackingClass>();
+                let registration = r.get_mut(std::any::TypeId::of::<ObjectStackingClass>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<ObjectStackingClass>>::from_type());
 
                 r
             })),
@@ -187,7 +217,7 @@ where
     }
 
     /// Registers a component which will be tracked, updated, and reported in state events
-    pub fn register_component<Type>(self) -> Self
+    pub fn register_component<Type>(&mut self)
     where
         Type: GetTypeRegistration + Reflect + Default + Component,
     {
@@ -197,11 +227,10 @@ where
         let registration = registry.get_mut(std::any::TypeId::of::<Type>()).unwrap();
         registration.insert(<ReflectComponent as FromType<Type>>::from_type());
         drop(registry);
-        self
     }
 
     /// Registers a resource that will be tracked and reported as part of the state
-    pub fn register_resource<Type>(self) -> Self
+    pub fn register_resource<Type>(&mut self)
     where
         Type: GetTypeRegistration + Reflect + Default + Resource,
     {
@@ -211,7 +240,6 @@ where
         let registration = registry.get_mut(std::any::TypeId::of::<Type>()).unwrap();
         registration.insert(<ReflectResource as FromType<Type>>::from_type());
         drop(registry);
-        self
     }
 
     pub fn default_setup_schedule() -> Schedule {
