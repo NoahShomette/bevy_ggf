@@ -14,7 +14,6 @@ use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_ggf::game_core::command::GameCommands;
 use bevy_ggf::game_core::runner::GameRunner;
-use bevy_ggf::game_core::state::StateThing;
 use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
@@ -218,7 +217,7 @@ fn setup(mut world: &mut World) {
         object_group: object_group_infantry,
     };
 
-    let tilemap_size = TilemapSize { x: 50, y: 50 };
+    let tilemap_size = TilemapSize { x: 5, y: 5 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
     let tilemap_type = TilemapType::Square;
 
@@ -259,7 +258,7 @@ fn setup(mut world: &mut World) {
         tile_stack_rules,
     );
 
-    let player_spawn_pos = TilePos { x: 10, y: 10 };
+    let player_spawn_pos = TilePos { x: 3, y: 3 };
 
     let spawn_object = game_commands.spawn_object(
         (
@@ -335,99 +334,82 @@ fn simulate(world: &mut World) {
 
         let registration = game.type_registry.read();
 
-        for state in game_state {
-            //info!("{:?}", state);
-            match state {
-                StateThing::Object {
-                    change_type,
-                    object_id,
-                    object_grid_position,
-                    components,
-                } => {
-                    let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
-                        SystemState::new(&mut world);
+        for tile in game_state.tiles {
+            let mut system_state: SystemState<(
+                Query<(Entity, &TilePos, &Tile), Without<ObjectId>>,
+                Query<(Entity, &ObjectId), Without<Tile>>,
+            )> = SystemState::new(&mut world);
+            let (mut tile_query, mut object_query) = system_state.get_mut(&mut world);
 
-                    let mut object_query = system_state.get(&mut world);
+            if let Some((entity, _, _)) = tile_query
+                .iter_mut()
+                .find(|(_, id, _)| id == &&tile.tile_pos)
+            {
+                for component in tile.components {
+                    let type_info = component.type_name();
+                    if let Some(type_registration) = registration.get_with_name(type_info) {
+                        if let Some(reflect_component) =
+                            type_registration.data::<ReflectComponent>()
+                        {
+                            reflect_component.remove(&mut world.entity_mut(entity));
+                            reflect_component.insert(&mut world.entity_mut(entity), &*component);
+                        }
+                    }
+                }
+            } else {
+                let mut entity = world.spawn_empty();
 
-                    if let Some((entity, object_id)) =
-                        object_query.iter_mut().find(|(_, id)| id == &&object_id)
-                    {
-                        for component in components {
-                            let type_info = component.type_name();
-                            if let Some(type_registration) = registration.get_with_name(type_info) {
-                                if let Some(reflect_component) =
-                                    type_registration.data::<ReflectComponent>()
-                                {
-                                    reflect_component.remove(&mut world.entity_mut(entity));
-                                    reflect_component
-                                        .insert(&mut world.entity_mut(entity), &*component);
-                                }
-                            }
+                for component in tile.components {
+                    let type_info = component.type_name();
+                    if let Some(type_registration) = registration.get_with_name(type_info) {
+                        if let Some(reflect_component) =
+                            type_registration.data::<ReflectComponent>()
+                        {
+                            reflect_component.insert(&mut entity, &*component);
                         }
                     } else {
-                        let entity = world.spawn_empty().id();
+                    }
+                }
+            }
 
-                        for component in components {
-                            let type_info = component.type_name();
-                            if let Some(type_registration) = registration.get_with_name(type_info) {
-                                if let Some(reflect_component) =
-                                    type_registration.data::<ReflectComponent>()
-                                {
-                                    reflect_component.remove(&mut world.entity_mut(entity));
-                                    reflect_component
-                                        .insert(&mut world.entity_mut(entity), &*component);
-                                }
+            for object in tile.objects_in_tile {
+                let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
+                    SystemState::new(&mut world);
+
+                let mut object_query = system_state.get(&mut world);
+
+                if let Some((entity, object_id)) = object_query
+                    .iter_mut()
+                    .find(|(_, id)| id == &&object.object_id)
+                {
+                    for component in object.components {
+                        let type_info = component.type_name();
+                        if let Some(type_registration) = registration.get_with_name(type_info) {
+                            if let Some(reflect_component) =
+                                type_registration.data::<ReflectComponent>()
+                            {
+                                reflect_component.remove(&mut world.entity_mut(entity));
+                                reflect_component
+                                    .insert(&mut world.entity_mut(entity), &*component);
+                            }
+                        }
+                    }
+                } else {
+                    let entity = world.spawn_empty().id();
+
+                    for component in object.components {
+                        let type_info = component.type_name();
+                        if let Some(type_registration) = registration.get_with_name(type_info) {
+                            if let Some(reflect_component) =
+                                type_registration.data::<ReflectComponent>()
+                            {
+                                reflect_component.remove(&mut world.entity_mut(entity));
+                                reflect_component
+                                    .insert(&mut world.entity_mut(entity), &*component);
                             }
                         }
                     }
                 }
-                StateThing::Tile {
-                    change_type,
-                    tile_pos,
-                    components,
-                } => {
-                    let mut system_state: SystemState<Query<(Entity, &TilePos, &Tile)>> =
-                        SystemState::new(&mut world);
-                    let mut object_query = system_state.get_mut(&mut world);
-
-                    if let Some((entity, _, _)) =
-                        object_query.iter_mut().find(|(_, id, _)| id == &&tile_pos)
-                    {
-                        for component in components {
-                            let type_info = component.type_name();
-                            if let Some(type_registration) = registration.get_with_name(type_info) {
-                                if let Some(reflect_component) =
-                                    type_registration.data::<ReflectComponent>()
-                                {
-                                    reflect_component.remove(&mut world.entity_mut(entity));
-                                    reflect_component
-                                        .insert(&mut world.entity_mut(entity), &*component);
-                                }
-                            }
-                        }
-                    } else {
-                        let mut entity = world.spawn_empty();
-
-                        for component in components {
-                            let type_info = component.type_name();
-                            if let Some(type_registration) = registration.get_with_name(type_info) {
-                                if let Some(reflect_component) =
-                                    type_registration.data::<ReflectComponent>()
-                                {
-                                    reflect_component.insert(&mut entity, &*component);
-                                }
-                            } else {
-                                //println!("Are we making it here");
-                            }
-                        }
-                    }
-                }
-                StateThing::Resource { .. } => {}
-                StateThing::Player {
-                    change_type,
-                    player_id,
-                    components,
-                } => {}
             }
         }
 

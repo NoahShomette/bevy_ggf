@@ -1,12 +1,10 @@
 ﻿use crate::mapping::tiles::Tile;
-use crate::object::{Object, ObjectGridPosition, ObjectId};
+use crate::object::{ObjectGridPosition, ObjectId};
 use crate::team::PlayerId;
-use bevy::prelude::{
-    apply_system_buffers, FromReflect, Reflect, ReflectComponent, Schedule, SystemSet, World,
-};
+use bevy::prelude::{Reflect, ReflectComponent, SystemSet, World};
 use bevy::reflect::{TypeRegistry, TypeRegistryArc};
+use bevy::utils::HashMap;
 use bevy_ecs_tilemap::tiles::TilePos;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum StateSystems {
@@ -26,12 +24,18 @@ pub fn get_state_diff(mut world: &mut World) {}
 // the state that changed since last time this system was run
 impl GameStateHandler {
     /// returns the entire game state in a vec
-    pub fn get_state(
-        &mut self,
-        mut world: &World,
-        type_registry: &TypeRegistryArc,
-    ) -> Vec<StateThing> {
-        let mut state: Vec<StateThing> = vec![];
+    pub fn get_state(&mut self, mut world: &World, type_registry: &TypeRegistryArc) -> StateEvents {
+        let mut state: StateEvents = StateEvents {
+            players: vec![],
+            resources: vec![],
+            tiles: vec![],
+            despawned_objects: vec![],
+        };
+        // We make a temporary map of tiles so that as we get objects from the world we can insert
+        // them into the right tiles information
+        let mut tiles: HashMap<TilePos, TileState> = HashMap::new();
+        let mut objects: HashMap<TilePos, Vec<ObjectState>> = HashMap::new();
+
         let type_registry = type_registry.read();
 
         for archetype in world.archetypes().iter() {
@@ -58,17 +62,14 @@ impl GameStateHandler {
                     }
 
                     if let Some(tile_pos) = world.get::<TilePos>(entity_id) {
-                        state.push(StateThing::Tile {
-                            change_type: ChangeType::NoChange,
-                            tile_pos: *tile_pos,
-                            components,
-                        })
-                    } else {
-                        state.push(StateThing::Tile {
-                            change_type: ChangeType::NoChange,
-                            tile_pos: Default::default(),
-                            components,
-                        })
+                        tiles.insert(
+                            *tile_pos,
+                            TileState {
+                                tile_pos: *tile_pos,
+                                components,
+                                objects_in_tile: vec![],
+                            },
+                        );
                     }
                 }
 
@@ -91,22 +92,37 @@ impl GameStateHandler {
                     }
 
                     if let Some(tile_pos) = world.get::<ObjectGridPosition>(entity_id) {
-                        state.push(StateThing::Object {
-                            change_type: ChangeType::NoChange,
-                            object_id: *object_id,
-                            components,
-                            object_grid_position: *tile_pos,
-                        })
-                    } else {
-                        state.push(StateThing::Object {
-                            change_type: ChangeType::NoChange,
-                            object_id: *object_id,
-                            components,
-                            object_grid_position: Default::default(),
-                        })
+                        if let Some(objects) = objects.get_mut(&tile_pos.tile_position){
+                            objects.push(ObjectState {
+                                object_id: *object_id,
+                                components,
+                                object_grid_position: *tile_pos,
+                            },)
+                        }else{
+                            objects.insert(
+                                tile_pos.tile_position,
+                                vec![ObjectState {
+                                    object_id: *object_id,
+                                    components,
+                                    object_grid_position: *tile_pos,
+                                }],
+                            );
+                        }
+                        
                     }
                 }
             }
+        }
+
+        
+
+        for (_, mut tile) in tiles.drain() {
+            if let Some(objects) = objects.get_mut(&tile.tile_pos){
+                for object in objects.drain(..) {
+                    tile.objects_in_tile.push(object);
+                }
+            }
+            state.tiles.push(tile);
         }
 
         state
@@ -115,10 +131,31 @@ impl GameStateHandler {
     pub fn get_state_diff(&mut self, mut world: &World, type_registry: &TypeRegistry) {}
 
     pub fn get_updates(&mut self) -> Option<StateEvents> {
-        if !self.state_events.state.is_empty() {
-            let new_events = StateEvents {
-                state: self.state_events.state.drain(..).collect(),
-            };
+        let mut has_state = false;
+        let mut new_events = StateEvents {
+            players: vec![],
+            resources: vec![],
+            tiles: vec![],
+            despawned_objects: vec![],
+        };
+        if !self.state_events.players.is_empty() {
+            has_state = true;
+            new_events.players = self.state_events.players.drain(..).collect();
+        }
+        if !self.state_events.resources.is_empty() {
+            has_state = true;
+            new_events.resources = self.state_events.resources.drain(..).collect();
+        }
+        if !self.state_events.tiles.is_empty() {
+            has_state = true;
+            new_events.tiles = self.state_events.tiles.drain(..).collect();
+        }
+        if !self.state_events.despawned_objects.is_empty() {
+            has_state = true;
+            new_events.despawned_objects = self.state_events.despawned_objects.drain(..).collect();
+        }
+
+        if has_state {
             return Some(new_events);
         } else {
             return None;
@@ -130,54 +167,43 @@ impl GameStateHandler {
 /// that matches the specific [`StateThing`] that was changed. Each enum variant contains the
 /// information needed to enact that which includes Ids, the kind of
 /// change represented by [`ChangeType`], and the reflected state itself
+
+
+/// Contains the state of a player, identified by a [`PlayerId`] component
 #[derive(Debug)]
-pub enum StateThing {
-    Object {
-        change_type: ChangeType,
-        object_id: ObjectId,
-        object_grid_position: ObjectGridPosition,
-        components: Vec<Box<dyn Reflect>>,
-    },
-    Tile {
-        change_type: ChangeType,
-        tile_pos: TilePos,
-        components: Vec<Box<dyn Reflect>>,
-    },
-    Resource {
-        change_type: ChangeType,
-        resource: Box<dyn Reflect>,
-    },
-    Player {
-        change_type: ChangeType,
-        player_id: PlayerId,
-        components: Vec<Box<dyn Reflect>>,
-    },
+pub struct PlayerState {
+    pub player_id: PlayerId,
+    pub components: Vec<Box<dyn Reflect>>,
 }
 
-/// What type of change occured
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Hash,
-    Eq,
-    PartialOrd,
-    PartialEq,
-    Ord,
-    Reflect,
-    FromReflect,
-    Serialize,
-    Deserialize,
-)]
-pub enum ChangeType {
-    NoChange,
-    Modified,
-    Spawned,
-    Despawned,
+/// Contains the state of a [`Resource`]
+#[derive(Debug)]
+pub struct ResourceState {
+    pub resource: Box<dyn Reflect>,
 }
 
-/// A list of all state things that occured during the last simulation tick
+/// Contains an objects state, identified via its [`ObjectId`] component
+#[derive(Debug)]
+pub struct ObjectState {
+    pub object_id: ObjectId,
+    pub object_grid_position: ObjectGridPosition,
+    pub components: Vec<Box<dyn Reflect>>,
+}
+
+/// Contains the entire state of a Tile, identified by its [`TilePos`] component, and all the Objects
+/// in that tile
+#[derive(Debug)]
+pub struct TileState {
+    pub tile_pos: TilePos,
+    pub components: Vec<Box<dyn Reflect>>,
+    pub objects_in_tile: Vec<ObjectState>,
+}
+
+/// A list of all changed states that occured during the last simulation tick
 #[derive(Debug, Default)]
 pub struct StateEvents {
-    state: Vec<StateThing>,
+    pub players: Vec<PlayerState>,
+    pub resources: Vec<ResourceState>,
+    pub tiles: Vec<TileState>,
+    pub despawned_objects: Vec<ObjectId>,
 }

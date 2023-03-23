@@ -1,22 +1,25 @@
 ﻿//!
 
-use std::cell::RefCell;
 use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use crate::game_core::runner::GameRunner;
-use crate::game_core::state::{
-    get_state_diff, GameStateHandler, StateEvents, StateSystems, StateThing,
-};
+use crate::game_core::state::{get_state_diff, GameStateHandler, StateEvents, StateSystems};
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{Tile, TileObjectStacks, TileObjects, ObjectStackingClass};
+use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjectStacks, TileObjects};
 use crate::mapping::MapIdProvider;
 use crate::movement::TileMovementCosts;
-use crate::object::{Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType};
+use crate::object::{
+    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType,
+};
 use bevy::app::{App, CoreSchedule, Plugin};
-use bevy::prelude::{apply_system_buffers, Children, Commands, Component, FixedTime, IntoSystemAppConfig, IntoSystemConfig, Parent, ReflectComponent, ReflectResource, ResMut, Resource, Schedule, World};
+use bevy::prelude::{
+    apply_system_buffers, Children, Commands, Component, FixedTime, IntoSystemAppConfig,
+    IntoSystemConfig, Parent, ReflectComponent, ReflectResource, ResMut, Resource, Schedule, World,
+};
 use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRegistryInternal};
 use bevy_ecs_tilemap::tiles::TilePos;
 use chrono::{DateTime, Utc};
 use parking_lot::{Mutex, RwLock};
+use std::cell::RefCell;
 use std::default::Default;
 use std::sync::Arc;
 
@@ -49,7 +52,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn get_state(&mut self) -> Vec<StateThing> {
+    pub fn get_state(&mut self) -> StateEvents {
         self.game_state_handler
             .get_state(&mut self.game_world, &self.type_registry)
     }
@@ -121,7 +124,7 @@ where
         }
 
         let mut game_world = World::new();
-        
+
         game_world.insert_resource(ObjectIdProvider::default());
         game_world.insert_resource(MapIdProvider::default());
 
@@ -170,13 +173,15 @@ where
                 r.register::<TilePos>();
                 let registration = r.get_mut(std::any::TypeId::of::<TilePos>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<TilePos>>::from_type());
-                
+
                 // tiles
                 r.register::<Tile>();
                 let registration = r.get_mut(std::any::TypeId::of::<Tile>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<Tile>>::from_type());
                 r.register::<TileTerrainInfo>();
-                let registration = r.get_mut(std::any::TypeId::of::<TileTerrainInfo>()).unwrap();
+                let registration = r
+                    .get_mut(std::any::TypeId::of::<TileTerrainInfo>())
+                    .unwrap();
                 registration.insert(<ReflectComponent as FromType<TileTerrainInfo>>::from_type());
                 //r.register::<TileObjectStacks>();
                 //let registration = r.get_mut(std::any::TypeId::of::<TileObjectStacks>()).unwrap();
@@ -185,31 +190,39 @@ where
                 let registration = r.get_mut(std::any::TypeId::of::<TileObjects>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<TileObjects>>::from_type());
                 r.register::<TileMovementCosts>();
-                let registration = r.get_mut(std::any::TypeId::of::<TileMovementCosts>()).unwrap();
+                let registration = r
+                    .get_mut(std::any::TypeId::of::<TileMovementCosts>())
+                    .unwrap();
                 registration.insert(<ReflectComponent as FromType<TileMovementCosts>>::from_type());
 
                 //Objects
                 r.register::<ObjectId>();
                 let registration = r.get_mut(std::any::TypeId::of::<ObjectId>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<ObjectId>>::from_type());
-                
+
                 r.register::<ObjectClass>();
-                
+
                 r.register::<ObjectGroup>();
-                
+
                 r.register::<ObjectType>();
-                
+
                 r.register::<ObjectGridPosition>();
-                let registration = r.get_mut(std::any::TypeId::of::<ObjectGridPosition>()).unwrap();
-                registration.insert(<ReflectComponent as FromType<ObjectGridPosition>>::from_type());
-                
+                let registration = r
+                    .get_mut(std::any::TypeId::of::<ObjectGridPosition>())
+                    .unwrap();
+                registration
+                    .insert(<ReflectComponent as FromType<ObjectGridPosition>>::from_type());
+
                 r.register::<Object>();
                 let registration = r.get_mut(std::any::TypeId::of::<Object>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<Object>>::from_type());
 
                 r.register::<ObjectStackingClass>();
-                let registration = r.get_mut(std::any::TypeId::of::<ObjectStackingClass>()).unwrap();
-                registration.insert(<ReflectComponent as FromType<ObjectStackingClass>>::from_type());
+                let registration = r
+                    .get_mut(std::any::TypeId::of::<ObjectStackingClass>())
+                    .unwrap();
+                registration
+                    .insert(<ReflectComponent as FromType<ObjectStackingClass>>::from_type());
 
                 r
             })),
@@ -255,11 +268,10 @@ where
 
     pub fn build(mut self, mut main_world: &mut World) {
         self.setup_schedule.run(&mut self.game_world);
-        
-        if let Some(mut commands) = self.commands.as_mut(){
+
+        if let Some(mut commands) = self.commands.as_mut() {
             commands.execute_buffer(&mut self.game_world);
-        }
-        else{
+        } else {
             self.commands = Some(GameCommands::default());
         }
 

@@ -125,6 +125,7 @@ fn test_tile_object_stacks() {
 /// A StackingClass represents what kind of stack an object belongs to in a tile. This is used internally
 /// in [`TileObjectStacks`]
 #[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
+#[reflect(Hash)]
 pub struct StackingClass {
     pub name: String,
 }
@@ -144,7 +145,7 @@ pub struct TileObjectStacksCount {
     pub max_count: u32,
 }
 
-/// Simple Vec that holds Entities that are currently in the tile.
+/// Simple Vec that holds the [`ObjectId`] of all Objects that are currently in the tile.
 #[derive(Clone, Eq, PartialEq, Default, Component, Reflect, FromReflect)]
 #[reflect(Component)]
 pub struct TileObjects {
