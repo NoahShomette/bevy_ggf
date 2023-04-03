@@ -7,6 +7,7 @@ use bevy::prelude::{
 };
 use bevy::reflect::{Reflect, TypeData};
 use bevy::{DefaultPlugins, MinimalPlugins};
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy_ascii_terminal::{
     AutoCamera, Border, Terminal, TerminalBundle, TerminalPlugin, TileFormatter,
 };
@@ -14,6 +15,7 @@ use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_ggf::game_core::command::GameCommands;
 use bevy_ggf::game_core::runner::GameRunner;
+use bevy_ggf::game_core::state::{ObjectState, TileState};
 use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
@@ -27,7 +29,6 @@ use bevy_ggf::movement::{
 };
 use bevy_ggf::object::{ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectType};
 use bevy_ggf::{object, BggfDefaultPlugins};
-use std::any::Any;
 
 fn main() {
     let mut app = App::new();
@@ -37,9 +38,14 @@ fn main() {
     app.add_plugin(TerminalPlugin)
         .insert_resource(ClearColor(Color::BLACK));
     app.add_startup_system(setup);
-    app.add_system(simulate);
+    app.add_system(simulate_game);
+    app.add_system(update_game_state);
     app.add_system(handle_input);
     app.add_system(draw_world);
+    
+    app.add_plugin(LogDiagnosticsPlugin::default())
+        .add_plugin(FrameTimeDiagnosticsPlugin::default());
+    
     app.run();
 }
 
@@ -58,7 +64,7 @@ pub struct TestRunner {
 impl GameRunner for TestRunner {
     fn simulate_game(&mut self, world: &mut World) {
         self.schedule.run(world);
-        println!("Ran world")
+        //println!("Ran world")
     }
 }
 
@@ -217,7 +223,7 @@ fn setup(mut world: &mut World) {
         object_group: object_group_infantry,
     };
 
-    let tilemap_size = TilemapSize { x: 5, y: 5 };
+    let tilemap_size = TilemapSize { x: 200, y: 200 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
     let tilemap_type = TilemapType::Square;
 
@@ -310,6 +316,7 @@ fn setup(mut world: &mut World) {
         tilemap_type,
     );
     game.setup_mapping();
+    game.add_player(true);
 
     game.register_component::<PlayerMarker>();
 
@@ -321,20 +328,28 @@ fn setup(mut world: &mut World) {
     world.spawn((TerminalBundle::from(term), AutoCamera));
 }
 
-fn simulate(world: &mut World) {
+fn simulate_game(world: &mut World) {
     world.resource_scope(|mut world, mut game: Mut<Game>| {
         world.resource_scope(|world, mut game_runtime: Mut<GameRuntime<TestRunner>>| {
+            game_runtime.game_runner.simulate_game(&mut game.game_world);
             world.resource_scope(|world, mut game_commands: Mut<GameCommands>| {
                 game_commands.execute_buffer(&mut game.game_world);
             });
-            game_runtime.game_runner.simulate_game(&mut game.game_world);
         });
-        let game_state = game.get_state();
+    });
+}
+
+fn update_game_state(world: &mut World) {
+    world.resource_scope(|mut world, mut game: Mut<Game>| {
+        let game_state = game.get_state_diff(0);
+        //println!("{:?}", game_state);
         let mut player_pos = world.remove_resource::<PlayerPos>().unwrap();
 
         let registration = game.type_registry.read();
 
-        for tile in game_state.tiles {
+        let tiles: Vec<TileState> = game_state.tiles.into_iter().collect();
+
+        for tile in tiles {
             let mut system_state: SystemState<(
                 Query<(Entity, &TilePos, &Tile), Without<ObjectId>>,
                 Query<(Entity, &ObjectId), Without<Tile>>,
@@ -345,7 +360,7 @@ fn simulate(world: &mut World) {
                 .iter_mut()
                 .find(|(_, id, _)| id == &&tile.tile_pos)
             {
-                for component in tile.components {
+                for component in tile.components.into_iter() {
                     let type_info = component.type_name();
                     if let Some(type_registration) = registration.get_with_name(type_info) {
                         if let Some(reflect_component) =
@@ -371,42 +386,41 @@ fn simulate(world: &mut World) {
                     }
                 }
             }
+        }
 
-            for object in tile.objects_in_tile {
-                let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
-                    SystemState::new(&mut world);
+        let objects: Vec<ObjectState> = game_state.objects.into_iter().collect();
+        for object in objects {
+            let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
+                SystemState::new(&mut world);
 
-                let mut object_query = system_state.get(&mut world);
+            let mut object_query = system_state.get(&mut world);
 
-                if let Some((entity, object_id)) = object_query
-                    .iter_mut()
-                    .find(|(_, id)| id == &&object.object_id)
-                {
-                    for component in object.components {
-                        let type_info = component.type_name();
-                        if let Some(type_registration) = registration.get_with_name(type_info) {
-                            if let Some(reflect_component) =
-                                type_registration.data::<ReflectComponent>()
-                            {
-                                reflect_component.remove(&mut world.entity_mut(entity));
-                                reflect_component
-                                    .insert(&mut world.entity_mut(entity), &*component);
-                            }
+            if let Some((entity, object_id)) = object_query
+                .iter_mut()
+                .find(|(_, id)| id == &&object.object_id)
+            {
+                for component in object.components {
+                    let type_info = component.type_name();
+                    if let Some(type_registration) = registration.get_with_name(type_info) {
+                        if let Some(reflect_component) =
+                            type_registration.data::<ReflectComponent>()
+                        {
+                            reflect_component.remove(&mut world.entity_mut(entity));
+                            reflect_component.insert(&mut world.entity_mut(entity), &*component);
                         }
                     }
-                } else {
-                    let entity = world.spawn_empty().id();
+                }
+            } else {
+                let entity = world.spawn_empty().id();
 
-                    for component in object.components {
-                        let type_info = component.type_name();
-                        if let Some(type_registration) = registration.get_with_name(type_info) {
-                            if let Some(reflect_component) =
-                                type_registration.data::<ReflectComponent>()
-                            {
-                                reflect_component.remove(&mut world.entity_mut(entity));
-                                reflect_component
-                                    .insert(&mut world.entity_mut(entity), &*component);
-                            }
+                for component in object.components {
+                    let type_info = component.type_name();
+                    if let Some(type_registration) = registration.get_with_name(type_info) {
+                        if let Some(reflect_component) =
+                            type_registration.data::<ReflectComponent>()
+                        {
+                            reflect_component.remove(&mut world.entity_mut(entity));
+                            reflect_component.insert(&mut world.entity_mut(entity), &*component);
                         }
                     }
                 }
@@ -414,6 +428,8 @@ fn simulate(world: &mut World) {
         }
 
         world.insert_resource(player_pos);
+        drop(registration);
+        game.game_state_handler.clear_changed(world);
     });
 }
 

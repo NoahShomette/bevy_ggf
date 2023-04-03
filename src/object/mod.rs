@@ -4,7 +4,7 @@
 
 use crate::mapping::tiles::ObjectStackingClass;
 use crate::movement::ObjectMovementBundle;
-use bevy::prelude::{Bundle, Component, Resource, SpriteBundle, ReflectComponent};
+use bevy::prelude::{Bundle, Component, Resource, ReflectComponent};
 use bevy::reflect::{FromReflect, Reflect};
 use bevy_ecs_tilemap::prelude::TilePos;
 use serde::{Deserialize, Serialize};

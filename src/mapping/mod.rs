@@ -14,6 +14,7 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use crate::game_core::GameBuilder;
 use crate::game_core::runner::GameRunner;
+use crate::player::PlayerList;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -152,6 +153,9 @@ impl GameCommand for SpawnRandomMap {
         let tilemap_type = self.tilemap_type;
         let tilemap_entity = world.spawn_empty().id();
 
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
+
         world.resource_scope(|world, terrain_movement_costs: Mut<TerrainMovementCosts>| {
             for x in 0..map_size.x {
                 for y in 0..map_size.y {
@@ -175,6 +179,7 @@ impl GameCommand for SpawnRandomMap {
                             tile_objects: TileObjects::default(),
                         })
                         .insert(tile_movement_costs.clone())
+                        .insert(changed_component.clone())
                         .id();
 
                     tile_storage.set(&tile_pos, tile_entity);

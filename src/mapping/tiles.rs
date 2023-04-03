@@ -125,7 +125,6 @@ fn test_tile_object_stacks() {
 /// A StackingClass represents what kind of stack an object belongs to in a tile. This is used internally
 /// in [`TileObjectStacks`]
 #[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
-#[reflect(Hash)]
 pub struct StackingClass {
     pub name: String,
 }

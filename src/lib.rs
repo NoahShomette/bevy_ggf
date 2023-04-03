@@ -16,7 +16,7 @@ pub mod combat;
 pub mod mapping;
 pub mod movement;
 pub mod object;
-pub mod team;
+pub mod player;
 pub mod game_core;
 
 pub struct BggfCorePlugin;

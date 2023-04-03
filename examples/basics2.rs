@@ -188,7 +188,7 @@ fn simulate(mut world: &mut World) {
         world.resource_scope(|world, mut game_runtime: Mut<GameRuntime<TestRunner>>| {
             game_runtime.game_runner.simulate_game(&mut game.game_world);
         });
-        let game_state = game.get_state();
+        let game_state = game.get_entire_state();
         for state in game_state {
         }
     });

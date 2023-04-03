@@ -19,6 +19,7 @@ use bevy::prelude::{
 use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
+use crate::player::PlayerList;
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
@@ -196,7 +197,7 @@ impl GameCommand for MoveObject {
                     move_event.send(MoveEvent::MoveComplete {
                         object_moved: self.object_moving,
                     });
-
+                    
                     system_state.apply(world);
                     Ok(())
                 } else {

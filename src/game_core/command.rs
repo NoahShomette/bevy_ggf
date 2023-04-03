@@ -56,14 +56,17 @@
 //!
 //! ```
 
+use crate::game_core::state::DespawnedObjects;
 use crate::game_core::{Game, ObjectIdProvider};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::mapping::MapId;
 use crate::object::{Object, ObjectGridPosition, ObjectId};
+use crate::player::PlayerList;
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
 use bevy::prelude::{
-    Bundle, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without, World,
+    Bundle, Commands, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without,
+    World,
 };
 use bevy::reflect::FromReflect;
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
@@ -280,11 +283,9 @@ impl GameCommands {
             match command.command.execute(world) {
                 Ok(_) => {
                     self.history.push(command);
-
                 }
                 Err(error) => {
                     info!("execution failed with: {:?}", error);
-
                 }
             }
             self.history.clear_rollback_history();
@@ -471,17 +472,19 @@ pub struct RemoveObjectFromTile {
 
 impl GameCommand for RemoveObjectFromTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
         let mut system_state: SystemState<(
-            Query<(&ObjectId, &ObjectStackingClass)>,
+            Query<(Entity, &ObjectId, &ObjectStackingClass)>,
             Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
-        let Some((_, object_stacking_class)) = object_query
+        let Some((entity, _, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.object_game_id)else {
+            .find(|(_, id, _)| id == &&self.object_game_id)else {
             return Err(String::from("No object components found"));
         };
         let Some((_, tile_storage)) = tile_storage_query
@@ -494,15 +497,21 @@ impl GameCommand for RemoveObjectFromTile {
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
             return Err(String::from("No tile stack rules found"));
         };
-
+        
         tile_objects.remove_object(self.object_game_id);
         tile_stack_rules.decrement_object_class_count(object_stacking_class);
+
+        world.entity_mut(tile_entity).insert(changed_component.clone());
+        world.entity_mut(entity).insert(changed_component);
+        
         return Ok(());
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
         let mut system_state: SystemState<(
-            Query<(&ObjectId, &mut ObjectGridPosition, &ObjectStackingClass)>,
+            Query<(Entity, &ObjectId, &mut ObjectGridPosition, &ObjectStackingClass)>,
             Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
@@ -510,9 +519,9 @@ impl GameCommand for RemoveObjectFromTile {
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
-        let Some((_, mut object_grid_position, object_stacking_class)) = object_query
+        let Some((entity, _, mut object_grid_position, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(id, _, _)| id == &&self.object_game_id)else {
+            .find(|(_, id, _, _)| id == &&self.object_game_id)else {
             return Err(String::from("No object components found"));
         };
         let Some((_, tile_storage)) = tile_storage_query
@@ -526,10 +535,14 @@ impl GameCommand for RemoveObjectFromTile {
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
             return Err(String::from("No tile stack rules found"));
         };
-
+        
         tile_objects.add_object(self.object_game_id);
         object_grid_position.tile_position = self.tile_pos;
         tile_stack_rules.increment_object_class_count(object_stacking_class);
+
+        world.entity_mut(tile_entity).insert(changed_component.clone());
+        world.entity_mut(entity).insert(changed_component);
+        
         Ok(())
     }
 }
@@ -548,8 +561,10 @@ pub struct AddObjectToTile {
 
 impl GameCommand for AddObjectToTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
         let mut system_state: SystemState<(
-            Query<(&ObjectId, &mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
+            Query<(Entity, &ObjectId, &mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
             Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(Entity, &MapId, &TileStorage, Without<Object>)>,
         )> = SystemState::new(&mut world);
@@ -557,10 +572,10 @@ impl GameCommand for AddObjectToTile {
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
-        let Some((_, mut object_grid_position, object_stacking_class)) =
+        let Some((entity, _, mut object_grid_position, object_stacking_class)) =
             object_query
                 .iter_mut()
-                .find(|(id, _, _)| id == &&self.object_game_id) else {
+                .find(|(_, id, _, _)| id == &&self.object_game_id) else {
             return Err(String::from(format!("No Object Components found for ObjectId: {:?}", self.object_game_id)));
         };
         let Some((entity, _, tile_storage, _)) = tile_storage_query
@@ -575,16 +590,22 @@ impl GameCommand for AddObjectToTile {
             return Err(String::from("No tile components found"));
         };
 
+
         tile_objects.add_object(self.object_game_id);
         object_grid_position.tile_position = self.tile_pos;
         tile_stack_rules.increment_object_class_count(object_stacking_class);
+        
+        world.entity_mut(tile_entity).insert(changed_component.clone());
+        world.entity_mut(entity).insert(changed_component);
 
         Ok(())
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
         let mut system_state: SystemState<(
-            Query<(&ObjectId, &ObjectStackingClass)>,
+            Query<(Entity, &ObjectId, &ObjectStackingClass)>,
             Query<(&mut TileObjectStacks, &mut TileObjects)>,
             Query<(&MapId, &TileStorage)>,
         )> = SystemState::new(&mut world);
@@ -592,9 +613,9 @@ impl GameCommand for AddObjectToTile {
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
-        let Some((_, object_stacking_class)) = object_query
+        let Some((entity, _, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.object_game_id)else {
+            .find(|(_, id, _)| id == &&self.object_game_id)else {
             return Err(String::from("No object components found found"));
         };
         let Some((_, tile_storage)) = tile_storage_query
@@ -609,8 +630,12 @@ impl GameCommand for AddObjectToTile {
             return Err(String::from("No tile components found"));
         };
 
+
         tile_objects.remove_object(self.object_game_id);
         tile_stack_rules.decrement_object_class_count(object_stacking_class);
+
+        world.entity_mut(tile_entity).insert(changed_component.clone());
+        world.entity_mut(entity).insert(changed_component);
         Ok(())
     }
 }
@@ -633,8 +658,10 @@ where
     fn execute(&mut self, world: &mut World) -> Result<(), String> {
         // Assign a new id as we un assign the id when we rollback
         let id = world.resource_mut::<ObjectIdProvider>().next_id_component();
-
-        world.spawn(self.bundle.clone()).insert(id);
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+        world
+            .spawn(self.bundle.clone())
+            .insert((id, changed_component));
 
         let mut add = AddObjectToTile {
             object_game_id: id,
@@ -647,6 +674,8 @@ where
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
         let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
             SystemState::new(&mut world);
         let mut object_query = system_state.get_mut(&mut world);
@@ -670,10 +699,20 @@ where
         world.entity_mut(entity).despawn_recursive();
         world.resource_mut::<ObjectIdProvider>().remove_last_id();
 
+        world
+            .resource_mut::<DespawnedObjects>()
+            .despawned_objects
+            .insert(
+                self.object_game_id
+                    .expect("Rollback can only be called after execute which returns an entity id"),
+                changed_component,
+            );
+
         return Ok(());
     }
 }
 
+//TODO update this to record the objects components now that I know how to do it
 #[derive(Clone, Debug, Reflect)]
 pub struct DespawnObject {
     pub on_map: MapId,
@@ -684,6 +723,8 @@ pub struct DespawnObject {
 
 impl GameCommand for DespawnObject {
     fn execute(&mut self, world: &mut World) -> Result<(), String> {
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
         let mut system_state: SystemState<Query<(Entity, &ObjectId, &TilePos)>> =
             SystemState::new(world);
         let mut object_query = system_state.get_mut(world);
@@ -707,10 +748,21 @@ impl GameCommand for DespawnObject {
         let _ = remove.execute(world);
 
         self.tile_pos = Some(tile_pos);
+
+        world
+            .resource_mut::<DespawnedObjects>()
+            .despawned_objects
+            .insert(
+                self.object_game_id,
+                changed_component,
+            );
+        
         return Ok(());
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
         let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
             SystemState::new(&mut world);
         let mut object_query = system_state.get_mut(&mut world);

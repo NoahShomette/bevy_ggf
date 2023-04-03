@@ -2,15 +2,19 @@
 
 use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use crate::game_core::runner::GameRunner;
-use crate::game_core::state::{get_state_diff, GameStateHandler, StateEvents, StateSystems};
+use crate::game_core::state::{DespawnedObjects, GameStateHandler, StateEvents, StateSystems};
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjectStacks, TileObjects};
+use crate::mapping::tiles::{
+    ObjectStackingClass, Tile, TileObjectStacks, TileObjectStacksCount, TileObjects,
+};
 use crate::mapping::MapIdProvider;
 use crate::movement::TileMovementCosts;
 use crate::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType,
 };
+use crate::player::{Player, PlayerList};
 use bevy::app::{App, CoreSchedule, Plugin};
+use bevy::ecs::world::EntityMut;
 use bevy::prelude::{
     apply_system_buffers, Children, Commands, Component, FixedTime, IntoSystemAppConfig,
     IntoSystemConfig, Parent, ReflectComponent, ReflectResource, ResMut, Resource, Schedule, World,
@@ -19,7 +23,6 @@ use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRe
 use bevy_ecs_tilemap::tiles::TilePos;
 use chrono::{DateTime, Utc};
 use parking_lot::{Mutex, RwLock};
-use std::cell::RefCell;
 use std::default::Default;
 use std::sync::Arc;
 
@@ -49,12 +52,25 @@ pub struct Game {
     pub type_registry: TypeRegistry,
     /// Holds updates to the game state
     pub game_state_handler: GameStateHandler,
+    /// List of all players in the game
+    pub player_list: PlayerList,
 }
 
 impl Game {
-    pub fn get_state(&mut self) -> StateEvents {
-        self.game_state_handler
-            .get_state(&mut self.game_world, &self.type_registry)
+    pub fn get_entire_state(&mut self, for_player_id: Option<usize>) -> StateEvents {
+        self.game_state_handler.get_entire_state(
+            &mut self.game_world,
+            for_player_id,
+            &self.type_registry,
+        )
+    }
+
+    pub fn get_state_diff(&mut self, for_player_id: usize) -> StateEvents {
+        self.game_state_handler.get_state_diff(
+            &mut self.game_world,
+            for_player_id,
+            &self.type_registry,
+        )
     }
 
     pub fn execute_game_commands(&mut self) {}
@@ -89,6 +105,8 @@ where
     pub setup_schedule: Schedule,
     pub type_registry: TypeRegistry,
     pub commands: Option<GameCommands>,
+    pub next_player_id: usize,
+    pub player_list: PlayerList,
 }
 
 impl<GR> GameBuilder<GR>
@@ -107,6 +125,8 @@ where
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
             type_registry: GameBuilder::<GR>::default_registry(),
             commands: Default::default(),
+            next_player_id: 0,
+            player_list: PlayerList { players: vec![] },
         }
     }
     pub fn new_game_with_commands(
@@ -139,6 +159,8 @@ where
                 },
                 history: Default::default(),
             }),
+            next_player_id: 0,
+            player_list: PlayerList { players: vec![] },
         }
     }
 
@@ -178,17 +200,23 @@ where
                 r.register::<Tile>();
                 let registration = r.get_mut(std::any::TypeId::of::<Tile>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<Tile>>::from_type());
+
                 r.register::<TileTerrainInfo>();
                 let registration = r
                     .get_mut(std::any::TypeId::of::<TileTerrainInfo>())
                     .unwrap();
                 registration.insert(<ReflectComponent as FromType<TileTerrainInfo>>::from_type());
+
                 //r.register::<TileObjectStacks>();
                 //let registration = r.get_mut(std::any::TypeId::of::<TileObjectStacks>()).unwrap();
                 //registration.insert(<ReflectComponent as FromType<TileObjectStacks>>::from_type());
                 r.register::<TileObjects>();
+                r.register::<TileObjectStacksCount>();
+
+                r.register::<TileObjects>();
                 let registration = r.get_mut(std::any::TypeId::of::<TileObjects>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<TileObjects>>::from_type());
+
                 r.register::<TileMovementCosts>();
                 let registration = r
                     .get_mut(std::any::TypeId::of::<TileMovementCosts>())
@@ -259,21 +287,23 @@ where
         let mut schedule = Schedule::default();
 
         schedule
-            .configure_sets((StateSystems::CommandFlush, StateSystems::State))
-            .add_system(apply_system_buffers.in_set(StateSystems::CommandFlush))
-            .add_system(get_state_diff.after(StateSystems::State));
+    }
 
-        schedule
+    pub fn add_player(&mut self, needs_state: bool) -> (usize, EntityMut) {
+        let new_player_id = self.next_player_id;
+        self.next_player_id += 1;
+        let player_entity = self
+            .game_world
+            .spawn(Player::new(new_player_id, needs_state));
+        self.player_list
+            .players
+            .push(Player::new(new_player_id, needs_state));
+        (new_player_id, player_entity)
     }
 
     pub fn build(mut self, mut main_world: &mut World) {
         self.setup_schedule.run(&mut self.game_world);
 
-        if let Some(mut commands) = self.commands.as_mut() {
-            commands.execute_buffer(&mut self.game_world);
-        } else {
-            self.commands = Some(GameCommands::default());
-        }
 
         main_world.insert_resource::<GameRuntime<GR>>(GameRuntime {
             game_runner: self.game_runner,
@@ -281,11 +311,24 @@ where
         self.game_world.insert_resource(GameTypeRegistry {
             type_registry: self.type_registry.clone(),
         });
+        self.game_world.insert_resource(DespawnedObjects {
+            despawned_objects: Default::default(),
+        });
+        self.game_world.insert_resource(self.player_list.clone());
+
+
+        if let Some(mut commands) = self.commands.as_mut() {
+            commands.execute_buffer(&mut self.game_world);
+        } else {
+            self.commands = Some(GameCommands::default());
+        }
+        
         main_world.insert_resource(self.commands.unwrap());
         main_world.insert_resource::<Game>(Game {
             game_world: self.game_world,
             type_registry: self.type_registry,
             game_state_handler: Default::default(),
+            player_list: self.player_list,
         });
     }
 }
