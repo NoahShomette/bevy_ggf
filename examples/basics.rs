@@ -223,7 +223,7 @@ fn setup(mut world: &mut World) {
         object_group: object_group_infantry,
     };
 
-    let tilemap_size = TilemapSize { x: 200, y: 200 };
+    let tilemap_size = TilemapSize { x: 30, y: 30 };
     let tilemap_tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
     let tilemap_type = TilemapType::Square;
 

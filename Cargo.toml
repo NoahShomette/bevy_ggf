@@ -31,7 +31,7 @@ opt-level = 3
 
 [dependencies]
 bevy = { version = "0.10.0", features = ["bevy_scene", "bevy_gilrs", "bevy_winit", "serialize", ], default-features = false }
-bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", features = [], default-features = false }
+bevy_ecs_tilemap = { version = "0.10", features = [], default-features = false }
 serde = { version = "1.0.125", features = ["derive"] }
 rand = "0.8.5"
 chrono = { version = "0.4.23", features = ["std", "serde"] }
@@ -40,3 +40,6 @@ parking_lot = "0.12.1"
 [dev-dependencies]
 bevy = { version = "0.10.0", features = ["bevy_asset", "bevy_scene", "bevy_gilrs", "bevy_winit", "animation", "x11", "png", "filesystem_watcher", "bevy_render", "serialize", "trace_chrome", "trace" ], default-features = false }
 bevy_ascii_terminal = "0.12.4"
+
+[patch.crates-io]
+bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", features = [], default-features = false }
