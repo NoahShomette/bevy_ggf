@@ -153,9 +153,6 @@ impl GameCommand for SpawnRandomMap {
         let tilemap_type = self.tilemap_type;
         let tilemap_entity = world.spawn_empty().id();
 
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
-
-
         world.resource_scope(|world, terrain_movement_costs: Mut<TerrainMovementCosts>| {
             for x in 0..map_size.x {
                 for y in 0..map_size.y {
@@ -179,7 +176,7 @@ impl GameCommand for SpawnRandomMap {
                             tile_objects: TileObjects::default(),
                         })
                         .insert(tile_movement_costs.clone())
-                        .insert(changed_component.clone())
+                        .insert(crate::game_core::state::Changed::default())
                         .id();
 
                     tile_storage.set(&tile_pos, tile_entity);

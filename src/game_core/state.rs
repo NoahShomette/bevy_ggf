@@ -1,13 +1,12 @@
 ﻿use crate::mapping::tiles::Tile;
 use crate::object::{ObjectGridPosition, ObjectId};
-use crate::player::Player;
+use crate::player::{Player, PlayerList};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
     Commands, Component, Entity, FromReflect, Mut, Query, Reflect, ReflectComponent, Resource,
     SystemSet, With, World,
 };
 use bevy::reflect::{TypeRegistry, TypeRegistryArc};
-use bevy::utils::petgraph::visit::Walker;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::tiles::TilePos;
 use serde::{Deserialize, Serialize};
@@ -40,9 +39,6 @@ impl GameStateHandler {
             objects: vec![],
             despawned_objects: vec![],
         };
-        // We make a temporary map of tiles so that as we get objects from the world we can insert
-        // them into the right tiles information
-
         let type_registry = type_registry.read();
 
         for archetype in world.archetypes().iter() {
@@ -180,7 +176,7 @@ impl GameStateHandler {
 
         world.resource_scope(|world, mut despawned_objects: Mut<DespawnedObjects>| {
             for (id, mut changed) in despawned_objects.despawned_objects.iter_mut() {
-                if changed.was_seen(for_player_id) {
+                if changed.check_and_register_seen(for_player_id) {
                     state.despawned_objects.push(*id);
                 }
             }
@@ -190,15 +186,15 @@ impl GameStateHandler {
     }
 
     /// Simple function that will clear all changed components that have been fully seen
-    pub fn clear_changed(&mut self, world: &mut World) {
+    pub fn clear_changed(&mut self, world: &mut World, player_list: &PlayerList) {
         let mut system_state: SystemState<(Query<(Entity, &Changed)>, Commands)> =
             SystemState::new(world);
         let (changed_query, mut commands) = system_state.get(world);
-        for (entity, changed) in changed_query.iter() {
-            if changed.all_seen() {
-                commands.entity(entity).remove::<Changed>();
+            for (entity, changed) in changed_query.iter() {
+                if changed.all_seen(&player_list.players) {
+                    commands.entity(entity).remove::<Changed>();
+                }
             }
-        }
         system_state.apply(world);
     }
 
@@ -284,30 +280,32 @@ pub struct StateEvents {
     pub despawned_objects: Vec<ObjectId>,
 }
 
-#[derive(Clone, Eq, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
+#[derive(Default, Clone, Eq, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
 pub struct Changed {
-    pub players_seen: HashMap<usize, bool>,
+    pub players_seen: Vec<usize>,
 }
 
 impl Changed {
-    pub fn all_seen(&self) -> bool {
-        for (_, bool) in self.players_seen.iter() {
-            if !bool {
+    pub fn all_seen(&self, players: &Vec<Player>) -> bool {
+        for player in players.iter() {
+            if player.needs_state && !self.players_seen.contains(&player.id()) {
                 return false;
             }
         }
         true
     }
 
-    pub fn was_seen(&mut self, id: usize) -> bool {
-        let was_seen = self
-            .players_seen
-            .get(&id)
-            .expect("Changed Components must include every PlayerId");
-        let was_seen = *was_seen;
-        self.players_seen.insert(id, true);
+    pub fn check_and_register_seen(&mut self, id: usize) -> bool {
+        return if self.players_seen.contains(&id) {
+            true
+        } else {
+            self.players_seen.push(id);
+            false
+        };
+    }
 
-        was_seen
+    pub fn was_seen(&mut self, id: usize) -> bool {
+        return self.players_seen.contains(&id);
     }
 }
 

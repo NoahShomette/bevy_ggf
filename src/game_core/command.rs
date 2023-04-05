@@ -474,8 +474,6 @@ pub struct RemoveObjectFromTile {
 
 impl GameCommand for RemoveObjectFromTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
-
         let mut system_state: SystemState<(
             Query<(Entity, &ObjectId, &ObjectStackingClass)>,
             Query<(&mut TileObjectStacks, &mut TileObjects)>,
@@ -503,14 +501,13 @@ impl GameCommand for RemoveObjectFromTile {
         tile_objects.remove_object(self.object_game_id);
         tile_stack_rules.decrement_object_class_count(object_stacking_class);
 
-        world.entity_mut(tile_entity).insert(changed_component.clone());
-        world.entity_mut(entity).insert(changed_component);
+        world.entity_mut(tile_entity).insert(crate::game_core::state::Changed::default());
+        world.entity_mut(entity).insert(crate::game_core::state::Changed::default());
         
         return Ok(());
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
 
         let mut system_state: SystemState<(
             Query<(Entity, &ObjectId, &mut ObjectGridPosition, &ObjectStackingClass)>,
@@ -542,8 +539,8 @@ impl GameCommand for RemoveObjectFromTile {
         object_grid_position.tile_position = self.tile_pos;
         tile_stack_rules.increment_object_class_count(object_stacking_class);
 
-        world.entity_mut(tile_entity).insert(changed_component.clone());
-        world.entity_mut(entity).insert(changed_component);
+        world.entity_mut(tile_entity).insert(crate::game_core::state::Changed::default());
+        world.entity_mut(entity).insert(crate::game_core::state::Changed::default());
         
         Ok(())
     }
@@ -563,8 +560,6 @@ pub struct AddObjectToTile {
 
 impl GameCommand for AddObjectToTile {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
-
         let mut system_state: SystemState<(
             Query<(Entity, &ObjectId, &mut ObjectGridPosition, &ObjectStackingClass), With<Object>>,
             Query<(&mut TileObjectStacks, &mut TileObjects)>,
@@ -597,14 +592,13 @@ impl GameCommand for AddObjectToTile {
         object_grid_position.tile_position = self.tile_pos;
         tile_stack_rules.increment_object_class_count(object_stacking_class);
         
-        world.entity_mut(tile_entity).insert(changed_component.clone());
-        world.entity_mut(entity).insert(changed_component);
+        world.entity_mut(tile_entity).insert(crate::game_core::state::Changed::default());
+        world.entity_mut(entity).insert(crate::game_core::state::Changed::default());
 
         Ok(())
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
 
         let mut system_state: SystemState<(
             Query<(Entity, &ObjectId, &ObjectStackingClass)>,
@@ -636,8 +630,8 @@ impl GameCommand for AddObjectToTile {
         tile_objects.remove_object(self.object_game_id);
         tile_stack_rules.decrement_object_class_count(object_stacking_class);
 
-        world.entity_mut(tile_entity).insert(changed_component.clone());
-        world.entity_mut(entity).insert(changed_component);
+        world.entity_mut(tile_entity).insert(crate::game_core::state::Changed::default());
+        world.entity_mut(entity).insert(crate::game_core::state::Changed::default());
         Ok(())
     }
 }
@@ -661,10 +655,9 @@ where
     fn execute(&mut self, world: &mut World) -> Result<(), String> {
         // Assign a new id as we un assign the id when we rollback
         let id = world.resource_mut::<ObjectIdProvider>().next_id_component();
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
         world
             .spawn(self.bundle.clone())
-            .insert((id, changed_component, PlayerMarker::new(self.player_team)));
+            .insert((id, crate::game_core::state::Changed::default(), PlayerMarker::new(self.player_team)));
 
         let mut add = AddObjectToTile {
             object_game_id: id,
@@ -677,7 +670,6 @@ where
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
 
         let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
             SystemState::new(&mut world);
@@ -708,7 +700,7 @@ where
             .insert(
                 self.object_game_id
                     .expect("Rollback can only be called after execute which returns an entity id"),
-                changed_component,
+                crate::game_core::state::Changed::default(),
             );
 
         return Ok(());
@@ -726,8 +718,6 @@ pub struct DespawnObject {
 
 impl GameCommand for DespawnObject {
     fn execute(&mut self, world: &mut World) -> Result<(), String> {
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
-
         let mut system_state: SystemState<Query<(Entity, &ObjectId, &TilePos)>> =
             SystemState::new(world);
         let mut object_query = system_state.get_mut(world);
@@ -757,14 +747,13 @@ impl GameCommand for DespawnObject {
             .despawned_objects
             .insert(
                 self.object_game_id,
-                changed_component,
+                crate::game_core::state::Changed::default(),
             );
         
         return Ok(());
     }
 
     fn rollback(&mut self, mut world: &mut World) -> Result<(), String> {
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
 
         let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
             SystemState::new(&mut world);

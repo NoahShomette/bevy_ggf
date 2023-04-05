@@ -21,16 +21,6 @@ pub struct PlayerList {
     pub players: Vec<Player>,
 }
 
-impl PlayerList {
-    pub fn new_changed_component(&self) -> Changed {
-        let mut players_seen = HashMap::new();
-        for player in self.players.iter() {
-            players_seen.insert(player.id, false);
-        }
-        Changed { players_seen }
-    }
-}
-
 /// Represents a team of players with a custom id
 #[derive(
     Default,
