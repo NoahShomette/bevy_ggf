@@ -1,19 +1,12 @@
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
-use crate::mapping::{
-    add_object_to_tile, remove_object_from_tile, tile_pos_to_centered_map_world_pos, Map,
-};
 use crate::movement::{
-    AvailableMove, CurrentMovementInformation, MoveError, MoveEvent, MovementSystem, ObjectMoved,
+    AvailableMove, MoveEvent, MovementSystem, ObjectMoved,
     ObjectMovement, TileMovementCosts,
 };
-use crate::object::{Object, ObjectGridPosition};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{
-    Commands, Entity, EventReader, EventWriter, Mut, ParamSet, Query, Res, ResMut, Transform, With,
-    Without, World,
-};
+use bevy::prelude::{Commands, Entity, EventReader, Mut, Query, Res, World};
 use bevy::utils::hashbrown::HashMap;
-use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapGridSize, TilemapSize, TilemapType};
+use bevy_ecs_tilemap::prelude::{TilePos, TilemapSize};
+use crate::object::ObjectId;
 
 /// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific
@@ -33,7 +26,7 @@ pub fn tile_movement_cost_check(
         return false;
     };
 
-    let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else{
+    let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else {
         return false;
     };
 
@@ -41,7 +34,7 @@ pub fn tile_movement_cost_check(
         if (move_from_tile_node.move_cost.unwrap()
             + *tile_movement_costs
                 .movement_type_cost
-                .get(object_movement.movement_type)
+                .get(&object_movement.movement_type)
                 .unwrap_or(&1) as i32)
             < (tile_node.move_cost.unwrap())
         {
@@ -49,7 +42,7 @@ pub fn tile_movement_cost_check(
                 move_from_tile_node.move_cost.unwrap()
                     + *tile_movement_costs
                         .movement_type_cost
-                        .get(object_movement.movement_type)
+                        .get(&object_movement.movement_type)
                         .unwrap_or(&1) as i32,
             );
             tile_node.prior_node = move_from_tile_node.node_pos;
@@ -60,7 +53,7 @@ pub fn tile_movement_cost_check(
     } else if (move_from_tile_node.move_cost.unwrap()
         + *tile_movement_costs
             .movement_type_cost
-            .get(object_movement.movement_type)
+            .get(&object_movement.movement_type)
             .unwrap_or(&1) as i32)
         <= object_movement.move_points
     {
@@ -68,7 +61,7 @@ pub fn tile_movement_cost_check(
             move_from_tile_node.move_cost.unwrap()
                 + *tile_movement_costs
                     .movement_type_cost
-                    .get(object_movement.movement_type)
+                    .get(&object_movement.movement_type)
                     .unwrap_or(&1) as i32,
         );
         tile_node.prior_node = move_from_tile_node.node_pos;
@@ -78,7 +71,9 @@ pub fn tile_movement_cost_check(
     };
 }
 
-/// Struct used in a [`MovementCalculator`](crate::movement::MovementCalculator) to hold the list of [`MoveNode`]
+/// Struct to be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to hold the
+/// list of [`MoveNode`]s. This is not to be used for any other purpose than calculating movement
+/// and will be converted into an [`AvailableMove`] struct to be used outside the movement calculater
 pub struct MovementNodes {
     pub move_nodes: HashMap<TilePos, MoveNode>,
 }
@@ -219,217 +214,19 @@ impl MoveNode {
     }
 }
 
-// main events
-// MoveBegin
-// MoveCalculated (Vec<TilePos>)
-// MoveObject
-// MoveComplete
-
-/// Handles all MoveBegin events. Uses the MovementSystem resource to calculate the move and update
-/// the CurrentMoveInformation resource
-pub(crate) fn handle_move_begin_events(world: &mut World) {
-    let mut move_events_vec: Vec<MoveEvent> = vec![];
-
-    let mut system_state: SystemState<EventReader<MoveEvent>> = SystemState::new(world);
-    let mut move_events = system_state.get_mut(world);
-
-    for event in move_events.iter() {
-        if let MoveEvent::MoveBegin { object_moving } = event {
-            move_events_vec.push(MoveEvent::MoveBegin {
-                object_moving: *object_moving,
-            });
-        }
-    }
-
-    let mut system_state: SystemState<Res<MovementSystem>> = SystemState::new(world);
-    let movement_system = system_state.get(world);
-
-    let mut move_info: MovementNodes = MovementNodes {
-        move_nodes: HashMap::new(),
-    };
-
-    for event in move_events_vec {
-        if let MoveEvent::MoveBegin { object_moving } = event {
-            move_info = movement_system.movement_calculator.calculate_move(
-                &movement_system,
-                &object_moving,
-                world,
-            );
-        }
-    }
-
-    if !move_info.move_nodes.is_empty() {
-        world.resource_scope(|_world, mut a: Mut<CurrentMovementInformation>| {
-            for (tile_pos, move_node) in move_info.move_nodes.iter() {
-                if move_node.valid_move {
-                    a.available_moves.insert(
-                        *tile_pos,
-                        AvailableMove {
-                            tile_pos: move_node.node_pos,
-                            prior_tile_pos: move_node.prior_node,
-                            move_cost: move_node
-                                .move_cost
-                                .expect("All valid moves should have a move cost"),
-                        },
-                    );
-                }
-            }
-        });
-    }
-}
-
-/// Handles the TryMoveObject events. Will check if the given TilePos is inside the CurrentMovementInformation
-/// resource and will move the unit if so.
-///
-/// Clears the CurrentAvailableMoves resource if the move was successful.
-///
-/// Sends an event with the success or the error depending on the move
-// TODO: Remove it clearing the CurrentAvailableMoves resource - place that in its own system that
-// is optional
-pub(crate) fn handle_try_move_events(
-    mut move_events: ParamSet<(EventReader<MoveEvent>, EventWriter<MoveEvent>)>,
-    mut object_query: Query<
-        (
-            &mut Transform,
-            &mut ObjectGridPosition,
-            &ObjectStackingClass,
-        ),
-        With<Object>,
-    >,
-    mut tile_query: Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-    mut tilemap_q: Query<
-        (
-            &mut Map,
-            &TilemapGridSize,
-            &TilemapType,
-            &mut TileStorage,
-            &Transform,
-        ),
-        Without<Object>,
-    >,
-    mut movement_information: ResMut<CurrentMovementInformation>,
-    mut move_error_writer: EventWriter<MoveError>,
-) {
-    let mut result: Result<MoveEvent, MoveError> =
-        Err(MoveError::NotValidMove(String::from("Try move failed")));
-
-    for event in move_events.p0().iter() {
-        if let MoveEvent::TryMoveObject {
-            object_moving,
-            new_pos,
-        } = event
-        {
-            if movement_information.contains_move(new_pos) {
-                result = move_object(
-                    object_moving,
-                    new_pos,
-                    &mut object_query,
-                    &mut tile_query,
-                    &mut tilemap_q,
-                );
-            } else {
-                result = Err(MoveError::default());
-            }
-        }
-    }
-    match result {
-        Ok(move_event) => {
-            movement_information.available_moves.clear();
-            move_events.p1().send(move_event);
-        }
-        Err(error) => {
-            move_error_writer.send(error);
-        }
-    }
-}
-
-/// this is an unchecked move of an object. It adds the object to the tile at new_pos,
-/// it removes the object from the old tile, and then it moves the object transform and updates the
-/// object tile_pos.
-/// it does not provide any sort of valid movement
-///
-/// currently only works for one map entity. If there are more than one it will panic
-//TODO update this to use the MapHandler resource
-pub fn move_object(
-    object_moving: &Entity,
-    new_pos: &TilePos,
-    object_query: &mut Query<
-        (
-            &mut Transform,
-            &mut ObjectGridPosition,
-            &ObjectStackingClass,
-        ),
-        With<Object>,
-    >,
-    tile_query: &mut Query<(&mut TileObjectStackingRules, &mut TileObjects)>,
-    tilemap_q: &mut Query<
-        (
-            &mut Map,
-            &TilemapGridSize,
-            &TilemapType,
-            &mut TileStorage,
-            &Transform,
-        ),
-        Without<Object>,
-    >,
-) -> Result<MoveEvent, MoveError> {
-    // gets the components needed to move the object
-    let (mut transform, mut object_grid_position, object_stack_class) =
-        object_query.get_mut(*object_moving).unwrap();
-
-    // gets the map components
-    let (_map, grid_size, map_type, mut tile_storage, map_transform) = tilemap_q.single_mut();
-
-    // if a tile exists at the selected point
-    return if let Some(tile_entity) = tile_storage.get(new_pos) {
-        // if the tile has the needed components
-        if let Ok((_tile_stack_rules, _tile_objects)) = tile_query.get(tile_entity) {
-            remove_object_from_tile(
-                *object_moving,
-                object_stack_class,
-                &mut tile_storage,
-                tile_query,
-                object_grid_position.tile_position,
-            );
-            add_object_to_tile(
-                *object_moving,
-                &mut object_grid_position,
-                object_stack_class,
-                &mut tile_storage,
-                tile_query,
-                *new_pos,
-            );
-
-            // have to transform the tiles position to the transformed position to place the object at the right point
-            let tile_world_pos =
-                tile_pos_to_centered_map_world_pos(new_pos, map_transform, grid_size, map_type);
-
-            transform.translation = tile_world_pos.extend(5.0);
-
-            Ok(MoveEvent::MoveComplete {
-                object_moved: *object_moving,
-            })
-        } else {
-            Err(MoveError::NotValidMove(String::from(
-                "Tile does not have needed components",
-            )))
-        }
-    } else {
-        Err(MoveError::NotValidMove(String::from(
-            "Move Position not valid",
-        )))
-    };
-}
-
 /// Adds the [`ObjectMoved`] component to any entity that is sent through the [`MoveEvent::MoveComplete`]
 /// event.
 pub fn add_object_moved_component_on_moves(
     mut move_events: EventReader<MoveEvent>,
+    mut object_query: Query<(Entity, &ObjectId)>,
     mut commands: Commands,
 ) {
     for event in move_events.iter() {
         if let MoveEvent::MoveComplete { object_moved } = event {
-            commands.entity(*object_moved).insert(ObjectMoved);
+            let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| id == &object_moved) else{
+                continue;
+            };
+            commands.entity(entity).insert(ObjectMoved);
         }
     }
 }

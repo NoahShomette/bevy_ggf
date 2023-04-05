@@ -4,9 +4,10 @@
 
 use crate::mapping::tiles::ObjectStackingClass;
 use crate::movement::ObjectMovementBundle;
-use crate::selection::SelectableEntity;
-use bevy::prelude::{Bundle, Component, Resource, SpriteBundle};
+use bevy::prelude::{Bundle, Component, Resource, ReflectComponent};
+use bevy::reflect::{FromReflect, Reflect};
 use bevy_ecs_tilemap::prelude::TilePos;
+use serde::{Deserialize, Serialize};
 
 // Default Components that we should have for objects
 // These are separated simply to ease development and thought process. Any component for any object can
@@ -45,47 +46,78 @@ AddResourceOnTurn
 // ObjectClass -> (Ground, Air, Water, Building, etc)
 // ObjectGroup -> (Armor, Capital Ship, Helicopter)
 // ObjectType -> (Light Tank, Battleship, Infantry, Unit Barracks, Wall)
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct ObjectMinimalBundle {
     pub object: Object,
     pub object_info: ObjectInfo,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
-    pub sprite_bundle: SpriteBundle,
 }
 
 /// Base bundle that provides all functionality for all subsystems in the crate
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct ObjectCoreBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
     pub object_info: ObjectInfo,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
-    pub sprite_bundle: SpriteBundle,
-
     //
-    pub selectable: SelectableEntity,
     //pub unit_movement_bundle: UnitMovementBundle,
 }
 
 /// Base bundle that provides all functionality for all subsystems in the crate
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct UnitBundle {
     // items that are in the minimal bundle items first
     pub object: Object,
     pub object_info: ObjectInfo,
     pub object_grid_position: ObjectGridPosition,
     pub object_stacking_class: ObjectStackingClass,
-    pub sprite_bundle: SpriteBundle,
 
     //
     pub unit_movement_bundle: ObjectMovementBundle,
-    pub selectable: SelectableEntity,
+}
+
+/// A resource inserted into the world to provide consistent unique ids to keep track of game
+/// entities through potential spawns, despawns, and other shenanigans.
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Resource, Reflect, FromReflect)]
+pub struct ObjectIdProvider {
+    pub last_id: usize,
+}
+
+impl Default for ObjectIdProvider {
+    fn default() -> Self {
+        ObjectIdProvider { last_id: 0 }
+    }
+}
+
+impl ObjectIdProvider {
+    pub fn next_id_component(&mut self) -> ObjectId {
+        ObjectId { id: self.next_id() }
+    }
+
+    pub fn next_id(&mut self) -> usize {
+        self.last_id = self.last_id.saturating_add(1);
+        self.last_id
+    }
+
+    pub fn remove_last_id(&mut self) {
+        self.last_id = self.last_id.saturating_sub(1);
+    }
+}
+
+/// Provides a way to track entities through potential despawns, spawns, and other shenanigans. Use
+/// this to reference entities and then query for the entity that it is attached to.
+#[derive(Default, Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
+#[reflect(Component)]
+pub struct ObjectId {
+    pub id: usize,
 }
 
 ///Marker component for an entity signifying it as an Object
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
+#[derive(Default, Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct Object;
 
 impl Object {
@@ -101,15 +133,15 @@ impl Object {
 /// use bevy_ggf::object::ObjectClass;
 ///
 /// pub const OBJECT_CLASS: &'static [ObjectClass] = &[
-///     ObjectClass { name: "Ground" },
-///     ObjectClass { name: "Air" },
-///     ObjectClass { name: "Water" },
-///     ObjectClass { name: "Building" },
+///     ObjectClass { name: String::from("Ground") },
+///     ObjectClass { name: String::from("Air") },
+///     ObjectClass { name: String::from("Water") },
+///     ObjectClass { name: String::from("Building") },
 /// ];
 /// ```
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
+#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Reflect, FromReflect)]
 pub struct ObjectClass {
-    pub name: &'static str,
+    pub name: String,
 }
 
 /// Defines a new distinct ObjectGroup. ObjectGroup is used to represent the group that an Object
@@ -120,18 +152,18 @@ pub struct ObjectClass {
 /// ```rust
 /// use bevy_ggf::object::{ObjectClass, ObjectGroup};
 ///
-/// pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass{name: "Ground"};
-/// pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup{name: "Infantry", object_class: &OBJECT_CLASS_GROUND};
+/// pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass{name: String::from("Ground")};
+/// pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup{name: String::from("Infantry"), object_class: OBJECT_CLASS_GROUND};
 ///
 /// ```
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
+#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Reflect, FromReflect)]
 pub struct ObjectGroup {
-    pub name: &'static str,
-    pub object_class: &'static ObjectClass,
+    pub name: String,
+    pub object_class: ObjectClass,
 }
 
-/// Defines a new distinct ObjectType. ObjectType is
-/// used to explicitly differentiate different types of objects and enable logic based on an objects type.
+/// Defines a new distinct ObjectType. Each ObjectType should represent a distinct and unique type of
+/// object.
 /// Add the [`ObjectInfo`] wrapper component to an entity to use.
 ///
 /// ## Example
@@ -151,13 +183,13 @@ pub struct ObjectGroup {
 /// use bevy_ggf::object::{ObjectClass, ObjectGroup, ObjectType};
 ///
 /// // Declare an ObjectClass to use in our ObjectGroup
-/// pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass{name: "Ground"};
+/// pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass{name: String::from("Ground")};
 ///
 /// // Declare an ObjectGroup using our ObjectClass
-/// pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup{name: "Infantry", object_class: &OBJECT_CLASS_GROUND};
+/// pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup{name: String::from("Infantry"), object_class: OBJECT_CLASS_GROUND};
 ///
 /// // Declare our ObjectType using the ObjectGroup which uses in itself the ObjectClass
-/// pub const OBJECT_TYPE_RIFLEMAN: ObjectType = ObjectType{name: "Rifleman", object_group: &OBJECT_GROUP_INFANTRY};
+/// pub const OBJECT_TYPE_RIFLEMAN: ObjectType = ObjectType{name: String::from("Rifleman"), object_group: OBJECT_GROUP_INFANTRY};
 ///
 /// // We can access an ObjectTypes genealogy through it.
 /// pub fn get_object_type_genealogy(){
@@ -166,22 +198,23 @@ pub struct ObjectGroup {
 /// }
 ///
 /// ```
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq)]
+#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Reflect, FromReflect)]
 pub struct ObjectType {
-    pub name: &'static str,
-    pub object_group: &'static ObjectGroup,
+    pub name: String,
+    pub object_group: ObjectGroup,
 }
 
 /// Holds a reference to a [`ObjectType`]. Is used to explicitly determine what an entity is from other
 /// Objects and enable logic based on a specific object type. Use this with a distinct [`ObjectType`] to
 /// define objects that might have exact same components and stats but you want different
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Debug, Component)]
+#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct ObjectInfo {
-    pub object_type: &'static ObjectType,
+    pub object_type: ObjectType,
 }
 
 /// Resource holding all [`ObjectType`]s that are used in the game
-#[derive(Resource)]
+#[derive(Resource, Reflect, FromReflect)]
 #[allow(dead_code)]
 pub struct GameObjectInfo {
     object_classes: Vec<ObjectClass>,
@@ -190,7 +223,16 @@ pub struct GameObjectInfo {
 }
 
 /// The position of the Object on the Tilemap.
-#[derive(Component)]
+#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect)]
+#[reflect(Component)]
 pub struct ObjectGridPosition {
     pub tile_position: TilePos,
+}
+
+// TODO: Implement building objects eventually
+/// Allows this object to build other objects. Not currently implemented
+#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
+#[reflect(Component)]
+struct Builder {
+    pub can_build: Vec<ObjectType>,
 }

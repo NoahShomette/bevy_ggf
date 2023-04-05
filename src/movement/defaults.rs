@@ -1,15 +1,16 @@
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules, TileObjects};
-use crate::mapping::MapHandler;
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
 use crate::movement::{
     DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, ObjectTypeMovementRules,
-    TileMoveCheck,
+    TileMoveCheck, TileMoveCheckMeta, TileMoveChecks,
 };
-use crate::object::{ObjectGridPosition, ObjectInfo};
-use bevy::prelude::{Entity, IVec2, Res, World};
+use crate::object::{Object, ObjectGridPosition, ObjectId, ObjectInfo};
+use bevy::ecs::system::SystemState;
+use bevy::prelude::{Entity, IVec2, Query, Res, Transform, With, Without, World};
 use bevy::utils::hashbrown::HashMap;
-use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapSize};
+use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapSize, TilemapType};
+use crate::mapping::MapId;
 
 // BUILT IN IMPLEMENTATIONS
 
@@ -26,32 +27,37 @@ pub struct SquareMovementCalculator {
 impl MovementCalculator for SquareMovementCalculator {
     fn calculate_move(
         &self,
-        movement_system: &Res<MovementSystem>,
-        object_moving: &Entity,
-        world: &World,
+        tile_move_checks: &TileMoveChecks,
+        map_type: TilemapType,
+        on_map: MapId,
+        object_moving: Entity,
+        world: &mut World,
     ) -> MovementNodes {
-        let Some(object_grid_position) = world.get::<ObjectGridPosition>(*object_moving) else {
-            return MovementNodes {
-                move_nodes: HashMap::new(),
-            };
-        };
 
-        let Some(map_handler) = world.get_resource::<MapHandler>() else {
+        let mut system_state: SystemState<
+            (Query<(Entity, &MapId, &TileStorage, &TilemapSize)>,
+            Query<&ObjectGridPosition>)
+        > = SystemState::new(world);
+        let (mut tile_storage_query, mut object_query) =
+            system_state.get_mut(world);
+        
+        
+        let Ok(object_grid_position) = object_query.get(object_moving) else{
             return MovementNodes {
                 move_nodes: HashMap::new(),
             };
         };
-
-        let Some(tile_storage) = world.get::<TileStorage>(map_handler.get_map_entity(IVec2 { x: 0, y: 0 }).unwrap()) else {
+        
+        let Some((_, _, tile_storage, tilemap_size)) = tile_storage_query
+            .iter_mut()
+            .find(|(_, id, _, _)| id == &&on_map)else{
             return MovementNodes {
                 move_nodes: HashMap::new(),
             };
         };
-        let Some(tilemap_size) = world.get::<TilemapSize>(map_handler.get_map_entity(IVec2 { x: 0, y: 0 }).unwrap()) else {
-            return MovementNodes {
-                move_nodes: HashMap::new(),
-            };
-        };
+        
+        let tile_storage = tile_storage.clone();
+        let tilemap_size = tilemap_size.clone();
 
         let mut move_info = MovementNodes {
             move_nodes: HashMap::new(),
@@ -91,39 +97,45 @@ impl MovementCalculator for SquareMovementCalculator {
                 continue;
             };
 
-            let neighbors = move_info.get_neighbors_tilepos(
+            let neighbor_pos = move_info.get_neighbors_tilepos(
                 current_node.node_pos,
                 self.diagonal_movement.is_diagonal(),
-                tilemap_size,
+                &tilemap_size,
             );
 
             let current_node = *current_node;
-
-            'neighbors: for neighbor in neighbors.iter() {
-                if visited_nodes.contains(neighbor) {
-                    continue;
-                }
+            let mut neighbors: Vec<(TilePos, Entity)> = vec![];
+            for neighbor in neighbor_pos.iter(){
                 let Some(tile_entity) = tile_storage.get(neighbor) else {
                     continue;
                 };
+                neighbors.push((*neighbor, tile_entity));
+            }
 
-                move_info.add_node(neighbor, current_node);
 
-                if tile_movement_cost_check(
-                    *object_moving,
-                    tile_entity,
-                    neighbor,
+            'neighbors: for neighbor in neighbors.iter() {
+                if visited_nodes.contains(&neighbor.0) {
+                    continue;
+                }
+  
+
+                move_info.add_node(&neighbor.0, current_node);
+
+                if !tile_movement_cost_check(
+                    object_moving,
+                    neighbor.1,
+                    &neighbor.0,
                     &current_node.node_pos,
                     &mut move_info,
                     world,
-                ) {} else {
+                ){
                     continue 'neighbors;
                 }
 
-                if !movement_system.check_tile_move_checks(
-                    *object_moving,
-                    tile_entity,
-                    neighbor,
+                if !tile_move_checks.check_tile_move_checks(
+                    object_moving,
+                    neighbor.1,
+                    &neighbor.0,
                     &current_node.node_pos,
                     world,
                 ) {
@@ -131,14 +143,14 @@ impl MovementCalculator for SquareMovementCalculator {
                 }
 
 
-                let _ = move_info.set_valid_move(neighbor);
+                let _ = move_info.set_valid_move(&neighbor.0);
 
                 // if none of them return false and cancel the loop then we can infer that we are able to move into that neighbor
                 // we add the neighbor to the list of unvisited nodes and then push the neighbor to the available moves list
-                unvisited_nodes.push(*move_info.get_node_mut(neighbor).expect(
+                unvisited_nodes.push(*move_info.get_node_mut(&neighbor.0).expect(
                     "Is safe because we know we add the node in at the beginning of this loop",
                 )); //
-                available_moves.push(*neighbor);
+                available_moves.push(neighbor.0);
             }
 
             unvisited_nodes.remove(0);
@@ -159,12 +171,12 @@ impl TileMoveCheck for MoveCheckSpace {
         tile_entity: Entity,
         _checking_tile_pos: &TilePos,
         _move_from_tile_pos: &TilePos,
-        world: &World,
+        world: &mut World,
     ) -> bool {
         let Some(object_stack_class) = world.get::<ObjectStackingClass>(moving_entity) else {
             return false;
         };
-        let Some(tile_objects) = world.get::<TileObjectStackingRules>(tile_entity) else {
+        let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
             return false;
         };
 
@@ -183,37 +195,52 @@ impl TileMoveCheck for MoveCheckAllowedTile {
         tile_entity: Entity,
         _tile_pos: &TilePos,
         _last_tile_pos: &TilePos,
-        world: &World,
+        world: &mut World,
     ) -> bool {
-        let Some(object_movement) = world.get::<ObjectMovement>(entity_moving) else {
-            return false;
+        let mut system_state: SystemState<(
+            Query<(
+                Entity,
+                &ObjectId,
+                Option<&ObjectTypeMovementRules>,
+                Option<&ObjectMovement>,
+                Option<&ObjectInfo>,
+            )>,
+            Query<(&TileTerrainInfo, &TileObjects)>,
+        )> = SystemState::new(world);
+        let (mut object_query, mut tile_query) = system_state.get_mut(world);
+
+        let Ok((entity, object_id, object_type_movement_rules, object_movement, object_info)) = object_query.get(entity_moving) else{
+            return false
         };
-        let Some(tile_terrain_info) = world.get::<TileTerrainInfo>(tile_entity) else {
-            return false;
+
+        let Ok((tile_terrain_info, tile_objects)) = tile_query.get(tile_entity) else{
+            return false
         };
 
         // if the moving object has the optional type movement rules
-        if let Some(object_type_movement_rules) =
-            world.get::<ObjectTypeMovementRules>(entity_moving)
-        {
+        if let Some(object_type_movement_rules) = object_type_movement_rules {
             // get the tiles object holder
-            if let Some(tile_objects) = world.get::<TileObjects>(tile_entity) {
-                // for each object in the holder we feed its info into the ObjectTypeMovementRules
-                // and return the bool if its there, else we just ignore it
-                for tile_object in tile_objects.entities_in_tile.iter() {
-                    let Some(object_info) = world.get::<ObjectInfo>(*tile_object) else {
-                        continue;
+            // for each object in the holder we feed its info into the ObjectTypeMovementRules
+            // and return the bool if its there, else we just ignore it
+            for tile_object in tile_objects.entities_in_tile.iter() {
+                let Some((_, _, _, _, object_info)) = object_query
+                        .iter()
+                        .find(|(_, id, _, _, _)| id == &tile_object) else{
+                        return true;
                     };
-
+                if let Some(object_info) = object_info {
                     if let Some(bool) = object_type_movement_rules.can_move_on_tile(object_info) {
                         return bool;
                     }
                 }
-            };
+            }
         };
-
-        object_movement
-            .object_terrain_movement_rules
-            .can_move_on_tile(tile_terrain_info)
+        if let Some(object_movement) = object_movement {
+            object_movement
+                .object_terrain_movement_rules
+                .can_move_on_tile(tile_terrain_info)
+        } else {
+            return false;
+        }
     }
 }
