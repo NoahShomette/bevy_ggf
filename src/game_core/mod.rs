@@ -12,7 +12,7 @@ use crate::movement::TileMovementCosts;
 use crate::object::{
     Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType,
 };
-use crate::player::{Player, PlayerList};
+use crate::player::{Player, PlayerList, PlayerMarker};
 use bevy::app::{App, CoreSchedule, Plugin};
 use bevy::ecs::world::EntityMut;
 use bevy::prelude::{
@@ -252,6 +252,13 @@ where
                 registration
                     .insert(<ReflectComponent as FromType<ObjectStackingClass>>::from_type());
 
+                r.register::<PlayerMarker>();
+                let registration = r
+                    .get_mut(std::any::TypeId::of::<PlayerMarker>())
+                    .unwrap();
+                registration
+                    .insert(<ReflectComponent as FromType<PlayerMarker>>::from_type());
+                
                 r
             })),
         }

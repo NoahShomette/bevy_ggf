@@ -33,7 +33,17 @@ impl PlayerList {
 
 /// Represents a team of players with a custom id
 #[derive(
-    Clone, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize,
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
 )]
 pub struct Team {
     id: usize,
@@ -42,7 +52,18 @@ pub struct Team {
 
 /// A unique player with unique information used to drive game systems
 #[derive(
-    Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize,
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
 )]
 pub struct Player {
     id: usize,
@@ -59,10 +80,21 @@ impl Player {
     }
 }
 
-/// A component that marks something as related to the given player - used to mark objects as player 
+/// A component that marks something as related to the given player - used to mark objects as player
 /// owned chiefly
 #[derive(
-    Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize,
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
 )]
 pub struct PlayerMarker {
     id: usize,
