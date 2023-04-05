@@ -1,13 +1,11 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ggf::camera::{ClickEvent, CursorWorldPos};
 use bevy_ggf::combat::battle_resolver::Combat;
-use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult};
-use bevy_ggf::game::command::{
+use bevy_ggf::combat::defaults::{BasicBattleCalculator, BasicBattleResult, BasicObjectAPCalculator};
+use bevy_ggf::game_core::command::{
     execute_game_commands_buffer, execute_game_rollbacks_buffer, execute_game_rollforward_buffer,
     GameCommands,
 };
-use bevy_ggf::game::{GameAppExt, GameId, GameType};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, TileObjectStackingRules, TileObjectStacksCount,
@@ -24,13 +22,12 @@ use bevy_ggf::movement::{
     ObjectTypeMovementRules, TerrainMovementCosts, TileMoveCheckMeta, TileMoveChecks,
     TileMovementCosts,
 };
-use bevy_ggf::object::{
-    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectInfo, ObjectType, UnitBundle,
-};
+use bevy_ggf::object::{Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectInfo, ObjectType, UnitBundle};
 use bevy_ggf::selection::{
     ClearSelectedObject, CurrentSelectedObject, SelectableEntity, TrySelectEvents,
 };
 use bevy_ggf::{game, BggfDefaultPlugins};
+use bevy_ggf::game_core::{GameAppExt, ObjectId, GameType};
 
 pub const OBJECT_CLASS_GROUND: ObjectClass = ObjectClass { name: "Ground" };
 pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup {
@@ -52,8 +49,8 @@ pub const OBJECT_TYPE_BRIDGE: ObjectType = ObjectType {
     object_group: &OBJECT_GROUP_INFANTRY,
 };
 
-pub const STACKING_CLASS_GROUND: StackingClass = StackingClass { name: "Ground" };
-pub const STACKING_CLASS_BUILDING: StackingClass = StackingClass { name: "Building" };
+pub const stacking_class_ground: StackingClass = StackingClass { name: "Ground" };
+pub const stacking_class_building: StackingClass = StackingClass { name: "Building" };
 
 pub const MOVEMENT_TYPES: &'static [MovementType] = &[
     MovementType { name: "Infantry" },
@@ -137,6 +134,7 @@ fn main() {
             },
         })
         .insert_resource(Combat::<BasicBattleResult> {
+            attack_power_calculator: Box::new(BasicObjectAPCalculator),
             battle_calculator: Box::new(BasicBattleCalculator {}),
         })
         .add_event::<BasicBattleResult>()
@@ -216,14 +214,14 @@ fn startup(
 
     let tile_stack_rules = TileObjectStackingRules::new(vec![
         (
-            &STACKING_CLASS_GROUND,
+            &stacking_class_ground,
             TileObjectStacksCount {
                 current_count: 0,
                 max_count: 1,
             },
         ),
         (
-            &STACKING_CLASS_BUILDING,
+            &stacking_class_building,
             TileObjectStacksCount {
                 current_count: 0,
                 max_count: 1,
@@ -265,7 +263,7 @@ fn startup(
                 tile_position: TilePos::new(0, 0),
             },
             object_stacking_class: ObjectStackingClass {
-                stack_class: &STACKING_CLASS_BUILDING,
+                stack_class: &stacking_class_building,
             },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
@@ -304,7 +302,7 @@ fn startup(
                     tile_position: TilePos::new(1, 1),
                 },
                 object_stacking_class: ObjectStackingClass {
-                    stack_class: &STACKING_CLASS_GROUND,
+                    stack_class: &stacking_class_ground,
                 },
                 sprite_bundle: SpriteBundle {
                     transform: Transform {
@@ -357,7 +355,7 @@ fn select_and_move_unit_to_tile_clicked(
         ),
         With<Map>,
     >,
-    moving_object: Query<(&GameId, &ObjectGridPosition)>,
+    moving_object: Query<(&ObjectId, &ObjectGridPosition)>,
     mut click_event_reader: EventReader<ClickEvent>,
     mut select_object_event_writer: EventWriter<TrySelectEvents>,
     mut game: ResMut<GameCommands>,
@@ -405,7 +403,7 @@ fn select_and_move_unit_to_tile_clicked(
 
 fn handle_move_complete_event(
     mut selected_object: ResMut<CurrentSelectedObject>,
-    mut object_query: Query<(Entity, &GameId)>,
+    mut object_query: Query<(Entity, &ObjectId)>,
     mut event_reader: EventReader<MoveEvent>,
     mut commands: Commands,
 ) {

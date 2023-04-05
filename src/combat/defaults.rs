@@ -2,13 +2,12 @@ use crate::combat::battle_resolver::{
     AttackPowerCalculator, BattleCalculator, BattleError, BattleResult, Combat,
 };
 use crate::combat::{AttackPower, BaseAttackPower, Health, OnDeath};
-use crate::game::GameId;
-use crate::object::{ObjectInfo, ObjectType};
+use crate::object::{ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{Component, Entity, Mut, Query, ResMut, World};
 use bevy::utils::HashMap;
 use crate::combat::commands::GameCommandsExt;
-use crate::game::command::GameCommands;
+use crate::game_core::command::GameCommands;
 
 /// A simple default struct implementing [`BaseAttackPower`]. Holds a hashmap that must contain a reference
 /// to every ObjectType in the game. Returns the u32 saved in the hashmap corresponding to the given
@@ -41,7 +40,7 @@ impl BaseAttackPower for ObjectAP {
         let Some(object_info) = world.get::<ObjectInfo>(opponent_entity) else {
             return self.default_attack_power;
         };
-        let Some(ap) = self.attack_power.get(object_info.object_type) else {
+        let Some(ap) = self.attack_power.get(&object_info.object_type) else {
             return self.default_attack_power;
         };
         return *ap;
@@ -73,11 +72,11 @@ pub struct BasicObjectAPCalculator;
 impl AttackPowerCalculator for BasicObjectAPCalculator {
     fn calculate_object_attack_power(
         &self,
-        object_to_calculate: GameId,
-        opponent_object: GameId,
+        object_to_calculate: ObjectId,
+        opponent_object: ObjectId,
         world: &mut World,
     ) -> u32 {
-        let mut system_state: SystemState<Query<(Entity, &GameId, &AttackPower)>> =
+        let mut system_state: SystemState<Query<(Entity, &ObjectId, &AttackPower)>> =
             SystemState::new(world);
         let object_query = system_state.get(world);
 
@@ -107,8 +106,8 @@ impl BattleCalculator for BasicBattleCalculator {
     fn resolve_combat(
         &mut self,
         world: &mut World,
-        attacking_id: GameId,
-        defending_id: GameId,
+        attacking_id: ObjectId,
+        defending_id: ObjectId,
     ) -> Result<Self::Result, BattleError> {
         let mut attacking_ap = 0;
         let mut defending_ap = 0;
@@ -122,7 +121,7 @@ impl BattleCalculator for BasicBattleCalculator {
                 .calculate_object_attack_power(defending_id, attacking_id, world);
         });
 
-        let mut system_state: SystemState<(Query<(Entity, &GameId, &mut Health)>, ResMut<GameCommands>)> =
+        let mut system_state: SystemState<(Query<(Entity, &ObjectId, &mut Health)>, ResMut<GameCommands>)> =
             SystemState::new(world);
         let (mut object_query, mut game_commands) = system_state.get_mut(world);
 
@@ -137,7 +136,7 @@ impl BattleCalculator for BasicBattleCalculator {
         if attacking_health.current_health <= 0 {
             match attacking_health.on_death {
                 OnDeath::Destroy => {
-                    game_commands.despawn_object();
+                    //game_commands.despawn_object(/* MapId */, /* GameId */);
                 }
                 OnDeath::Capture { .. } => {}
             }

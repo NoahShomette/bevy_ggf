@@ -2,19 +2,19 @@ pub mod object;
 pub mod terrain;
 pub mod tiles;
 
-use crate::game::command::{GameCommand, GameCommands};
+use crate::game_core::command::{GameCommand, GameCommands};
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
-    BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStackingRules, TileObjects,
+    BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStacks, TileObjects,
 };
-use crate::movement::TerrainMovementCosts;
+use crate::movement::{MoveError, MoveEvent, MovementCalculator, MovementSystem, TerrainMovementCosts, TileMoveCheckMeta, TileMoveChecks, TileMovementCosts};
 use bevy::ecs::system::SystemState;
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle};
-use rand;
-use rand::Rng;
+use crate::game_core::GameBuilder;
+use crate::game_core::runner::GameRunner;
+use crate::player::PlayerList;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -24,6 +24,26 @@ impl Plugin for BggfMappingPlugin {
         app.add_event::<MapSpawned>()
             .add_event::<MapDeSpawned>()
             .insert_resource(MapIdProvider::default());
+    }
+}
+
+pub trait GameBuilderMappingExt {
+    fn setup_mapping(&mut self)
+        where
+            Self: Sized;
+}
+
+impl<T: GameRunner + 'static> GameBuilderMappingExt for GameBuilder<T>
+    where
+        T: GameRunner + 'static,
+{
+    
+    fn setup_mapping(&mut self)
+        where
+            Self: Sized,
+    {
+        self.game_world.init_resource::<Events<MapSpawned>>();
+        self.game_world.init_resource::<Events<MapDeSpawned>>();
     }
 }
 
@@ -55,7 +75,7 @@ impl MapIdProvider {
     }
 }
 
-#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component)]
+#[derive(Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
 pub struct MapId {
     pub id: usize,
 }
@@ -83,9 +103,8 @@ pub trait MapCommandsExt {
         tile_map_size: TilemapSize,
         tilemap_type: TilemapType,
         tilemap_tile_size: TilemapTileSize,
-        map_texture_handle: Handle<Image>,
         map_terrain_vec: Vec<TerrainType>,
-        tile_stack_rules: TileObjectStackingRules,
+        tile_stack_rules: TileObjectStacks,
     ) -> SpawnRandomMap;
 }
 
@@ -95,15 +114,13 @@ impl MapCommandsExt for GameCommands {
         tile_map_size: TilemapSize,
         tilemap_type: TilemapType,
         tilemap_tile_size: TilemapTileSize,
-        map_texture_handle: Handle<Image>,
         map_terrain_type_vec: Vec<TerrainType>,
-        tile_stack_rules: TileObjectStackingRules,
+        tile_stack_rules: TileObjectStacks,
     ) -> SpawnRandomMap {
         self.queue.push(SpawnRandomMap {
             tile_map_size,
             tilemap_type,
             tilemap_tile_size,
-            map_texture_handle: map_texture_handle.clone(),
             map_terrain_type_vec: map_terrain_type_vec.clone(),
             tile_stack_rules: tile_stack_rules.clone(),
             spawned_map_id: None,
@@ -112,7 +129,6 @@ impl MapCommandsExt for GameCommands {
             tile_map_size,
             tilemap_type,
             tilemap_tile_size,
-            map_texture_handle,
             map_terrain_type_vec,
             tile_stack_rules,
             spawned_map_id: None,
@@ -120,14 +136,13 @@ impl MapCommandsExt for GameCommands {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Reflect)]
 pub struct SpawnRandomMap {
     tile_map_size: TilemapSize,
     tilemap_type: TilemapType,
     tilemap_tile_size: TilemapTileSize,
-    map_texture_handle: Handle<Image>,
     map_terrain_type_vec: Vec<TerrainType>,
-    tile_stack_rules: TileObjectStackingRules,
+    tile_stack_rules: TileObjectStacks,
     spawned_map_id: Option<MapId>,
 }
 
@@ -138,36 +153,33 @@ impl GameCommand for SpawnRandomMap {
         let tilemap_type = self.tilemap_type;
         let tilemap_entity = world.spawn_empty().id();
 
+        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
+
+
         world.resource_scope(|world, terrain_movement_costs: Mut<TerrainMovementCosts>| {
             for x in 0..map_size.x {
                 for y in 0..map_size.y {
                     let tile_pos = TilePos { x, y };
-                    let mut rng = rand::thread_rng();
-                    let tile_texture_index = rng.gen_range(0..self.map_terrain_type_vec.len());
-                    let texture_index = self.map_terrain_type_vec[tile_texture_index];
                     let tile_movement_costs = terrain_movement_costs
                         .movement_cost_rules
-                        .get(&self.map_terrain_type_vec[tile_texture_index])
+                        .get(&self.map_terrain_type_vec[0])
                         .unwrap();
 
                     let tile_entity = world
                         .spawn(BggfTileBundle {
-                            tile_bundle: TileBundle {
-                                position: tile_pos,
-                                texture_index: TileTextureIndex(texture_index.texture_index),
-                                tilemap_id: TilemapId(tilemap_entity),
-                                ..Default::default()
-                            },
                             tile: Tile,
                             tile_terrain_info: TileTerrainInfo {
-                                terrain_type: self.map_terrain_type_vec[tile_texture_index],
+                                terrain_type: self.map_terrain_type_vec[0].clone(),
                             },
+                            tile_pos,
+                            tilemap_id: TilemapId(tilemap_entity),
                         })
                         .insert(BggfTileObjectBundle {
                             tile_stack_rules: self.tile_stack_rules.clone(),
                             tile_objects: TileObjects::default(),
                         })
                         .insert(tile_movement_costs.clone())
+                        .insert(changed_component.clone())
                         .id();
 
                     tile_storage.set(&tile_pos, tile_entity);
@@ -189,17 +201,7 @@ impl GameCommand for SpawnRandomMap {
 
         world
             .entity_mut(tilemap_entity)
-            .insert(TilemapBundle {
-                grid_size,
-                map_type,
-                size: map_size,
-                storage: tile_storage,
-                texture: TilemapTexture::Single(self.map_texture_handle.clone_weak()),
-                tile_size,
-                transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
-                frustum_culling: FrustumCulling(true),
-                ..Default::default()
-            })
+            .insert((grid_size, map_type, map_size, tile_storage, tile_size))
             .insert(Map {
                 tilemap_type,
                 map_size,
@@ -235,6 +237,31 @@ impl GameCommand for SpawnRandomMap {
         world.resource_mut::<MapIdProvider>().remove_last_id();
 
         return Ok(());
+    }
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Component,
+    Debug,
+    Default,
+    Hash,
+    Eq,
+    PartialOrd,
+    PartialEq,
+    Ord,
+    Reflect,
+    FromReflect,
+)]
+pub struct GridPos {
+    pub x: u32,
+    pub y: u32,
+}
+
+impl From<TilePos> for GridPos {
+    fn from(value: TilePos) -> Self {
+        todo!()
     }
 }
 

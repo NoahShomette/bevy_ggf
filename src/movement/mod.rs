@@ -3,59 +3,101 @@
 pub mod backend;
 pub mod defaults;
 
-use crate::game::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
-use crate::game::GameId;
+use crate::game_core::command::{AddObjectToTile, GameCommand, GameCommands, RemoveObjectFromTile};
+use crate::game_core::runner::GameRunner;
+use crate::game_core::GameBuilder;
 use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
-use crate::movement::backend::{
-    add_object_moved_component_on_moves, handle_move_begin_events, MoveNode, MovementNodes,
-};
-use crate::object::{ObjectClass, ObjectGroup, ObjectInfo, ObjectType};
-use bevy::ecs::system::{SystemParamFetch, SystemParamState, SystemState};
+use crate::movement::backend::{MoveNode, MovementNodes};
+use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
+use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    info, App, Bundle, Component, CoreStage, Entity, EventReader, EventWriter,
-    IntoSystemDescriptor, Mut, Plugin, Query, Resource, World,
+    info, App, Bundle, Component, Entity, EventWriter, Events, IntoSystemConfig,
+    IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Reflect, ReflectComponent,
+    Resource, SystemSet, World,
 };
+use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
+use crate::player::PlayerList;
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
 ///
-pub struct BggfMovementPlugin {
-    pub add_defaults_core: bool,
-    pub add_defaults_extra: bool,
-}
+pub struct BggfMovementPlugin;
 
 impl Plugin for BggfMovementPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<TerrainMovementCosts>()
-            .add_event::<ClearObjectAvailableMoves>()
-            .add_event::<MoveEvent>()
-            .add_event::<MoveError>();
-        if self.add_defaults_core {
-            app.add_system_to_stage(CoreStage::PostUpdate, handle_move_begin_events.at_end());
-        }
-        if self.add_defaults_extra {
-            app.add_system(add_object_moved_component_on_moves);
-        }
+        app.add_event::<MoveEvent>().add_event::<MoveError>();
     }
 }
 
 impl Default for BggfMovementPlugin {
     fn default() -> Self {
-        Self {
-            add_defaults_core: true,
-            add_defaults_extra: true,
-        }
+        Self
     }
+}
+
+pub trait GameBuilderMovementExt {
+    fn with_movement_calculator<MC>(
+        &mut self,
+        movement_calculator: MC,
+        tile_move_checks: Vec<TileMoveCheckMeta>,
+        map_type: TilemapType,
+    ) where
+        MC: MovementCalculator,
+        Self: Sized;
+
+    fn setup_movement(&mut self, tile_movement_costs: Vec<(TerrainType, TileMovementCosts)>)
+    where
+        Self: Sized;
+}
+
+impl<T: GameRunner + 'static> GameBuilderMovementExt for GameBuilder<T>
+where
+    T: GameRunner + 'static,
+{
+    fn with_movement_calculator<MC>(
+        &mut self,
+        movement_calculator: MC,
+        tile_move_checks: Vec<TileMoveCheckMeta>,
+        map_type: TilemapType,
+    ) where
+        MC: MovementCalculator,
+        Self: Sized,
+    {
+        self.game_world.insert_resource(MovementSystem {
+            movement_calculator: Box::new(movement_calculator),
+            map_type,
+            tile_move_checks: TileMoveChecks { tile_move_checks },
+        });
+
+      
+    }
+
+    fn setup_movement(&mut self, tile_movement_costs: Vec<(TerrainType, TileMovementCosts)>)
+    where
+        Self: Sized,
+    {
+        self.game_world
+            .insert_resource(TerrainMovementCosts::from_vec(tile_movement_costs));
+        
+        self.game_world.init_resource::<Events<MoveEvent>>();
+        self.game_world.init_resource::<Events<MoveError>>();
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+pub enum MovementSystems {
+    Parallel,
+    CommandFlush,
 }
 
 /// An extension trait for [GameCommands] with movement related commands.
 pub trait MoveCommandsExt {
     fn move_object(
         &mut self,
-        object_moving: GameId,
+        object_moving: ObjectId,
         on_map: MapId,
         current_pos: TilePos,
         new_pos: TilePos,
@@ -68,7 +110,7 @@ impl MoveCommandsExt for GameCommands {
     /// the [`TilePos`] that the object is moving too
     fn move_object(
         &mut self,
-        object_moving: GameId,
+        object_moving: ObjectId,
         on_map: MapId,
         current_pos: TilePos,
         new_pos: TilePos,
@@ -91,9 +133,9 @@ impl MoveCommandsExt for GameCommands {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
 pub struct MoveObject {
-    object_moving: GameId,
+    object_moving: ObjectId,
     on_map: MapId,
     current_pos: TilePos,
     new_pos: TilePos,
@@ -101,10 +143,7 @@ pub struct MoveObject {
 }
 
 impl GameCommand for MoveObject {
-    fn execute(
-        &mut self,
-        mut world: &mut World,
-    ) -> Result<(), String> {
+    fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
         let mut remove = RemoveObjectFromTile {
             object_game_id: self.object_moving,
             on_map: self.on_map,
@@ -118,7 +157,7 @@ impl GameCommand for MoveObject {
 
         return match self.attempt {
             true => {
-                let mut system_state: SystemState<Query<(Entity, &GameId)>> =
+                let mut system_state: SystemState<Query<(Entity, &ObjectId)>> =
                     SystemState::new(&mut world);
 
                 let mut object_query = system_state.get_mut(&mut world);
@@ -158,7 +197,7 @@ impl GameCommand for MoveObject {
                     move_event.send(MoveEvent::MoveComplete {
                         object_moved: self.object_moving,
                     });
-
+                    
                     system_state.apply(world);
                     Ok(())
                 } else {
@@ -183,10 +222,7 @@ impl GameCommand for MoveObject {
         };
     }
 
-    fn rollback(
-        &mut self,
-        world: &mut World,
-    ) -> Result<(), String> {
+    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
         let mut remove = RemoveObjectFromTile {
             object_game_id: self.object_moving,
             on_map: self.on_map,
@@ -200,7 +236,7 @@ impl GameCommand for MoveObject {
 
         remove.execute(world)?;
         add.execute(world)?;
-        
+
         return Ok(());
     }
 }
@@ -301,7 +337,7 @@ pub struct TileMoveCheckMeta {
 /// ```rust
 /// use bevy::prelude::{Entity, World};
 /// use bevy_ecs_tilemap::prelude::TilePos;
-/// use bevy_ggf::mapping::tiles::{ObjectStackingClass, TileObjectStackingRules};
+/// use bevy_ggf::mapping::tiles::{ObjectStackingClass, TileObjectStacks};
 /// use bevy_ggf::movement::TileMoveCheck;
 ///
 /// // Create a new struct for our TileMoveCheck
@@ -323,7 +359,7 @@ pub struct TileMoveCheckMeta {
 ///             return false;
 ///         };
 /// // Get the TileObjectStacks component of the tile that we are checking
-///         let Some(tile_objects) = world.get::<TileObjectStackingRules>(tile_entity) else {
+///         let Some(tile_objects) = world.get::<TileObjectStacks>(tile_entity) else {
 ///             return false;
 ///         };
 /// // Use the built in function on a TileObjectStacks struct to check if the tile has space for this objects stacking class
@@ -376,18 +412,18 @@ impl From<MoveNode> for AvailableMove {
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub enum MoveEvent {
     MoveBegin {
-        object_moving: GameId,
+        object_moving: ObjectId,
         on_map: MapId,
     },
     MoveCalculated {
         available_moves: Vec<TilePos>,
     },
     TryMoveObject {
-        object_moving: GameId,
+        object_moving: ObjectId,
         new_pos: TilePos,
     },
     MoveComplete {
-        object_moved: GameId,
+        object_moved: ObjectId,
     },
 }
 
@@ -421,28 +457,50 @@ impl DiagonalMovement {
     }
 }
 
+/// A resource that holds all the [`MovementType`]s in the game. The types are stored in a hashmap
+/// with the key being the name given to the MovementType
+#[derive(Clone, Eq, PartialEq, Debug, Resource)]
+pub struct MovementTypes {
+    pub movement_types: HashMap<String, MovementType>,
+}
+
+impl MovementTypes {
+    pub fn insert(&mut self, movement_type: MovementType) {
+        self.movement_types
+            .insert(movement_type.name.clone(), movement_type.clone());
+    }
+
+    pub fn insert_vec(&mut self, movement_types: Vec<MovementType>) {
+        for movement_type in movement_types {
+            self.movement_types
+                .insert(movement_type.name.clone(), movement_type.clone());
+        }
+    }
+}
+
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
+#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
 pub struct MovementType {
-    pub name: &'static str,
+    pub name: String,
 }
 
 /// Component that must be added to a tile in order to define that tiles movement cost.
 ///
 /// Contains a hashmap that holds a reference to a [`MovementType`] as a key and a u32 as the value. The u32 is used
 /// in pathfinding as the cost to move into that tile.
-#[derive(Clone, Eq, PartialEq, Debug, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct TileMovementCosts {
-    pub movement_type_cost: HashMap<&'static MovementType, u32>,
+    pub movement_type_cost: HashMap<MovementType, u32>,
 }
 
 impl TileMovementCosts {
     /// Helper function to create a hashmap of TerrainType rules for Object Movement.
-    pub fn new(rules: Vec<(&'static MovementType, u32)>) -> TileMovementCosts {
-        let mut hashmap: HashMap<&'static MovementType, u32> = HashMap::new();
+    pub fn new(rules: Vec<(MovementType, u32)>) -> TileMovementCosts {
+        let mut hashmap: HashMap<MovementType, u32> = HashMap::new();
         for rule in rules.iter() {
-            hashmap.insert(rule.0, rule.1);
+            hashmap.insert(rule.0.clone(), rule.1);
         }
         TileMovementCosts {
             movement_type_cost: hashmap,
@@ -456,6 +514,22 @@ impl TileMovementCosts {
 #[derive(Resource, Default, Debug)]
 pub struct TerrainMovementCosts {
     pub movement_cost_rules: HashMap<TerrainType, TileMovementCosts>,
+}
+
+impl TerrainMovementCosts {
+    /// Creates a new [`TerrainMovementCosts`] struct from a vec of [`TerrainType`] and [`TileMovementCosts`]
+    pub fn from_vec(
+        terrain_movement_costs: Vec<(TerrainType, TileMovementCosts)>,
+    ) -> TerrainMovementCosts {
+        let mut hashmap: HashMap<TerrainType, TileMovementCosts> = HashMap::new();
+        for (terrain_type, tile_movement_costs) in terrain_movement_costs {
+            hashmap.insert(terrain_type, tile_movement_costs);
+        }
+
+        Self {
+            movement_cost_rules: hashmap,
+        }
+    }
 }
 
 // UNIT MOVEMENT STUFF
@@ -473,46 +547,12 @@ pub struct ObjectMovementBundle {
 /// **object_terrain_movement_rules** - defines a list of rules based on TerrainType and TerrainClass
 /// that the object follows. If you want to declare movement rules based on the type of object that
 /// is in the tile that is getting checked, use ObjectTypeMovementRules
-#[derive(Clone, Eq, PartialEq, Debug, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
-    pub movement_type: &'static MovementType,
+    pub movement_type: MovementType,
     pub object_terrain_movement_rules: ObjectTerrainMovementRules,
-}
-
-//TODO: Update this to just a guaranteed ordered vec - ordered meaning the first element
-/// Resource that holds a Hashmap of [`AvailableMove`] structs. These structs should represent verified
-/// valid moves and are updated when the [`MoveEvent::MoveBegin`] event is processed.
-#[derive(Clone, Eq, PartialEq, Default, Debug, Component)]
-pub struct CurrentMovementInformation {
-    pub available_moves: HashMap<TilePos, AvailableMove>,
-}
-
-impl CurrentMovementInformation {
-    /// Returns true or false if CurrentMovementInformation contains a move at the assigned TilePos
-    pub fn contains_move(&self, new_pos: &TilePos) -> bool {
-        self.available_moves.contains_key(new_pos)
-    }
-
-    /// Clears the moves from the collection
-    pub fn clear_moves(&mut self) {
-        self.available_moves.clear();
-    }
-}
-
-pub struct ClearObjectAvailableMoves {
-    object: Entity,
-}
-
-fn clear_selected_object(
-    mut clear_object_reader: EventReader<ClearObjectAvailableMoves>,
-    mut current_movement_information: Query<&mut CurrentMovementInformation>,
-) {
-    for event in clear_object_reader.iter() {
-        if let Ok(mut info) = current_movement_information.get_mut(event.object) {
-            info.clear_moves();
-        }
-    }
 }
 
 /// Optional component that can be attached to an object to define rules related to that objects movement
@@ -527,11 +567,12 @@ fn clear_selected_object(
 /// If using the built in [`MoveCheckAllowedTile`](defaults::MoveCheckAllowedTile) implementation,
 /// these rules ignore [`ObjectStackingClass`](crate::mapping::tiles::ObjectStackingClass).
 ///
-#[derive(Clone, Eq, PartialEq, Debug, Component)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[reflect(Component)]
 pub struct ObjectTypeMovementRules {
-    object_class_rules: HashMap<&'static ObjectClass, bool>,
-    object_group_rules: HashMap<&'static ObjectGroup, bool>,
-    object_type_rules: HashMap<&'static ObjectType, bool>,
+    object_class_rules: HashMap<ObjectClass, bool>,
+    object_group_rules: HashMap<ObjectGroup, bool>,
+    object_type_rules: HashMap<ObjectType, bool>,
 }
 
 impl ObjectTypeMovementRules {
@@ -540,16 +581,16 @@ impl ObjectTypeMovementRules {
     /// bool fed in with the corresponding object info controls whether the object that has this component
     /// is allowed to move onto the given tile.
     pub fn new(
-        object_class_rules: Vec<(&'static ObjectClass, bool)>,
-        object_group_rules: Vec<(&'static ObjectGroup, bool)>,
-        object_type_rules: Vec<(&'static ObjectType, bool)>,
+        object_class_rules: Vec<(ObjectClass, bool)>,
+        object_group_rules: Vec<(ObjectGroup, bool)>,
+        object_type_rules: Vec<(ObjectType, bool)>,
     ) -> ObjectTypeMovementRules {
         ObjectTypeMovementRules {
             object_class_rules: ObjectTypeMovementRules::new_class_rules_hashmaps(
-                object_class_rules,
+                object_class_rules.clone(),
             ),
             object_group_rules: ObjectTypeMovementRules::new_group_rules_hashmaps(
-                object_group_rules,
+                object_group_rules.clone(),
             ),
             object_type_rules: ObjectTypeMovementRules::new_type_rules_hashmaps(object_type_rules),
         }
@@ -587,36 +628,36 @@ impl ObjectTypeMovementRules {
 
     /// Helper function to create a hashmap of [`ObjectType`] rules for Object Movement.
     pub fn new_type_rules_hashmaps(
-        type_rules: Vec<(&'static ObjectType, bool)>,
-    ) -> HashMap<&'static ObjectType, bool> {
-        let mut type_hashmap: HashMap<&'static ObjectType, bool> = HashMap::new();
+        type_rules: Vec<(ObjectType, bool)>,
+    ) -> HashMap<ObjectType, bool> {
+        let mut type_hashmap: HashMap<ObjectType, bool> = HashMap::new();
 
         for rule in type_rules.iter() {
-            type_hashmap.insert(rule.0, rule.1);
+            type_hashmap.insert(rule.0.clone(), rule.1);
         }
         type_hashmap
     }
 
     /// Helper function to create a hashmap of [`ObjectGroup`] rules for Object Movement.
     pub fn new_group_rules_hashmaps(
-        group_rules: Vec<(&'static ObjectGroup, bool)>,
-    ) -> HashMap<&'static ObjectGroup, bool> {
-        let mut group_hashmap: HashMap<&'static ObjectGroup, bool> = HashMap::new();
+        group_rules: Vec<(ObjectGroup, bool)>,
+    ) -> HashMap<ObjectGroup, bool> {
+        let mut group_hashmap: HashMap<ObjectGroup, bool> = HashMap::new();
 
         for rule in group_rules.iter() {
-            group_hashmap.insert(rule.0, rule.1);
+            group_hashmap.insert(rule.0.clone(), rule.1);
         }
         group_hashmap
     }
 
     /// Helper function to create a hashmap of [`ObjectClass`] rules for Object Movement.
     pub fn new_class_rules_hashmaps(
-        class_rules: Vec<(&'static ObjectClass, bool)>,
-    ) -> HashMap<&'static ObjectClass, bool> {
-        let mut class_hashmap: HashMap<&'static ObjectClass, bool> = HashMap::new();
+        class_rules: Vec<(ObjectClass, bool)>,
+    ) -> HashMap<ObjectClass, bool> {
+        let mut class_hashmap: HashMap<ObjectClass, bool> = HashMap::new();
 
         for rule in class_rules.iter() {
-            class_hashmap.insert(rule.0, rule.1);
+            class_hashmap.insert(rule.0.clone(), rule.1);
         }
 
         class_hashmap
@@ -638,17 +679,17 @@ impl ObjectTypeMovementRules {
 /// added to terrain_class_rules denotes that the object can move onto any TerrainTypes that has a reference
 /// to that TerrainClass.
 ///
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Reflect, FromReflect)]
 pub struct ObjectTerrainMovementRules {
-    terrain_class_rules: Vec<&'static TerrainClass>,
-    terrain_type_rules: HashMap<&'static TerrainType, bool>,
+    terrain_class_rules: Vec<TerrainClass>,
+    terrain_type_rules: HashMap<TerrainType, bool>,
 }
 
 impl ObjectTerrainMovementRules {
     /// Creates a new [`ObjectTerrainMovementRules`] from the provided [`TerrainClass`] vec and [`TerrainType`] rules
     pub fn new(
-        terrain_classes: Vec<&'static TerrainClass>,
-        terrain_type_rules: Vec<(&'static TerrainType, bool)>,
+        terrain_classes: Vec<TerrainClass>,
+        terrain_type_rules: Vec<(TerrainType, bool)>,
     ) -> ObjectTerrainMovementRules {
         ObjectTerrainMovementRules {
             terrain_class_rules: terrain_classes,
@@ -673,16 +714,14 @@ impl ObjectTerrainMovementRules {
         }
 
         self.terrain_class_rules
-            .contains(&tile_terrain_info.terrain_type.terrain_class)
+            .contains(&&tile_terrain_info.terrain_type.terrain_class)
     }
 
     /// Helper function to create a hashmap of [`TerrainType`] rules for Object Movement.
-    pub fn new_terrain_type_rules(
-        rules: Vec<(&'static TerrainType, bool)>,
-    ) -> HashMap<&'static TerrainType, bool> {
-        let mut hashmap: HashMap<&'static TerrainType, bool> = HashMap::new();
+    pub fn new_terrain_type_rules(rules: Vec<(TerrainType, bool)>) -> HashMap<TerrainType, bool> {
+        let mut hashmap: HashMap<TerrainType, bool> = HashMap::new();
         for rule in rules.iter() {
-            hashmap.insert(rule.0, rule.1);
+            hashmap.insert(rule.0.clone(), rule.1);
         }
         hashmap
     }
@@ -690,35 +729,36 @@ impl ObjectTerrainMovementRules {
 
 #[test]
 fn test_terrain_rules() {
-    const TERRAIN_CLASSES: &'static [TerrainClass] = &[
-        TerrainClass { name: "Ground" },
-        TerrainClass { name: "Water" },
+    let TERRAIN_CLASSES: Vec<TerrainClass> = vec![
+        TerrainClass {
+            name: String::from("Ground"),
+        },
+        TerrainClass {
+            name: String::from("Water"),
+        },
     ];
 
-    const TERRAIN_TYPES: &'static [TerrainType] = &[
+    let TERRAIN_TYPES: Vec<TerrainType> = vec![
         TerrainType {
-            name: "Grassland",
-            texture_index: 0,
-            terrain_class: &TERRAIN_CLASSES[0],
+            name: String::from("Grassland"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
         },
         TerrainType {
-            name: "Forest",
-            texture_index: 1,
-            terrain_class: &TERRAIN_CLASSES[0],
+            name: String::from("Forest"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
         },
         TerrainType {
-            name: "Mountain",
-            texture_index: 2,
-            terrain_class: &TERRAIN_CLASSES[0],
+            name: String::from("Mountain"),
+            terrain_class: TERRAIN_CLASSES[0].clone(),
         },
     ];
     let movement_rules = ObjectTerrainMovementRules::new(
-        vec![&TERRAIN_CLASSES[0], &TERRAIN_CLASSES[1]],
-        vec![(&TERRAIN_TYPES[2], false)],
+        vec![TERRAIN_CLASSES[0].clone(), TERRAIN_CLASSES[1].clone()],
+        vec![(TERRAIN_TYPES[2].clone(), false)],
     );
 
     let tile_terrain_info = TileTerrainInfo {
-        terrain_type: TERRAIN_TYPES[2],
+        terrain_type: TERRAIN_TYPES[2].clone(),
     };
 
     // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2]
