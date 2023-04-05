@@ -42,4 +42,4 @@ bevy = { version = "0.10.0", features = ["bevy_asset", "bevy_scene", "bevy_gilrs
 bevy_ascii_terminal = "0.12.4"
 
 [patch.crates-io]
-bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", features = [], default-features = false }
+bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap"}

@@ -61,7 +61,7 @@ use crate::game_core::{Game, ObjectIdProvider};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::mapping::MapId;
 use crate::object::{Object, ObjectGridPosition, ObjectId};
-use crate::player::PlayerList;
+use crate::player::{PlayerList, PlayerMarker};
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
 use bevy::prelude::{
@@ -427,7 +427,7 @@ impl GameCommands {
         }
     }
 
-    pub fn spawn_object<T>(&mut self, bundle: T, tile_pos: TilePos, on_map: MapId) -> SpawnObject<T>
+    pub fn spawn_object<T>(&mut self, bundle: T, tile_pos: TilePos, on_map: MapId, player_team: usize) -> SpawnObject<T>
     where
         T: Bundle + Clone + Reflect,
     {
@@ -435,12 +435,14 @@ impl GameCommands {
             bundle: bundle.clone(),
             tile_pos,
             on_map,
+            player_team,
             object_game_id: None,
         });
         SpawnObject {
             bundle,
             tile_pos,
             on_map,
+            player_team,
             object_game_id: None,
         }
     }
@@ -648,6 +650,7 @@ where
     pub bundle: T,
     pub tile_pos: TilePos,
     pub on_map: MapId,
+    pub player_team: usize,
     pub object_game_id: Option<ObjectId>,
 }
 
@@ -661,7 +664,7 @@ where
         let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
         world
             .spawn(self.bundle.clone())
-            .insert((id, changed_component));
+            .insert((id, changed_component, PlayerMarker::new(self.player_team)));
 
         let mut add = AddObjectToTile {
             object_game_id: id,
