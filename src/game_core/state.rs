@@ -10,6 +10,7 @@ use bevy::reflect::{TypeRegistry, TypeRegistryArc};
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::tiles::TilePos;
 use serde::{Deserialize, Serialize};
+use std::process::id;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum StateSystems {
@@ -195,6 +196,18 @@ impl GameStateHandler {
                 commands.entity(entity).remove::<Changed>();
             }
         }
+
+        world.resource_scope(|world, mut despawned_objects: Mut<DespawnedObjects>| {
+            let mut index_to_remove: Vec<ObjectId> = vec![];
+            for (id, mut changed) in despawned_objects.despawned_objects.iter_mut() {
+                if changed.all_seen(&player_list.players) {
+                    index_to_remove.push(*id);
+                }
+            }
+            for id in index_to_remove {
+                despawned_objects.despawned_objects.remove(&id);
+            }
+        });
         system_state.apply(world);
     }
 
