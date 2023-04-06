@@ -177,7 +177,7 @@ impl GameStateHandler {
 
         world.resource_scope(|world, mut despawned_objects: Mut<DespawnedObjects>| {
             for (id, mut changed) in despawned_objects.despawned_objects.iter_mut() {
-                if changed.check_and_register_seen(for_player_id) {
+                if !changed.check_and_register_seen(for_player_id) {
                     state.despawned_objects.push(*id);
                 }
             }
