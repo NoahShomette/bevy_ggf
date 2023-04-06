@@ -173,6 +173,25 @@ impl GameStateHandler {
                     })
                 }
             }
+
+            if let Some(player) = world.get::<Player>(entity) {
+                let mut components: Vec<Box<dyn Reflect>> = vec![];
+                for component in world.inspect_entity(entity).iter() {
+                    let reflect_component = type_registry
+                        .get(component.type_id().unwrap())
+                        .and_then(|registration| registration.data::<ReflectComponent>());
+                    if let Some(reflect_component) = reflect_component {
+                        if let Some(component) = reflect_component.reflect(world.entity(entity)) {
+                            components.push(component.clone_value());
+                        }
+                    }
+                }
+
+                state.players.push(PlayerState {
+                    player_id: *player,
+                    components,
+                })
+            }
         }
 
         world.resource_scope(|world, mut despawned_objects: Mut<DespawnedObjects>| {
