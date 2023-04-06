@@ -73,6 +73,11 @@ impl Game {
         )
     }
 
+    pub fn clear_changed(&mut self) {
+        self.game_state_handler
+            .clear_changed(&mut self.game_world, &self.player_list);
+    }
+
     pub fn execute_game_commands(&mut self) {}
 }
 
@@ -253,12 +258,9 @@ where
                     .insert(<ReflectComponent as FromType<ObjectStackingClass>>::from_type());
 
                 r.register::<PlayerMarker>();
-                let registration = r
-                    .get_mut(std::any::TypeId::of::<PlayerMarker>())
-                    .unwrap();
-                registration
-                    .insert(<ReflectComponent as FromType<PlayerMarker>>::from_type());
-                
+                let registration = r.get_mut(std::any::TypeId::of::<PlayerMarker>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<PlayerMarker>>::from_type());
+
                 r
             })),
         }
@@ -311,7 +313,6 @@ where
     pub fn build(mut self, mut main_world: &mut World) {
         self.setup_schedule.run(&mut self.game_world);
 
-
         main_world.insert_resource::<GameRuntime<GR>>(GameRuntime {
             game_runner: self.game_runner,
         });
@@ -323,13 +324,12 @@ where
         });
         self.game_world.insert_resource(self.player_list.clone());
 
-
         if let Some(mut commands) = self.commands.as_mut() {
             commands.execute_buffer(&mut self.game_world);
         } else {
             self.commands = Some(GameCommands::default());
         }
-        
+
         main_world.insert_resource(self.commands.unwrap());
         main_world.insert_resource::<Game>(Game {
             game_world: self.game_world,
