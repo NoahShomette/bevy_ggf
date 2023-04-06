@@ -127,7 +127,7 @@ impl GameStateHandler {
             let entity = *entity;
             let mut entity_mut = world.entity_mut(entity);
             let mut changed = entity_mut.get_mut::<Changed>().unwrap();
-            if changed.was_seen(for_player_id) {
+            if changed.check_and_register_seen(for_player_id) {
                 continue;
             }
             if let Some(_) = world.get::<Tile>(entity) {
@@ -190,11 +190,11 @@ impl GameStateHandler {
         let mut system_state: SystemState<(Query<(Entity, &Changed)>, Commands)> =
             SystemState::new(world);
         let (changed_query, mut commands) = system_state.get(world);
-            for (entity, changed) in changed_query.iter() {
-                if changed.all_seen(&player_list.players) {
-                    commands.entity(entity).remove::<Changed>();
-                }
+        for (entity, changed) in changed_query.iter() {
+            if changed.all_seen(&player_list.players) {
+                commands.entity(entity).remove::<Changed>();
             }
+        }
         system_state.apply(world);
     }
 
@@ -280,7 +280,9 @@ pub struct StateEvents {
     pub despawned_objects: Vec<ObjectId>,
 }
 
-#[derive(Default, Clone, Eq, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
+#[derive(
+    Default, Clone, Eq, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize,
+)]
 pub struct Changed {
     pub players_seen: Vec<usize>,
 }
