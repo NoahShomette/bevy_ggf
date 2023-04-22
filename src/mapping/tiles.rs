@@ -43,7 +43,7 @@ pub struct Tile;
 
 /// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
 /// using an [`TileObjectStacksCount`] struct.
-#[derive(Default, Clone, Eq, PartialEq, Component, Reflect, FromReflect)]
+#[derive(Default, Clone, Eq, PartialEq, Component, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 #[reflect(Component)]
 pub struct TileObjectStacks {
     pub tile_object_stacks: HashMap<StackingClass, TileObjectStacksCount>,
@@ -124,13 +124,13 @@ fn test_tile_object_stacks() {
 
 /// A StackingClass represents what kind of stack an object belongs to in a tile. This is used internally
 /// in [`TileObjectStacks`]
-#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 pub struct StackingClass {
     pub name: String,
 }
 
 /// A component to hold a [`StackingClass`].
-#[derive(Default, Clone, Eq, PartialEq, Hash, Debug, Component, Reflect, FromReflect)]
+#[derive(Default, Clone, Eq, PartialEq, Hash, Debug, Component, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 #[reflect(Component)]
 pub struct ObjectStackingClass {
     pub stack_class: StackingClass,
@@ -138,14 +138,14 @@ pub struct ObjectStackingClass {
 
 /// Wraps two u32s for use in a [`TileObjectStacks`] component. Used to keep track of the current_count
 /// of objects belonging to that [`ObjectStackingClass`] in the tile and the max_count allowed in the tile.
-#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 pub struct TileObjectStacksCount {
     pub current_count: u32,
     pub max_count: u32,
 }
 
 /// Simple Vec that holds the [`ObjectId`] of all Objects that are currently in the tile.
-#[derive(Clone, Eq, PartialEq, Default, Component, Reflect, FromReflect)]
+#[derive(Clone, Eq, PartialEq, Default, Component, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 #[reflect(Component)]
 pub struct TileObjects {
     pub entities_in_tile: Vec<ObjectId>,

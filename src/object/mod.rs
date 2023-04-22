@@ -291,8 +291,6 @@ pub struct GameObjectInfo {
     Debug,
     Component,
     Reflect,
-    serde::Deserialize,
-    serde::Serialize,
 )]
 #[reflect(Component)]
 pub struct ObjectGridPosition {
