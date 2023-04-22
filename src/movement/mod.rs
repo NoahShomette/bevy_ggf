@@ -480,7 +480,7 @@ impl MovementTypes {
 
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly
-#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 pub struct MovementType {
     pub name: String,
 }
@@ -547,7 +547,7 @@ pub struct ObjectMovementBundle {
 /// **object_terrain_movement_rules** - defines a list of rules based on TerrainType and TerrainClass
 /// that the object follows. If you want to declare movement rules based on the type of object that
 /// is in the tile that is getting checked, use ObjectTypeMovementRules
-#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 #[reflect(Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
@@ -679,7 +679,7 @@ impl ObjectTypeMovementRules {
 /// added to terrain_class_rules denotes that the object can move onto any TerrainTypes that has a reference
 /// to that TerrainClass.
 ///
-#[derive(Default, Clone, Eq, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(Default, Clone, Eq, PartialEq, Debug, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
 pub struct ObjectTerrainMovementRules {
     terrain_class_rules: Vec<TerrainClass>,
     terrain_type_rules: HashMap<TerrainType, bool>,
