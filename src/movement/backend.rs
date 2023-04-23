@@ -1,12 +1,11 @@
 use crate::movement::{
-    AvailableMove, MoveEvent, MovementSystem, ObjectMoved,
-    ObjectMovement, TileMovementCosts,
+    AvailableMove, MoveEvent, MovementSystem, ObjectMoved, ObjectMovement, TileMovementCosts,
 };
+use crate::object::ObjectId;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{Commands, Entity, EventReader, Mut, Query, Res, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapSize};
-use crate::object::ObjectId;
 
 /// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific

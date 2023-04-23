@@ -1,4 +1,4 @@
-﻿use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::ecs::system::SystemState;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::Input;
@@ -432,8 +432,7 @@ fn update_game_state(world: &mut World) {
         world.insert_resource(player_pos);
         drop(registration);
         let player_list = game.player_list.clone();
-        game.game_state_handler
-            .clear_changed(world, &player_list);
+        game.game_state_handler.clear_changed(world, &player_list);
     });
 }
 

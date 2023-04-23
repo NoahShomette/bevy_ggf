@@ -3,18 +3,21 @@ pub mod terrain;
 pub mod tiles;
 
 use crate::game_core::command::{GameCommand, GameCommands};
+use crate::game_core::runner::GameRunner;
+use crate::game_core::GameBuilder;
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStacks, TileObjects,
 };
-use crate::movement::{MoveError, MoveEvent, MovementCalculator, MovementSystem, TerrainMovementCosts, TileMoveCheckMeta, TileMoveChecks, TileMovementCosts};
+use crate::movement::{
+    MoveError, MoveEvent, MovementCalculator, MovementSystem, TerrainMovementCosts,
+    TileMoveCheckMeta, TileMoveChecks, TileMovementCosts,
+};
+use crate::player::PlayerList;
 use bevy::ecs::system::SystemState;
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use crate::game_core::GameBuilder;
-use crate::game_core::runner::GameRunner;
-use crate::player::PlayerList;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -29,18 +32,17 @@ impl Plugin for BggfMappingPlugin {
 
 pub trait GameBuilderMappingExt {
     fn setup_mapping(&mut self)
-        where
-            Self: Sized;
+    where
+        Self: Sized;
 }
 
 impl<T: GameRunner + 'static> GameBuilderMappingExt for GameBuilder<T>
-    where
-        T: GameRunner + 'static,
+where
+    T: GameRunner + 'static,
 {
-    
     fn setup_mapping(&mut self)
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         self.game_world.init_resource::<Events<MapSpawned>>();
         self.game_world.init_resource::<Events<MapDeSpawned>>();

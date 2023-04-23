@@ -1,4 +1,4 @@
-﻿//! Any actions that affect the game world should be specified as a [`GameCommand`] and submitted to
+//! Any actions that affect the game world should be specified as a [`GameCommand`] and submitted to
 //! through the [`GameCommands`] to enable saving, rollback, and more. A command should be entirely
 //! self contained, everything needed to accurately recreate the command should be included. A command
 //! **cannot** rely on any actions outside of it, only data. Eg, for MoveObject, you can't rely on
@@ -190,8 +190,8 @@ pub trait GameCommandClone {
 }
 
 impl<T> GameCommandClone for T
-    where
-        T: 'static + GameCommand + Clone + ?Sized,
+where
+    T: 'static + GameCommand + Clone + ?Sized,
 {
     fn clone_box(&self) -> Box<dyn GameCommand> {
         Box::new(self.clone())
@@ -207,8 +207,8 @@ pub struct GameCommandQueue {
 impl GameCommandQueue {
     /// Push a new command to the end of the queue
     pub fn push<C>(&mut self, command: C)
-        where
-            C: GameCommand,
+    where
+        C: GameCommand,
     {
         let utc: DateTime<Utc> = Utc::now();
         let command_meta = GameCommandMeta {
@@ -376,8 +376,8 @@ impl GameCommands {
 
     /// Add a custom command to the queue
     pub fn add<T>(&mut self, command: T) -> T
-        where
-            T: GameCommand + Clone,
+    where
+        T: GameCommand + Clone,
     {
         self.queue.push(command.clone());
         command
@@ -435,8 +435,8 @@ impl GameCommands {
         on_map: MapId,
         player_team: usize,
     ) -> SpawnObject<T>
-        where
-            T: Bundle + Clone + Reflect,
+    where
+        T: Bundle + Clone + Reflect,
     {
         self.queue.push(SpawnObject {
             bundle: bundle.clone(),
@@ -670,8 +670,8 @@ impl GameCommand for AddObjectToTile {
 
 #[derive(Clone, Debug, Reflect)]
 pub struct SpawnObject<T>
-    where
-        T: Bundle,
+where
+    T: Bundle,
 {
     pub bundle: T,
     pub tile_pos: TilePos,
@@ -681,8 +681,8 @@ pub struct SpawnObject<T>
 }
 
 impl<T> GameCommand for SpawnObject<T>
-    where
-        T: Bundle + Clone + Reflect,
+where
+    T: Bundle + Clone + Reflect,
 {
     fn execute(&mut self, mut world: &mut World) -> Result<(), String> {
         // Assign a new id as we un assign the id when we rollback

@@ -8,12 +8,12 @@
 // stuff as a unit but they get that marker component/trait and it holds them in a separate spot
 
 use crate::mapping::terrain::TileTerrainInfo;
+use crate::object::ObjectId;
 use bevy::prelude::{Bundle, Component, Entity, ReflectComponent};
 use bevy::reflect::{FromReflect, Reflect};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TileBundle, TilemapId};
 use bevy_ecs_tilemap::tiles::TilePos;
-use crate::object::ObjectId;
 
 /// Bundle containing all the basic tile components needed for a tile.
 ///
@@ -43,20 +43,26 @@ pub struct Tile;
 
 /// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
 /// using an [`TileObjectStacksCount`] struct.
-#[derive(Default, Clone, Eq, PartialEq, Component, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 #[reflect(Component)]
 pub struct TileObjectStacks {
     pub tile_object_stacks: HashMap<StackingClass, TileObjectStacksCount>,
 }
 
 impl TileObjectStacks {
-    pub fn new(
-        stack_rules: Vec<(StackingClass, TileObjectStacksCount)>,
-    ) -> TileObjectStacks {
+    pub fn new(stack_rules: Vec<(StackingClass, TileObjectStacksCount)>) -> TileObjectStacks {
         TileObjectStacks {
-            tile_object_stacks: TileObjectStacks::new_terrain_type_rules(
-                stack_rules,
-            ),
+            tile_object_stacks: TileObjectStacks::new_terrain_type_rules(stack_rules),
         }
     }
 
@@ -72,9 +78,8 @@ impl TileObjectStacks {
     }
 
     pub fn has_space(&self, object_class: &ObjectStackingClass) -> bool {
-        return if let Some(tile_stack_count_max) = self
-            .tile_object_stacks
-            .get(&object_class.stack_class)
+        return if let Some(tile_stack_count_max) =
+            self.tile_object_stacks.get(&object_class.stack_class)
         {
             tile_stack_count_max.current_count < tile_stack_count_max.max_count
         } else {
@@ -83,9 +88,8 @@ impl TileObjectStacks {
     }
 
     pub fn increment_object_class_count(&mut self, object_class: &ObjectStackingClass) {
-        if let Some(tile_stack_count_max) = self
-            .tile_object_stacks
-            .get_mut(&object_class.stack_class)
+        if let Some(tile_stack_count_max) =
+            self.tile_object_stacks.get_mut(&object_class.stack_class)
         {
             tile_stack_count_max.current_count += 1;
         }
@@ -124,13 +128,36 @@ fn test_tile_object_stacks() {
 
 /// A StackingClass represents what kind of stack an object belongs to in a tile. This is used internally
 /// in [`TileObjectStacks`]
-#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct StackingClass {
     pub name: String,
 }
 
 /// A component to hold a [`StackingClass`].
-#[derive(Default, Clone, Eq, PartialEq, Hash, Debug, Component, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    Debug,
+    Component,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 #[reflect(Component)]
 pub struct ObjectStackingClass {
     pub stack_class: StackingClass,
@@ -138,14 +165,36 @@ pub struct ObjectStackingClass {
 
 /// Wraps two u32s for use in a [`TileObjectStacks`] component. Used to keep track of the current_count
 /// of objects belonging to that [`ObjectStackingClass`] in the tile and the max_count allowed in the tile.
-#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct TileObjectStacksCount {
     pub current_count: u32,
     pub max_count: u32,
 }
 
 /// Simple Vec that holds the [`ObjectId`] of all Objects that are currently in the tile.
-#[derive(Clone, Eq, PartialEq, Default, Component, Reflect, FromReflect, serde::Deserialize,serde::Serialize)]
+#[derive(
+    Clone,
+    Eq,
+    PartialEq,
+    Default,
+    Component,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 #[reflect(Component)]
 pub struct TileObjects {
     pub entities_in_tile: Vec<ObjectId>,

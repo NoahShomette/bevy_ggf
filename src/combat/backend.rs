@@ -1,6 +1,6 @@
-use crate::combat::{ObjectAttacked};
-use bevy::prelude::{Commands, EventReader};
 use crate::combat::battle_resolver::BattleResult;
+use crate::combat::ObjectAttacked;
+use bevy::prelude::{Commands, EventReader};
 
 /// Adds the [`ObjectAttacked`] component to any entity that is sent through the [`CombatResultEvent::AttackResult`]
 /// event.

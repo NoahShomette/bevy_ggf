@@ -281,17 +281,7 @@ pub struct GameObjectInfo {
 }
 
 /// The position of the Object on the Tilemap.
-#[derive(
-    Default,
-    Clone,
-    Copy,
-    Eq,
-    Hash,
-    PartialEq,
-    Debug,
-    Component,
-    Reflect,
-)]
+#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect)]
 #[reflect(Component)]
 pub struct ObjectGridPosition {
     pub tile_position: TilePos,

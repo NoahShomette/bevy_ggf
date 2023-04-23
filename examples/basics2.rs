@@ -1,4 +1,4 @@
-﻿use bevy::prelude::{
+use bevy::prelude::{
     App, ClearColor, Color, IntoSystemAppConfigs, IntoSystemConfig, Mut, Schedule, World,
 };
 use bevy::{DefaultPlugins, MinimalPlugins};
@@ -189,7 +189,6 @@ fn simulate(mut world: &mut World) {
             game_runtime.game_runner.simulate_game(&mut game.game_world);
         });
         let game_state = game.get_entire_state();
-        for state in game_state {
-        }
+        for state in game_state {}
     });
 }

@@ -1,5 +1,6 @@
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
+use crate::mapping::MapId;
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
 use crate::movement::{
     DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, ObjectTypeMovementRules,
@@ -10,7 +11,6 @@ use bevy::ecs::system::SystemState;
 use bevy::prelude::{Entity, IVec2, Query, Res, Transform, With, Without, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapSize, TilemapType};
-use crate::mapping::MapId;
 
 // BUILT IN IMPLEMENTATIONS
 

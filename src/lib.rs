@@ -13,17 +13,16 @@ use bevy::app::{App, Plugin, PluginGroupBuilder};
 use bevy::prelude::PluginGroup;
 
 pub mod combat;
+pub mod game_core;
 pub mod mapping;
 pub mod movement;
 pub mod object;
 pub mod player;
-pub mod game_core;
 
 pub struct BggfCorePlugin;
 
 impl Plugin for BggfCorePlugin {
-    fn build(&self, app: &mut App) {
-    }
+    fn build(&self, app: &mut App) {}
 }
 
 pub struct BggfDefaultPlugins;
