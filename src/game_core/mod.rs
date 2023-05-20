@@ -193,8 +193,8 @@ where
                 // just manually register these here.
                 //
                 // The user can still register any custom types with `register_rollback_type()`.
-                r.register::<Parent>();
-                r.register::<Children>();
+                //r.register::<Parent>();
+                //r.register::<Children>();
 
                 // Other crates
                 r.register::<TilePos>();
