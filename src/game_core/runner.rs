@@ -1,11 +1,12 @@
-use bevy::prelude::{Resource, Schedule, SystemSet, World};
 use crate::game_core::Game;
+use bevy::prelude::{Resource, Schedule, SystemSet, World};
 
-/// Runtime that is implemented by the user to drive their game
+/// Runtime that is used to drive the game. Users can implement whatever the want onto the GameRunner
+/// and then call [GameRuntime::simulate()] in order to drive their game forward.
 #[derive(Resource)]
 pub struct GameRuntime<T>
-    where
-        T: GameRunner,
+where
+    T: GameRunner,
 {
     pub game_runner: T,
     pub game_pre_schedule: Schedule,
@@ -13,13 +14,13 @@ pub struct GameRuntime<T>
 }
 
 impl<T> GameRuntime<T>
-    where
-        T: GameRunner,
+where
+    T: GameRunner,
 {
-    pub fn simulate(&mut self, mut game_data: &mut Game) {
-        self.game_pre_schedule.run(&mut game_data.game_world);
-        self.game_runner.simulate_game(&mut game_data.game_world);
-        self.game_post_schedule.run(&mut game_data.game_world);
+    pub fn simulate(&mut self, mut world: &mut World) {
+        self.game_pre_schedule.run(&mut world);
+        self.game_runner.simulate_game(&mut world);
+        self.game_post_schedule.run(&mut world);
     }
 }
 
@@ -30,7 +31,7 @@ pub enum PostBaseSets {
     CommandFlush,
     Pre,
     Main,
-    Post
+    Post,
 }
 
 // SystemSet for the GameRunner FrameworkPreSchedule
@@ -40,11 +41,12 @@ pub enum PreBaseSets {
     CommandFlush,
     Pre,
     Main,
-    Post
+    Post,
 }
 
 /// The [`GameRunner`] represents the actual *game* logic that you want run whenever the game state
-/// should be updated, independently of GameCommands
+/// should be updated, independently of GameCommands. Use the [GameRuntime::simulate()] function instead
+/// of calling this directly in order to utilize automate change detection
 pub trait GameRunner: Send + Sync {
     fn simulate_game(&mut self, world: &mut World);
 }

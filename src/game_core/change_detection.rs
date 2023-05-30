@@ -57,3 +57,12 @@ pub fn track_resource_changes<R: Resource>(
         }
     }
 }
+
+// TODO: write tests for this
+#[test]
+fn test_component_change_tracking() {
+    //let game = GameBuilder::<TestRunner>::new_game(TestRunner { schedule }),
+}
+
+#[test]
+fn test_resource_change_tracking() {}
