@@ -38,7 +38,9 @@ pub fn track_component_changes<C: Component>(
     }
 
     for entity in removed_components.iter() {
-        commands.entity(entity).insert(Changed::default());
+        if let Some(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.insert(Changed::default());
+        }
     }
 }
 
