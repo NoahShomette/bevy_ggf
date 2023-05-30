@@ -4,7 +4,7 @@ use crate::game_core::{Game, GameBuilder, GameTypeRegistry};
 use crate::object::{Object, ObjectGridPosition, ObjectId};
 use bevy::prelude::{
     Commands, Component, DespawnRecursiveExt, DetectChanges, Entity, FromReflect, Mut, Query,
-    Reflect, Res, ResMut, Resource, With, World,
+    Reflect, RemovedComponents, Res, ResMut, Resource, With, World,
 };
 use std::any::TypeId;
 
@@ -31,8 +31,13 @@ pub fn despawn_objects(
 pub fn track_component_changes<C: Component>(
     mut commands: Commands,
     query: Query<Entity, bevy::prelude::Changed<C>>,
+    mut removed_components: RemovedComponents<C>,
 ) {
     for entity in query.iter() {
+        commands.entity(entity).insert(Changed::default());
+    }
+
+    for entity in removed_components.iter() {
         commands.entity(entity).insert(Changed::default());
     }
 }
