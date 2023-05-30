@@ -1,24 +1,21 @@
 ﻿//!
 
+use crate::game_core::change_detection::{despawn, track_component_changes};
 use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
-use crate::game_core::runner::GameRunner;
-use crate::game_core::state::{DespawnedObjects, GameStateHandler, StateEvents, StateSystems};
+use crate::game_core::runner::{GameRunner, GameRuntime, PostBaseSets, PreBaseSets};
+use crate::game_core::state::{DespawnedObjects, GameStateHandler, StateEvents};
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{
-    ObjectStackingClass, Tile, TileObjectStacks, TileObjectStacksCount, TileObjects,
-};
+use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjectStacksCount, TileObjects};
 use crate::mapping::MapIdProvider;
 use crate::movement::TileMovementCosts;
 use crate::object::{
-    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectType,
+    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectInfo,
+    ObjectType,
 };
 use crate::player::{Player, PlayerList, PlayerMarker};
-use bevy::app::{App, CoreSchedule, Plugin};
+use bevy::app::{App, Plugin};
 use bevy::ecs::world::EntityMut;
-use bevy::prelude::{
-    apply_system_buffers, Children, Commands, Component, FixedTime, IntoSystemAppConfig,
-    IntoSystemConfig, Parent, ReflectComponent, ReflectResource, ResMut, Resource, Schedule, World,
-};
+use bevy::prelude::*;
 use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRegistryInternal};
 use bevy_ecs_tilemap::tiles::TilePos;
 use chrono::{DateTime, Utc};
@@ -26,6 +23,7 @@ use parking_lot::{Mutex, RwLock};
 use std::default::Default;
 use std::sync::Arc;
 
+pub mod change_detection;
 pub mod command;
 pub mod requests;
 pub mod runner;
@@ -81,24 +79,6 @@ impl Game {
     pub fn execute_game_commands(&mut self) {}
 }
 
-/// Runtime that is implemented by the user to drive their game
-#[derive(Debug, Resource)]
-pub struct GameRuntime<T>
-where
-    T: GameRunner,
-{
-    pub game_runner: T,
-}
-
-impl<T> GameRuntime<T>
-where
-    T: GameRunner,
-{
-    pub fn simulate(&mut self, mut game_data: &mut Game) {
-        self.game_runner.simulate_game(&mut game_data.game_world);
-    }
-}
-
 /// GameBuilder that creates a new game and sets it up correctly
 #[derive(Resource)]
 pub struct GameBuilder<GR>
@@ -106,6 +86,8 @@ where
     GR: GameRunner + 'static,
 {
     pub game_runner: GR,
+    pub framework_pre_schedule: Schedule,
+    pub framework_post_schedule: Schedule,
     pub game_world: World,
     pub setup_schedule: Schedule,
     pub type_registry: TypeRegistry,
@@ -126,6 +108,8 @@ where
 
         GameBuilder {
             game_runner,
+            framework_pre_schedule: GameBuilder::<GR>::default_framework_pre_schedule(),
+            framework_post_schedule: GameBuilder::<GR>::default_framework_post_schedule(),
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
             type_registry: GameBuilder::<GR>::default_registry(),
@@ -155,6 +139,8 @@ where
 
         GameBuilder {
             game_runner,
+            framework_pre_schedule: Default::default(),
+            framework_post_schedule: Default::default(),
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
             type_registry: GameBuilder::<GR>::default_registry(),
@@ -233,6 +219,10 @@ where
                 let registration = r.get_mut(std::any::TypeId::of::<ObjectId>()).unwrap();
                 registration.insert(<ReflectComponent as FromType<ObjectId>>::from_type());
 
+                r.register::<ObjectInfo>();
+                let registration = r.get_mut(std::any::TypeId::of::<ObjectId>()).unwrap();
+                registration.insert(<ReflectComponent as FromType<ObjectId>>::from_type());
+
                 r.register::<ObjectClass>();
 
                 r.register::<ObjectGroup>();
@@ -266,6 +256,35 @@ where
         }
     }
 
+    pub fn default_components_track_changes(&mut self) {
+        self.register_component_track_changes::<Parent>();
+        self.register_component_track_changes::<Children>();
+
+        self.register_component_track_changes::<TilePos>();
+        self.register_component_track_changes::<Tile>();
+        self.register_component_track_changes::<TileTerrainInfo>();
+        self.register_component_track_changes::<TileObjects>();
+        //self.register_component_track_changes::<TileObjectStacks>();
+        self.register_component_track_changes::<TileMovementCosts>();
+
+        self.register_component_track_changes::<ObjectId>();
+        self.register_component_track_changes::<ObjectGridPosition>();
+        self.register_component_track_changes::<Object>();
+        self.register_component_track_changes::<ObjectStackingClass>();
+        self.register_component_track_changes::<ObjectInfo>();
+
+        self.register_component_track_changes::<PlayerMarker>();
+    }
+
+    /// Registers a component which will be tracked, updated, and reported in state events
+    pub fn register_component_track_changes<C>(&mut self)
+    where
+        C: Component,
+    {
+        self.framework_post_schedule
+            .add_system(track_component_changes::<C>.in_base_set(PostBaseSets::Main));
+    }
+
     /// Registers a component which will be tracked, updated, and reported in state events
     pub fn register_component<Type>(&mut self)
     where
@@ -297,6 +316,35 @@ where
 
         schedule
     }
+    pub fn default_framework_pre_schedule() -> Schedule {
+        let mut schedule = Schedule::default();
+        schedule.configure_sets(
+            (
+                PreBaseSets::CommandFlush,
+                PreBaseSets::Pre,
+                PreBaseSets::Main,
+                PreBaseSets::Post,
+            )
+                .chain(),
+        );
+        schedule
+    }
+
+    pub fn default_framework_post_schedule() -> Schedule {
+        let mut schedule = Schedule::default();
+        schedule.configure_sets(
+            (
+                PostBaseSets::CommandFlush,
+                PostBaseSets::Pre,
+                PostBaseSets::Main,
+                PostBaseSets::Post,
+            )
+                .chain(),
+        );
+
+        schedule.add_system(despawn.in_base_set(PostBaseSets::Main));
+        schedule
+    }
 
     pub fn add_player(&mut self, needs_state: bool) -> (usize, EntityMut) {
         let new_player_id = self.next_player_id;
@@ -315,6 +363,8 @@ where
 
         main_world.insert_resource::<GameRuntime<GR>>(GameRuntime {
             game_runner: self.game_runner,
+            framework_pre_schedule: self.framework_pre_schedule,
+            framework_post_schedule: self.framework_post_schedule,
         });
         self.game_world.insert_resource(GameTypeRegistry {
             type_registry: self.type_registry.clone(),
