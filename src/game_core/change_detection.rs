@@ -1,6 +1,6 @@
 use crate::game_core::runner::{GameRuntime, TurnBasedGameRunner};
 use crate::game_core::state::{Changed, DespawnedObjects, ResourceChangeTracking};
-use crate::game_core::{Game, GameBuilder};
+use crate::game_core::{Game, GameBuilder, GameTypeRegistry};
 use crate::object::{Object, ObjectGridPosition, ObjectId};
 use bevy::prelude::{
     Commands, Component, DespawnRecursiveExt, DetectChanges, Entity, FromReflect, Mut, Query,
@@ -42,11 +42,10 @@ pub fn track_component_changes<C: Component>(
 pub fn track_resource_changes<R: Resource>(
     resource: Res<R>,
     mut resources: ResMut<ResourceChangeTracking>,
-    game: Res<Game>,
+    world: &World,
 ) {
     if resource.is_changed() {
-        let component_id = game
-            .game_world
+        let component_id = world
             .components()
             .get_resource_id(TypeId::of::<R>())
             .unwrap_or_else(|| panic!("resource does not exist: {}", std::any::type_name::<R>()));
