@@ -1,6 +1,8 @@
 ﻿//!
 
-use crate::game_core::change_detection::{despawn, track_component_changes};
+use crate::game_core::change_detection::{
+    despawn_objects, track_component_changes, track_resource_changes,
+};
 use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use crate::game_core::runner::{GameRunner, GameRuntime, PostBaseSets, PreBaseSets};
 use crate::game_core::state::{DespawnedObjects, GameStateHandler, StateEvents};
@@ -46,7 +48,8 @@ pub struct GameTypeRegistry {
 pub struct Game {
     /// A world that should hold all game state
     pub game_world: World,
-    /// Holds component and resource registrations that will be diffed and updated
+    /// Holds component and resource registrations for all components and resources that will be 
+    /// diffed and updated automatically
     pub type_registry: TypeRegistry,
     /// Holds updates to the game state
     pub game_state_handler: GameStateHandler,
@@ -86,9 +89,13 @@ where
     GR: GameRunner + 'static,
 {
     pub game_runner: GR,
-    pub framework_pre_schedule: Schedule,
-    pub framework_post_schedule: Schedule,
+    /// A schedule that is run before the GameRunner::simulate_game function
+    pub game_pre_schedule: Schedule,
+    /// A schedule that is run after the GameRunner::simulate_game function
+    pub game_post_schedule: Schedule,
     pub game_world: World,
+    /// A schedule that is run as the last item before inserting the Game Resource during setup. Use
+    /// this for systems that must be run once when the game is setup and only then
     pub setup_schedule: Schedule,
     pub type_registry: TypeRegistry,
     pub commands: Option<GameCommands>,
@@ -108,8 +115,8 @@ where
 
         GameBuilder {
             game_runner,
-            framework_pre_schedule: GameBuilder::<GR>::default_framework_pre_schedule(),
-            framework_post_schedule: GameBuilder::<GR>::default_framework_post_schedule(),
+            game_pre_schedule: GameBuilder::<GR>::default_game_pre_schedule(),
+            game_post_schedule: GameBuilder::<GR>::default_game_post_schedule(),
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
             type_registry: GameBuilder::<GR>::default_registry(),
@@ -139,8 +146,8 @@ where
 
         GameBuilder {
             game_runner,
-            framework_pre_schedule: Default::default(),
-            framework_post_schedule: Default::default(),
+            game_pre_schedule: GameBuilder::<GR>::default_game_pre_schedule(),
+            game_post_schedule: GameBuilder::<GR>::default_game_post_schedule(),
             game_world,
             setup_schedule: GameBuilder::<GR>::default_setup_schedule(),
             type_registry: GameBuilder::<GR>::default_registry(),
@@ -276,20 +283,33 @@ where
         self.register_component_track_changes::<PlayerMarker>();
     }
 
-    /// Registers a component which will be tracked, updated, and reported in state events
+    /// Inserts a system into GameRunner::game_post_schedule that will track the specified Component
+    /// and insert a Changed::default() component when it detects a change
     pub fn register_component_track_changes<C>(&mut self)
     where
         C: Component,
     {
-        self.framework_post_schedule
+        self.game_post_schedule
             .add_system(track_component_changes::<C>.in_base_set(PostBaseSets::Main));
     }
 
-    /// Registers a component which will be tracked, updated, and reported in state events
+    /// Registers a resource which will be tracked, updated, and reported in state events
+    pub fn register_resource_track_changes<R>(&mut self)
+    where
+        R: Resource,
+    {
+        self.game_post_schedule
+            .add_system(track_resource_changes::<R>.in_base_set(PostBaseSets::Main));
+    }
+
+    /// Registers a component which will be tracked, updated, and reported in state events. Also adds
+    /// the component to change detection
     pub fn register_component<Type>(&mut self)
     where
         Type: GetTypeRegistration + Reflect + Default + Component,
     {
+        self.register_component_track_changes::<Type>();
+
         let mut registry = self.type_registry.write();
         registry.register::<Type>();
 
@@ -298,11 +318,14 @@ where
         drop(registry);
     }
 
-    /// Registers a resource that will be tracked and reported as part of the state
+    /// Registers a resource that will be tracked and reported as part of the state. Also adds
+    /// the resource to change detection
     pub fn register_resource<Type>(&mut self)
     where
         Type: GetTypeRegistration + Reflect + Default + Resource,
     {
+        self.register_resource_track_changes::<Type>();
+
         let mut registry = self.type_registry.write();
         registry.register::<Type>();
 
@@ -316,7 +339,7 @@ where
 
         schedule
     }
-    pub fn default_framework_pre_schedule() -> Schedule {
+    pub fn default_game_pre_schedule() -> Schedule {
         let mut schedule = Schedule::default();
         schedule.configure_sets(
             (
@@ -330,7 +353,7 @@ where
         schedule
     }
 
-    pub fn default_framework_post_schedule() -> Schedule {
+    pub fn default_game_post_schedule() -> Schedule {
         let mut schedule = Schedule::default();
         schedule.configure_sets(
             (
@@ -342,7 +365,7 @@ where
                 .chain(),
         );
 
-        schedule.add_system(despawn.in_base_set(PostBaseSets::Main));
+        schedule.add_system(despawn_objects.in_base_set(PostBaseSets::Main));
         schedule
     }
 
@@ -359,12 +382,10 @@ where
     }
 
     pub fn build(mut self, mut main_world: &mut World) {
-        self.setup_schedule.run(&mut self.game_world);
-
         main_world.insert_resource::<GameRuntime<GR>>(GameRuntime {
             game_runner: self.game_runner,
-            framework_pre_schedule: self.framework_pre_schedule,
-            framework_post_schedule: self.framework_post_schedule,
+            game_pre_schedule: self.game_pre_schedule,
+            game_post_schedule: self.game_post_schedule,
         });
         self.game_world.insert_resource(GameTypeRegistry {
             type_registry: self.type_registry.clone(),
@@ -381,11 +402,15 @@ where
         }
 
         main_world.insert_resource(self.commands.unwrap());
+        
+        self.setup_schedule.run(&mut self.game_world);
+        
         main_world.insert_resource::<Game>(Game {
             game_world: self.game_world,
             type_registry: self.type_registry,
             game_state_handler: Default::default(),
             player_list: self.player_list,
         });
+        
     }
 }

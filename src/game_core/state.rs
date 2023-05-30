@@ -1,16 +1,14 @@
 ﻿use crate::mapping::tiles::Tile;
 use crate::object::{ObjectGridPosition, ObjectId};
 use crate::player::{Player, PlayerList};
+use bevy::ecs::component::{ComponentId, ComponentInfo};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{
-    Commands, Component, Entity, FromReflect, Mut, Query, Reflect, ReflectComponent, Resource,
-    SystemSet, With, World,
-};
+use bevy::prelude::*;
 use bevy::reflect::{TypeRegistry, TypeRegistryArc};
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::tiles::TilePos;
 use serde::{Deserialize, Serialize};
-use std::process::id;
+use std::any::Any;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum StateSystems {
@@ -29,7 +27,7 @@ impl GameStateHandler {
     /// returns the entire game state in a vec
     pub fn get_entire_state(
         &mut self,
-        mut world: &World,
+        mut world: &mut World,
         for_player_id: Option<usize>,
         type_registry: &TypeRegistryArc,
     ) -> StateEvents {
@@ -102,6 +100,34 @@ impl GameStateHandler {
             }
         }
 
+        world.resource_scope(|world, mut resources: Mut<ResourceChangeTracking>| {
+            for (id, mut changed) in resources.resources.iter_mut() {
+                if let Some(for_player_id) = for_player_id {
+                    if changed.check_and_register_seen(for_player_id) {
+                        continue;
+                    }
+                }
+                // go through all resources and clone those that are registered
+                for (component_id, _) in world.storages().resources.iter() {
+                    let reflect_component = world
+                        .storages()
+                        .resources
+                        .get(component_id)
+                        .and_then(|info| type_registry.get(info.type_id().to_owned()))
+                        .and_then(|registration| registration.data::<ReflectResource>());
+                    if let Some(reflect_resource) = reflect_component {
+                        if let Some(resource) = reflect_resource.reflect(world) {
+                            if component_id == *id {
+                                state.resources.push(ResourceState {
+                                    resource: resource.clone_value(),
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         state
     }
 
@@ -121,7 +147,6 @@ impl GameStateHandler {
 
         let type_registry = type_registry.read();
         let mut query = world.query_filtered::<Entity, With<Changed>>();
-
         let entities: Vec<Entity> = query.iter(world).collect();
 
         for entity in entities.iter() {
@@ -135,7 +160,7 @@ impl GameStateHandler {
                 let mut components: Vec<Box<dyn Reflect>> = vec![];
                 for component in world.inspect_entity(entity).iter() {
                     let reflect_component = type_registry
-                        .get(component.type_id().unwrap())
+                        .get(ComponentInfo::type_id(component).unwrap())
                         .and_then(|registration| registration.data::<ReflectComponent>());
                     if let Some(reflect_component) = reflect_component {
                         if let Some(component) = reflect_component.reflect(world.entity(entity)) {
@@ -156,7 +181,7 @@ impl GameStateHandler {
                 let mut components: Vec<Box<dyn Reflect>> = vec![];
                 for component in world.inspect_entity(entity).iter() {
                     let reflect_component = type_registry
-                        .get(component.type_id().unwrap())
+                        .get(ComponentInfo::type_id(component).unwrap())
                         .and_then(|registration| registration.data::<ReflectComponent>());
                     if let Some(reflect_component) = reflect_component {
                         if let Some(component) = reflect_component.reflect(world.entity(entity)) {
@@ -178,7 +203,7 @@ impl GameStateHandler {
                 let mut components: Vec<Box<dyn Reflect>> = vec![];
                 for component in world.inspect_entity(entity).iter() {
                     let reflect_component = type_registry
-                        .get(component.type_id().unwrap())
+                        .get(ComponentInfo::type_id(component).unwrap())
                         .and_then(|registration| registration.data::<ReflectComponent>());
                     if let Some(reflect_component) = reflect_component {
                         if let Some(component) = reflect_component.reflect(world.entity(entity)) {
@@ -202,10 +227,36 @@ impl GameStateHandler {
             }
         });
 
+        world.resource_scope(|world, mut resources: Mut<ResourceChangeTracking>| {
+            for (id, changed) in resources.resources.iter_mut() {
+                if !changed.check_and_register_seen(for_player_id) {
+                    // go through all resources and clone those that are registered
+                    for (component_id, _) in world.storages().resources.iter() {
+                        let reflect_component = world
+                            .storages()
+                            .resources
+                            .get(component_id)
+                            .and_then(|info| type_registry.get(info.type_id().to_owned()))
+                            .and_then(|registration| registration.data::<ReflectResource>());
+                        if let Some(reflect_resource) = reflect_component {
+                            if let Some(resource) = reflect_resource.reflect(world) {
+                                if component_id == *id {
+                                    state.resources.push(ResourceState {
+                                        resource: resource.clone_value(),
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         state
     }
 
-    /// Simple function that will clear all changed components that have been fully seen
+    /// Simple function that will clear all changed components that have been fully seen as well as
+    /// the DespawnedObjects resource and the ResourceChangeTracking resource
     pub fn clear_changed(&mut self, world: &mut World, player_list: &PlayerList) {
         let mut system_state: SystemState<(Query<(Entity, &Changed)>, Commands)> =
             SystemState::new(world);
@@ -216,7 +267,7 @@ impl GameStateHandler {
             }
         }
 
-        world.resource_scope(|world, mut despawned_objects: Mut<DespawnedObjects>| {
+        world.resource_scope(|_world, mut despawned_objects: Mut<DespawnedObjects>| {
             let mut index_to_remove: Vec<ObjectId> = vec![];
             for (id, mut changed) in despawned_objects.despawned_objects.iter_mut() {
                 if changed.all_seen(&player_list.players) {
@@ -227,6 +278,21 @@ impl GameStateHandler {
                 despawned_objects.despawned_objects.remove(&id);
             }
         });
+
+        world.resource_scope(
+            |_world, mut resource_change_tracking: Mut<ResourceChangeTracking>| {
+                let mut index_to_remove: Vec<ComponentId> = vec![];
+                for (id, mut changed) in resource_change_tracking.resources.iter_mut() {
+                    if changed.all_seen(&player_list.players) {
+                        index_to_remove.push(*id);
+                    }
+                }
+                for id in index_to_remove {
+                    resource_change_tracking.resources.remove(&id);
+                }
+            },
+        );
+
         system_state.apply(world);
     }
 
@@ -260,11 +326,7 @@ impl GameStateHandler {
             new_events.despawned_objects = self.state_events.despawned_objects.drain(..).collect();
         }
 
-        if has_state {
-            return Some(new_events);
-        } else {
-            return None;
-        }
+        return if has_state { Some(new_events) } else { None };
     }
 }
 
@@ -320,6 +382,7 @@ pub struct Changed {
 }
 
 impl Changed {
+    /// Checks if all players that are marked as needs_state have been registered and returns the result
     pub fn all_seen(&self, players: &Vec<Player>) -> bool {
         for player in players.iter() {
             if player.needs_state && !self.players_seen.contains(&player.id()) {
@@ -329,6 +392,9 @@ impl Changed {
         true
     }
 
+    /// Checks if the given player id has already been registered and returns the result. If the player
+    /// id hasn't seen the changes then it marks it as seen and returns false. If the player id has seen
+    /// the changes then it does nothing and returns true.
     pub fn check_and_register_seen(&mut self, id: usize) -> bool {
         return if self.players_seen.contains(&id) {
             true
@@ -338,6 +404,7 @@ impl Changed {
         };
     }
 
+    /// Checks if the given player id has been registered and returns the results
     pub fn was_seen(&mut self, id: usize) -> bool {
         return self.players_seen.contains(&id);
     }
@@ -347,4 +414,10 @@ impl Changed {
 #[derive(Clone, Eq, Debug, PartialEq, Resource, Reflect, FromReflect, Serialize, Deserialize)]
 pub struct DespawnedObjects {
     pub despawned_objects: HashMap<ObjectId, Changed>,
+}
+
+/// Resource inserted into the world that will be used to drive sending despawned object updates
+#[derive(Clone, Eq, Debug, PartialEq, Resource)]
+pub struct ResourceChangeTracking {
+    pub resources: HashMap<ComponentId, Changed>,
 }

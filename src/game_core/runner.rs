@@ -8,8 +8,8 @@ pub struct GameRuntime<T>
         T: GameRunner,
 {
     pub game_runner: T,
-    pub framework_pre_schedule: Schedule,
-    pub framework_post_schedule: Schedule,
+    pub game_pre_schedule: Schedule,
+    pub game_post_schedule: Schedule,
 }
 
 impl<T> GameRuntime<T>
@@ -17,9 +17,9 @@ impl<T> GameRuntime<T>
         T: GameRunner,
 {
     pub fn simulate(&mut self, mut game_data: &mut Game) {
-        self.framework_pre_schedule.run(&mut game_data.game_world);
+        self.game_pre_schedule.run(&mut game_data.game_world);
         self.game_runner.simulate_game(&mut game_data.game_world);
-        self.framework_post_schedule.run(&mut game_data.game_world);
+        self.game_post_schedule.run(&mut game_data.game_world);
     }
 }
 
@@ -49,6 +49,7 @@ pub trait GameRunner: Send + Sync {
     fn simulate_game(&mut self, world: &mut World);
 }
 
+/// A simple example game runner for a turn based game
 pub struct TurnBasedGameRunner {
     turn_schedule: Schedule,
 }
@@ -59,6 +60,7 @@ impl GameRunner for TurnBasedGameRunner {
     }
 }
 
+/// A simple example game runner for a real time based game
 pub struct RealTimeGameRunner {
     ticks: usize,
     tick_schedule: Schedule,
