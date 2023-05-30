@@ -13,7 +13,7 @@
 //! use bevy_ggf::game_core::command::{GameCommand, GameCommands};
 //! use bevy_ggf::mapping::MapId;
 //!
-//! #[derive(Bundle, Default)]
+//! #[derive(Bundle, Default, + Reflect)]
 //! pub struct CustomBundle{
 //!     // Whatever components you want in your bundle - GameCommands::spawn_object will automatically
 //!     // insert the GameId struct with the next id
@@ -27,7 +27,7 @@
 //!     // Call whatever command on GameCommands - Add your own commands by writing an extension trait
 //!     // and implementing that for GameCommands//!
 //!
-//!     game_commands.spawn_object(CustomBundle::default(), TilePos::new(1, 1), MapId{id: 0});
+//!     game_commands.spawn_object(CustomBundle::default(), TilePos::new(1, 1), MapId{id: 0}, 0);
 //! }
 //!
 //! // Create a struct for your custom command, use this to store whatever data you need to execute

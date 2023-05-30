@@ -14,9 +14,9 @@ use bevy_ascii_terminal::{
 use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_ggf::game_core::command::GameCommands;
-use bevy_ggf::game_core::runner::GameRunner;
+use bevy_ggf::game_core::runner::{GameRunner, GameRuntime};
 use bevy_ggf::game_core::state::{ObjectState, TileState};
-use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
+use bevy_ggf::game_core::{Game, GameBuilder};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, Tile, TileObjectStacks, TileObjectStacksCount, TileObjects,

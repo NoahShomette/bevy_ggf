@@ -53,7 +53,7 @@ pub trait GameRunner: Send + Sync {
 
 /// A simple example game runner for a turn based game
 pub struct TurnBasedGameRunner {
-    turn_schedule: Schedule,
+    pub turn_schedule: Schedule,
 }
 
 impl GameRunner for TurnBasedGameRunner {
@@ -64,8 +64,8 @@ impl GameRunner for TurnBasedGameRunner {
 
 /// A simple example game runner for a real time based game
 pub struct RealTimeGameRunner {
-    ticks: usize,
-    tick_schedule: Schedule,
+    pub ticks: usize,
+    pub tick_schedule: Schedule,
 }
 
 impl GameRunner for RealTimeGameRunner {

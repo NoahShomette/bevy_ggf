@@ -5,7 +5,9 @@ use crate::game_core::change_detection::{
 };
 use crate::game_core::command::{GameCommand, GameCommandMeta, GameCommandQueue, GameCommands};
 use crate::game_core::runner::{GameRunner, GameRuntime, PostBaseSets, PreBaseSets};
-use crate::game_core::state::{DespawnedObjects, GameStateHandler, StateEvents};
+use crate::game_core::state::{
+    DespawnedObjects, GameStateHandler, ResourceChangeTracking, StateEvents,
+};
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjectStacksCount, TileObjects};
 use crate::mapping::MapIdProvider;
@@ -48,7 +50,7 @@ pub struct GameTypeRegistry {
 pub struct Game {
     /// A world that should hold all game state
     pub game_world: World,
-    /// Holds component and resource registrations for all components and resources that will be 
+    /// Holds component and resource registrations for all components and resources that will be
     /// diffed and updated automatically
     pub type_registry: TypeRegistry,
     /// Holds updates to the game state
@@ -393,6 +395,9 @@ where
         self.game_world.insert_resource(DespawnedObjects {
             despawned_objects: Default::default(),
         });
+        self.game_world.insert_resource(ResourceChangeTracking {
+            resources: Default::default(),
+        });
         self.game_world.insert_resource(self.player_list.clone());
 
         if let Some(mut commands) = self.commands.as_mut() {
@@ -402,15 +407,14 @@ where
         }
 
         main_world.insert_resource(self.commands.unwrap());
-        
+
         self.setup_schedule.run(&mut self.game_world);
-        
+
         main_world.insert_resource::<Game>(Game {
             game_world: self.game_world,
             type_registry: self.type_registry,
             game_state_handler: Default::default(),
             player_list: self.player_list,
         });
-        
     }
 }

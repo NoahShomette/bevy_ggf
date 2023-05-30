@@ -1,10 +1,8 @@
-﻿use crate::game_core::state::{Changed, DespawnedObjects, ResourceChangeTracking};
-use crate::game_core::Game;
-use crate::object::{Object, ObjectId};
-use bevy::prelude::{
-    Commands, Component, DespawnRecursiveExt, DetectChanges, Entity, Query, Res, ResMut, Resource,
-    With,
-};
+﻿use crate::game_core::runner::{GameRuntime, TurnBasedGameRunner};
+use crate::game_core::state::{Changed, DespawnedObjects, ResourceChangeTracking};
+use crate::game_core::{Game, GameBuilder};
+use crate::object::{Object, ObjectGridPosition, ObjectId};
+use bevy::prelude::{Commands, Component, DespawnRecursiveExt, DetectChanges, Entity, FromReflect, Mut, Query, Reflect, Res, ResMut, Resource, With, World};
 use std::any::TypeId;
 
 #[derive(Component)]
@@ -57,12 +55,132 @@ pub fn track_resource_changes<R: Resource>(
         }
     }
 }
+#[derive(Default, Component, Reflect, FromReflect)]
+struct TestComponent(u32);
 
 // TODO: write tests for this
 #[test]
 fn test_component_change_tracking() {
-    //let game = GameBuilder::<TestRunner>::new_game(TestRunner { schedule }),
+    let mut world = World::new();
+    let mut game = GameBuilder::<TurnBasedGameRunner>::new_game(TurnBasedGameRunner {
+        turn_schedule: Default::default(),
+    });
+    game.register_component::<TestComponent>();
+    game.build(&mut world);
+
+    let mut game = world.remove_resource::<Game>().unwrap();
+    let mut game_runtime = world
+        .remove_resource::<GameRuntime<TurnBasedGameRunner>>()
+        .unwrap();
+
+    let entity = game
+        .game_world
+        .spawn_empty()
+        .insert(TestComponent(0))
+        .insert(ObjectId { id: 0 })
+        .insert(ObjectGridPosition {
+            tile_position: Default::default(),
+        })
+        .id();
+
+    game_runtime.simulate(&mut game.game_world);
+
+    let mut first_state =
+        game.game_state_handler
+            .get_state_diff(&mut game.game_world, 0, &game.type_registry);
+
+    let mut entity_mut = game.game_world.entity_mut(entity);
+    let mut component = entity_mut.get_mut::<TestComponent>().unwrap();
+    component.0 += 1;
+
+    game_runtime.simulate(&mut game.game_world);
+
+    let mut second_state =
+        game.game_state_handler
+            .get_state_diff(&mut game.game_world, 0, &game.type_registry);
+
+    let components = first_state.objects.pop().unwrap().components;
+
+    let test_component_1 = components
+        .iter()
+        .find(|item| {
+            if let Some(_) = <TestComponent as FromReflect>::from_reflect(&*item.clone_value()) {
+                return true;
+            }
+            false
+        })
+        .unwrap();
+    let Some(test_component_1) = <TestComponent as FromReflect>::from_reflect(&*test_component_1.clone_value()) else {
+        panic!("Couldn't find component")
+    };
+
+    let components = second_state.objects.pop().unwrap().components;
+
+    let test_component_2 = components
+        .iter()
+        .find(|item| {
+            if let Some(_) = <TestComponent as FromReflect>::from_reflect(&*item.clone_value()) {
+                return true;
+            }
+            false
+        })
+        .unwrap();
+    let Some(test_component_2) = <TestComponent as FromReflect>::from_reflect(&*test_component_2.clone_value()) else {
+        panic!("Couldn't find component")
+    };
+
+    assert_eq!(test_component_1.0, 0);
+    assert_eq!(test_component_2.0, 1);
 }
 
+#[derive(Default, Resource, Reflect, FromReflect)]
+struct TestResource(u32);
+
 #[test]
-fn test_resource_change_tracking() {}
+fn test_resource_change_tracking() {
+    let mut world = World::new();
+    let mut game = GameBuilder::<TurnBasedGameRunner>::new_game(TurnBasedGameRunner {
+        turn_schedule: Default::default(),
+    });
+    game.register_resource::<TestResource>();
+    game.build(&mut world);
+
+    let mut game = world.remove_resource::<Game>().unwrap();
+    let mut game_runtime = world
+        .remove_resource::<GameRuntime<TurnBasedGameRunner>>()
+        .unwrap();
+
+    game.game_world.insert_resource(TestResource(0));
+
+    game_runtime.simulate(&mut game.game_world);
+
+    let mut first_state =
+        game.game_state_handler
+            .get_state_diff(&mut game.game_world, 0, &game.type_registry);
+
+    game.game_world
+        .resource_scope(|_, mut resource: Mut<TestResource>| {
+            resource.0 += 1;
+        });
+
+    game_runtime.simulate(&mut game.game_world);
+
+    let mut second_state =
+        game.game_state_handler
+            .get_state_diff(&mut game.game_world, 0, &game.type_registry);
+
+    let resource = first_state.resources.pop().unwrap();
+    
+    let Some(test_component_1) = <TestResource as FromReflect>::from_reflect(&*resource.resource.clone_value()) else {
+        panic!("Couldn't find component")
+    };
+
+    let resource = second_state.resources.pop().unwrap();
+
+    let Some(test_component_2) = <TestResource as FromReflect>::from_reflect(&*resource.resource.clone_value()) else {
+        panic!("Couldn't find component")
+    };
+
+    assert_eq!(test_component_1.0, 0);
+    assert_eq!(test_component_2.0, 1);
+}

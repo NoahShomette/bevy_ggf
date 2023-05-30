@@ -2,12 +2,12 @@ use bevy::prelude::{
     App, ClearColor, Color, IntoSystemAppConfigs, IntoSystemConfig, Mut, Schedule, World,
 };
 use bevy::{DefaultPlugins, MinimalPlugins};
+use bevy::utils::petgraph::visit::Walker;
 use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_ggf::game_core::command::GameCommands;
-use bevy_ggf::game_core::runner::GameRunner;
-use bevy_ggf::game_core::state::StateThing;
-use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
+use bevy_ggf::game_core::runner::{GameRunner, GameRuntime};
+use bevy_ggf::game_core::{Game, GameBuilder};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{StackingClass, TileObjectStacks, TileObjectStacksCount};
 use bevy_ggf::mapping::{MapCommandsExt, MapId};
@@ -159,14 +159,15 @@ fn setup(mut world: &mut World) {
         tile_stack_rules,
     );
 
-    let spawn_map_command = game_commands.spawn_object(
+    let spawn_object_command = game_commands.spawn_object(
         (TilePos { x: 50, y: 50 }),
         TilePos { x: 50, y: 50 },
         MapId { id: 1 },
+        0
     );
 
     let mut game = GameBuilder::<TestRunner>::new_game_with_commands(
-        vec![Box::new(spawn_map_command)],
+        vec![Box::new(spawn_object_command)],
         TestRunner::default(),
     );
 
@@ -188,7 +189,7 @@ fn simulate(mut world: &mut World) {
         world.resource_scope(|world, mut game_runtime: Mut<GameRuntime<TestRunner>>| {
             game_runtime.game_runner.simulate_game(&mut game.game_world);
         });
-        let game_state = game.get_entire_state();
-        for state in game_state {}
+        let game_state = game.get_entire_state(Some(0));
+        for state in game_state.objects.iter() {}
     });
 }
