@@ -343,29 +343,34 @@ where
     }
     pub fn default_game_pre_schedule() -> Schedule {
         let mut schedule = Schedule::default();
-        schedule.configure_sets(
-            (
-                PreBaseSets::CommandFlush,
-                PreBaseSets::Pre,
-                PreBaseSets::Main,
-                PreBaseSets::Post,
+        schedule
+            .configure_sets(
+                (
+                    PreBaseSets::Pre,
+                    PreBaseSets::Main,
+                    PreBaseSets::Post,
+                    PreBaseSets::CommandFlush,
+                )
+                    .chain(),
             )
-                .chain(),
-        );
+            .add_system(apply_system_buffers.in_base_set(PreBaseSets::CommandFlush));
+
         schedule
     }
 
     pub fn default_game_post_schedule() -> Schedule {
         let mut schedule = Schedule::default();
-        schedule.configure_sets(
-            (
-                PostBaseSets::CommandFlush,
-                PostBaseSets::Pre,
-                PostBaseSets::Main,
-                PostBaseSets::Post,
+        schedule
+            .configure_sets(
+                (
+                    PostBaseSets::CommandFlush,
+                    PostBaseSets::Pre,
+                    PostBaseSets::Main,
+                    PostBaseSets::Post,
+                )
+                    .chain(),
             )
-                .chain(),
-        );
+            .add_system(apply_system_buffers.in_base_set(PostBaseSets::CommandFlush));
 
         schedule.add_system(despawn_objects.in_base_set(PostBaseSets::Main));
         schedule
