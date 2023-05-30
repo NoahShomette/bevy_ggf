@@ -347,13 +347,17 @@ where
             .configure_sets(
                 (
                     PreBaseSets::Pre,
+                    PreBaseSets::PreCommandFlush,
                     PreBaseSets::Main,
+                    PreBaseSets::MainCommandFlush,
                     PreBaseSets::Post,
-                    PreBaseSets::CommandFlush,
+                    PreBaseSets::PostCommandFlush,
                 )
                     .chain(),
             )
-            .add_system(apply_system_buffers.in_base_set(PreBaseSets::CommandFlush));
+            .add_system(apply_system_buffers.in_base_set(PreBaseSets::PreCommandFlush))
+            .add_system(apply_system_buffers.in_base_set(PreBaseSets::MainCommandFlush))
+            .add_system(apply_system_buffers.in_base_set(PreBaseSets::PostCommandFlush));
 
         schedule
     }
@@ -363,16 +367,20 @@ where
         schedule
             .configure_sets(
                 (
-                    PostBaseSets::CommandFlush,
+                    PostBaseSets::PreCommandFlush,
                     PostBaseSets::Pre,
+                    PostBaseSets::MainCommandFlush,
                     PostBaseSets::Main,
+                    PostBaseSets::PostCommandFlush,
                     PostBaseSets::Post,
                 )
                     .chain(),
             )
-            .add_system(apply_system_buffers.in_base_set(PostBaseSets::CommandFlush));
+            .add_system(apply_system_buffers.in_base_set(PostBaseSets::PreCommandFlush))
+            .add_system(apply_system_buffers.in_base_set(PostBaseSets::MainCommandFlush))
+            .add_system(apply_system_buffers.in_base_set(PostBaseSets::PostCommandFlush));
 
-        schedule.add_system(despawn_objects.in_base_set(PostBaseSets::Main));
+        schedule.add_system(despawn_objects.in_base_set(PostBaseSets::Pre));
         schedule
     }
 

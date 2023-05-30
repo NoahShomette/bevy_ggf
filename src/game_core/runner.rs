@@ -28,9 +28,11 @@ where
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 #[system_set(base)]
 pub enum PostBaseSets {
-    CommandFlush,
+    PreCommandFlush,
     Pre,
+    MainCommandFlush,
     Main,
+    PostCommandFlush,
     Post,
 }
 
@@ -38,10 +40,12 @@ pub enum PostBaseSets {
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 #[system_set(base)]
 pub enum PreBaseSets {
-    CommandFlush,
     Pre,
+    PreCommandFlush,
     Main,
+    MainCommandFlush,
     Post,
+    PostCommandFlush,
 }
 
 /// The [`GameRunner`] represents the actual *game* logic that you want run whenever the game state
