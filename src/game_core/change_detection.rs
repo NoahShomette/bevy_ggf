@@ -39,23 +39,22 @@ pub fn track_component_changes<C: Component>(
 
 /// Checks if the given resource has changed and if so inserts its ComponentId into the
 /// ResourceChangeTracking resource
-pub fn track_resource_changes<R: Resource>(
-    resource: Res<R>,
-    mut resources: ResMut<ResourceChangeTracking>,
-    world: &World,
-) {
-    if resource.is_changed() {
-        let component_id = world
-            .components()
-            .get_resource_id(TypeId::of::<R>())
-            .unwrap_or_else(|| panic!("resource does not exist: {}", std::any::type_name::<R>()));
+pub fn track_resource_changes<R: Resource>(world: &mut World) {
+    world.resource_scope(|world, resource: Mut<R>| {
+        if resource.is_changed() {
+            let component_id = world.components().resource_id::<R>().unwrap_or_else(|| {
+                panic!("resource does not exist: {}", std::any::type_name::<R>())
+            });
 
-        if let Some(_) = resources.resources.get(&component_id) {
-            resources.resources.insert(component_id, Changed::default());
-        } else {
-            resources.resources.insert(component_id, Changed::default());
+            world.resource_scope(|world, mut resources: Mut<ResourceChangeTracking>| {
+                if let Some(_) = resources.resources.get(&component_id) {
+                    resources.resources.insert(component_id, Changed::default());
+                } else {
+                    resources.resources.insert(component_id, Changed::default());
+                }
+            });
         }
-    }
+    });
 }
 #[derive(Default, Component, Reflect, FromReflect)]
 struct TestComponent(u32);
