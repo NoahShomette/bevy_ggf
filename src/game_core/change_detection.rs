@@ -1,8 +1,11 @@
-﻿use crate::game_core::runner::{GameRuntime, TurnBasedGameRunner};
+use crate::game_core::runner::{GameRuntime, TurnBasedGameRunner};
 use crate::game_core::state::{Changed, DespawnedObjects, ResourceChangeTracking};
 use crate::game_core::{Game, GameBuilder};
 use crate::object::{Object, ObjectGridPosition, ObjectId};
-use bevy::prelude::{Commands, Component, DespawnRecursiveExt, DetectChanges, Entity, FromReflect, Mut, Query, Reflect, Res, ResMut, Resource, With, World};
+use bevy::prelude::{
+    Commands, Component, DespawnRecursiveExt, DetectChanges, Entity, FromReflect, Mut, Query,
+    Reflect, Res, ResMut, Resource, With, World,
+};
 use std::any::TypeId;
 
 #[derive(Component)]
@@ -170,7 +173,7 @@ fn test_resource_change_tracking() {
             .get_state_diff(&mut game.game_world, 0, &game.type_registry);
 
     let resource = first_state.resources.pop().unwrap();
-    
+
     let Some(test_component_1) = <TestResource as FromReflect>::from_reflect(&*resource.resource.clone_value()) else {
         panic!("Couldn't find component")
     };

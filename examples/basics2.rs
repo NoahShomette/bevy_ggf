@@ -1,8 +1,8 @@
 use bevy::prelude::{
     App, ClearColor, Color, IntoSystemAppConfigs, IntoSystemConfig, Mut, Schedule, World,
 };
-use bevy::{DefaultPlugins, MinimalPlugins};
 use bevy::utils::petgraph::visit::Walker;
+use bevy::{DefaultPlugins, MinimalPlugins};
 use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_ggf::game_core::command::GameCommands;
@@ -163,7 +163,7 @@ fn setup(mut world: &mut World) {
         (TilePos { x: 50, y: 50 }),
         TilePos { x: 50, y: 50 },
         MapId { id: 1 },
-        0
+        0,
     );
 
     let mut game = GameBuilder::<TestRunner>::new_game_with_commands(
