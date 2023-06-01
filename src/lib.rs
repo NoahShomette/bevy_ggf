@@ -18,6 +18,7 @@ pub mod mapping;
 pub mod movement;
 pub mod object;
 pub mod player;
+pub mod pathfinding;
 
 pub struct BggfCorePlugin;
 

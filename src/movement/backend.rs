@@ -1,9 +1,6 @@
-use crate::movement::{
-    AvailableMove, MoveEvent, MovementSystem, ObjectMoved, ObjectMovement, TileMovementCosts,
-};
+use crate::movement::{AvailableMove, MoveEvent, ObjectMoved, ObjectMovement, TileMovementCosts};
 use crate::object::ObjectId;
-use bevy::ecs::system::SystemState;
-use bevy::prelude::{Commands, Entity, EventReader, Mut, Query, Res, World};
+use bevy::prelude::{Commands, Entity, EventReader, Query, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapSize};
 
