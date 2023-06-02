@@ -162,7 +162,7 @@ impl PathfindAlgorithm for DijkstraSquare {
                 available_moves.push(neighbor.0);
 
                 if let Some(callback) = pathfind_callback {
-                    callback.foreach_tile(&mut world);
+                    callback.foreach_tile(pathfind_entity, neighbor.1, &neighbor.0, &mut world);
                 }
             }
 
