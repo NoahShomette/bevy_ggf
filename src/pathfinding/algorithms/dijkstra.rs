@@ -128,7 +128,7 @@ impl PathfindAlgorithm for DijkstraSquare {
 
                 self.new_node(neighbor.0, current_node);
 
-                if !DijkstraSquare::tile_movement_cost_check(
+                if !DijkstraSquare::node_cost_calculation(
                     pathfind_entity,
                     neighbor.1,
                     neighbor.0,
@@ -197,7 +197,7 @@ impl PathfindAlgorithm for DijkstraSquare {
         map
     }
 
-    fn tile_movement_cost_check(
+    fn node_cost_calculation(
         entity_moving: Entity,
         tile_entity: Entity,
         tile_pos: Self::NodePos,

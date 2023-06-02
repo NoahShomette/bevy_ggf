@@ -64,12 +64,12 @@ pub trait PathfindAlgorithm {
 
     fn new_pathfind_map(starting_pos: Self::NodePos) -> Self::PathfindMap;
 
-    fn tile_movement_cost_check(
-        entity_moving: Entity,
-        tile_entity: Entity,
-        tile_pos: Self::NodePos,
-        move_from_tile_pos: Self::NodePos,
-        movement_nodes: &mut Self::PathfindMap,
+    fn node_cost_calculation(
+        pathfinding_entity: Entity,
+        node_entity: Entity,
+        node_pos: Self::NodePos,
+        starting_node_pos: Self::NodePos,
+        pathfind_map: &mut Self::PathfindMap,
         world: &World,
     ) -> bool;
 
@@ -103,5 +103,13 @@ pub trait MapNode {
 }
 
 pub trait PathfindCallback {
-    fn foreach_tile(&mut self, world: &mut World);
+    type NodePos;
+
+    fn foreach_tile(
+        &mut self,
+        pathfinding_entity: Entity,
+        node_entity: Entity,
+        node_pos: Self::NodePos,
+        world: &mut World,
+    );
 }
