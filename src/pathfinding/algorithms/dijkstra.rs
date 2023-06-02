@@ -1,12 +1,15 @@
-﻿use crate::mapping::MapId;
+﻿use crate::mapping::tiles::Tile;
+use crate::mapping::MapId;
 use crate::movement::{AvailableMove, ObjectMovement, TileMoveChecks, TileMovementCosts};
 use crate::object::ObjectGridPosition;
-use crate::pathfinding::{MapNode, PathfindAlgorithm, PathfindCallback};
+use crate::pathfinding::{MapNode, PathfindAlgorithm, PathfindCallback, PathfindMap};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{Entity, Query, World};
 use bevy::utils::hashbrown::HashMap;
+use bevy::utils::petgraph::visit::Walker;
 use bevy_ecs_tilemap::map::TilemapSize;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage};
+use std::path::Iter;
 
 #[derive(Clone, Copy)]
 pub struct Node {
@@ -55,19 +58,17 @@ pub struct DijkstraSquare {
     pub nodes: HashMap<TilePos, Node>,
 }
 
-impl PathfindAlgorithm for DijkstraSquare {
+impl PathfindAlgorithm<TilePos, Node> for DijkstraSquare {
     type PathfindOutput = Vec<AvailableMove>;
-    type PathfindMap = HashMap<TilePos, Node>;
-    type MapNode = Node;
-    type NodePos = TilePos;
 
-    fn pathfind<CB: PathfindCallback>(
+    fn pathfind<CB: PathfindCallback<TilePos>, PM: PathfindMap<TilePos, Node, Vec<AvailableMove>>>(
         &mut self,
         on_map: MapId,
         pathfind_entity: Entity,
         mut world: &mut World,
         node_validity_checks: &mut TileMoveChecks,
         pathfind_callback: &mut Option<CB>,
+        pathfind_map: &mut PM,
     ) -> Self::PathfindOutput {
         let mut system_state: SystemState<(
             Query<(Entity, &MapId, &TileStorage, &TilemapSize)>,
@@ -89,7 +90,7 @@ impl PathfindAlgorithm for DijkstraSquare {
         let tile_storage = tile_storage.clone();
         let tilemap_size = tilemap_size.clone();
 
-        let mut move_info = Self::new_pathfind_map(object_grid_position.tile_position);
+        pathfind_map.new_pathfind_map(object_grid_position.tile_position);
 
         let mut available_moves: Vec<TilePos> = vec![];
 
@@ -110,7 +111,7 @@ impl PathfindAlgorithm for DijkstraSquare {
                 continue;
             };
 
-            let neighbor_pos = self.get_neighbors(current_node.node_pos, &tilemap_size);
+            let neighbor_pos = pathfind_map.get_neighbors(current_node.node_pos, &tilemap_size);
 
             let current_node = *current_node;
             let mut neighbors: Vec<(TilePos, Entity)> = vec![];
@@ -126,17 +127,16 @@ impl PathfindAlgorithm for DijkstraSquare {
                     continue;
                 }
 
-                self.new_node(neighbor.0, current_node);
+                pathfind_map.new_node(neighbor.0, current_node);
 
-                if !DijkstraSquare::node_cost_calculation(
+                if !pathfind_map.node_cost_calculation(
                     pathfind_entity,
                     neighbor.1,
                     neighbor.0,
                     current_node.node_pos,
-                    &mut move_info,
                     world,
                 ) {
-                    let _ = self.set_calculated_node(neighbor.0);
+                    let _ = pathfind_map.set_calculated_node(neighbor.0);
                     continue 'neighbors;
                 }
 
@@ -147,22 +147,22 @@ impl PathfindAlgorithm for DijkstraSquare {
                     &current_node.node_pos,
                     world,
                 ) {
-                    let _ = self.set_calculated_node(neighbor.0);
+                    let _ = pathfind_map.set_calculated_node(neighbor.0);
                     continue 'neighbors;
                 }
 
-                let _ = self.set_valid_node(neighbor.0);
-                let _ = self.set_calculated_node(neighbor.0);
+                let _ = pathfind_map.set_valid_node(neighbor.0);
+                let _ = pathfind_map.set_calculated_node(neighbor.0);
 
                 // if none of them return false and cancel the loop then we can infer that we are able to move into that neighbor
                 // we add the neighbor to the list of unvisited nodes and then push the neighbor to the available moves list
-                unvisited_nodes.push(self.get_node_mut(neighbor.0).expect(
+                unvisited_nodes.push(pathfind_map.get_node_mut(neighbor.0).expect(
                     "Is safe because we know we add the node in at the beginning of this loop",
-                ).clone()); //
+                ).clone());
                 available_moves.push(neighbor.0);
 
                 if let Some(callback) = pathfind_callback {
-                    callback.foreach_tile(pathfind_entity, neighbor.1, &neighbor.0, &mut world);
+                    callback.foreach_tile(pathfind_entity, neighbor.1, neighbor.0, &mut world);
                 }
             }
 
@@ -170,17 +170,18 @@ impl PathfindAlgorithm for DijkstraSquare {
             visited_nodes.push(current_node.node_pos);
         }
 
-        let mut available_moves: Vec<AvailableMove> = vec![];
-        for (_, node) in move_info.iter() {
-            if node.valid_move {
-                available_moves.push(AvailableMove::from(*node));
-            }
-        }
-        available_moves
+        pathfind_map.get_output()
     }
+}
 
-    fn new_pathfind_map(starting_pos: Self::NodePos) -> Self::PathfindMap {
-        let mut map = Self::PathfindMap::default();
+pub struct PathfindMapDijkstra {
+    pub map: HashMap<TilePos, Node>,
+    pub diagonals: bool,
+}
+
+impl PathfindMap<TilePos, Node, Vec<AvailableMove>> for PathfindMapDijkstra {
+    fn new_pathfind_map(&mut self, starting_pos: TilePos) {
+        let mut map: HashMap<TilePos, Node> = HashMap::default();
 
         // insert the starting node at the moving objects grid position
         map.insert(
@@ -194,15 +195,15 @@ impl PathfindAlgorithm for DijkstraSquare {
             },
         );
 
-        map
+        self.map = map;
     }
 
     fn node_cost_calculation(
+        &mut self,
         entity_moving: Entity,
         tile_entity: Entity,
-        tile_pos: Self::NodePos,
-        move_from_tile_pos: Self::NodePos,
-        movement_nodes: &mut Self::PathfindMap,
+        tile_pos: TilePos,
+        move_from_tile_pos: TilePos,
         world: &World,
     ) -> bool {
         let Some(object_movement) = world.get::<ObjectMovement>(entity_moving) else {
@@ -213,7 +214,7 @@ impl PathfindAlgorithm for DijkstraSquare {
         };
 
         let Some([tile_node, move_from_tile_node]) =
-            movement_nodes.get_many_mut([&tile_pos, &move_from_tile_pos]) else{
+            self.map.get_many_mut([&tile_pos, &move_from_tile_pos]) else{
             return false;
         };
 
@@ -254,11 +255,7 @@ impl PathfindAlgorithm for DijkstraSquare {
         };
     }
 
-    fn get_neighbors(
-        &self,
-        node_pos: Self::NodePos,
-        tilemap_size: &TilemapSize,
-    ) -> Vec<Self::NodePos> {
+    fn get_neighbors(&self, node_pos: TilePos, tilemap_size: &TilemapSize) -> Vec<TilePos> {
         let mut neighbor_tiles: Vec<TilePos> = vec![];
         let origin_tile = node_pos;
         if let Some(north) =
@@ -315,12 +312,12 @@ impl PathfindAlgorithm for DijkstraSquare {
         neighbor_tiles
     }
 
-    fn get_node_mut(&mut self, node_pos: Self::NodePos) -> Option<&mut Self::MapNode> {
-        self.nodes.get_mut(&node_pos)
+    fn get_node_mut(&mut self, node_pos: TilePos) -> Option<&mut Node> {
+        self.map.get_mut(&node_pos)
     }
 
-    fn new_node(&mut self, new_node_pos: Self::NodePos, prior_node: Self::MapNode) {
-        if !self.nodes.contains_key(&new_node_pos) {
+    fn new_node(&mut self, new_node_pos: TilePos, prior_node: Node) {
+        if !self.map.contains_key(&new_node_pos) {
             let node = Node {
                 node_pos: new_node_pos,
                 prior_node_pos: prior_node.node_pos,
@@ -328,11 +325,11 @@ impl PathfindAlgorithm for DijkstraSquare {
                 valid_move: false,
                 calculated: false,
             };
-            self.nodes.insert(new_node_pos, node);
+            self.map.insert(new_node_pos, node);
         }
     }
 
-    fn set_valid_node(&mut self, node_pos: Self::NodePos) -> Result<(), String> {
+    fn set_valid_node(&mut self, node_pos: TilePos) -> Result<(), String> {
         return if let Some(node) = self.get_node_mut(node_pos) {
             node.valid_move = true;
             Ok(())
@@ -341,12 +338,22 @@ impl PathfindAlgorithm for DijkstraSquare {
         };
     }
 
-    fn set_calculated_node(&mut self, node_pos: Self::NodePos) -> Result<(), String> {
+    fn set_calculated_node(&mut self, node_pos: TilePos) -> Result<(), String> {
         return if let Some(node) = self.get_node_mut(node_pos) {
             node.calculated = true;
             Ok(())
         } else {
             Err(String::from("Error getting node"))
         };
+    }
+
+    fn get_output(&mut self) -> Vec<AvailableMove> {
+        let mut available_moves: Vec<AvailableMove> = vec![];
+        for (_, node) in self.map.iter() {
+            if node.valid_move {
+                available_moves.push(AvailableMove::from(*node));
+            }
+        }
+        available_moves
     }
 }

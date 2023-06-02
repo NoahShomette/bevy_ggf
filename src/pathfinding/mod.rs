@@ -4,7 +4,10 @@ use crate::mapping::MapId;
 use crate::movement::TileMoveChecks;
 use bevy::prelude::{Entity, World};
 use bevy_ecs_tilemap::prelude::TilemapSize;
+use std::marker::PhantomData;
+use std::path::Iter;
 
+use crate::pathfinding;
 pub use algorithms::dijkstra;
 pub use algorithms::dijkstra::DijkstraSquare;
 
@@ -16,17 +19,44 @@ pub use algorithms::dijkstra::DijkstraSquare;
 /// - if the tile is valid is there anything we want to do to the tile or with the tile? eg if its clrs
 /// then I want to use the pathfinder to do the color conflicts so for each tile I want to run a set of custom game logic
 
-pub struct PathfindInstance<PF: PathfindAlgorithm, CB: PathfindCallback> {
+pub struct PathfindInstance<
+    PF: PathfindAlgorithm<NodePos, MapNode>,
+    PM: PathfindMap<NodePos, MapNode, PF::PathfindOutput>,
+    CB: PathfindCallback<NodePos>,
+    NodePos,
+    MapNode,
+> {
     pub pathfind_algorithm: PF,
     pub node_validity_checks: TileMoveChecks,
     pub pathfind_callback: Option<CB>,
+    pub pathfind_map: PM,
+    phantom_data: PhantomData<NodePos>,
+    phantom_data_2: PhantomData<MapNode>,
 }
 
-impl<PF, CB> PathfindInstance<PF, CB>
+impl<PF, PM, NodePos, MapNode, CB> PathfindInstance<PF, PM, CB, NodePos, MapNode>
 where
-    PF: PathfindAlgorithm,
-    CB: PathfindCallback,
+    PF: PathfindAlgorithm<NodePos, MapNode>,
+    PM: PathfindMap<NodePos, MapNode, PF::PathfindOutput>,
+    CB: PathfindCallback<NodePos>,
 {
+    /// Construct a new pathfind instance
+    pub fn new(
+        pathfind_algorithm: PF,
+        node_validity_checks: TileMoveChecks,
+        pathfind_callback: Option<CB>,
+        pathfind_map: PM,
+    ) -> Self {
+        Self {
+            pathfind_algorithm,
+            node_validity_checks,
+            pathfind_callback,
+            pathfind_map,
+            phantom_data: Default::default(),
+            phantom_data_2: Default::default(),
+        }
+    }
+
     /// The main function of a
     pub fn pathfind(
         &mut self,
@@ -40,50 +70,51 @@ where
             world,
             &mut self.node_validity_checks,
             &mut self.pathfind_callback,
+            &mut self.pathfind_map,
         )
     }
 }
 
 /// Core trait that represents the base algorithm
-pub trait PathfindAlgorithm {
+pub trait PathfindAlgorithm<NodePos, MapNode> {
     /// The output that your pathfind algorithm will output.
     type PathfindOutput;
-    type PathfindMap;
-    type MapNode: MapNode;
-    type NodePos;
     /// The main component of the pathfinding system. This is what computes the pathfinder and runs
     /// the rest of the components of the systems
-    fn pathfind<CB: PathfindCallback>(
+    fn pathfind<
+        CB: PathfindCallback<NodePos>,
+        PM: PathfindMap<NodePos, MapNode, Self::PathfindOutput>,
+    >(
         &mut self,
         on_map: MapId,
         pathfind_entity: Entity,
         world: &mut World,
         node_validity_checks: &mut TileMoveChecks,
         pathfind_callback: &mut Option<CB>,
+        pathfind_map: &mut PM,
     ) -> Self::PathfindOutput;
+}
 
-    fn new_pathfind_map(starting_pos: Self::NodePos) -> Self::PathfindMap;
+pub trait PathfindMap<NodePos, MapNode, PathfindOutput> {
+    fn new_pathfind_map(&mut self, starting_pos: NodePos);
 
     fn node_cost_calculation(
+        &mut self,
         pathfinding_entity: Entity,
         node_entity: Entity,
-        node_pos: Self::NodePos,
-        starting_node_pos: Self::NodePos,
-        pathfind_map: &mut Self::PathfindMap,
+        node_pos: NodePos,
+        starting_node_pos: NodePos,
         world: &World,
     ) -> bool;
 
-    fn get_neighbors(
-        &self,
-        node_pos: Self::NodePos,
-        tilemap_size: &TilemapSize,
-    ) -> Vec<Self::NodePos>;
+    fn get_neighbors(&self, node_pos: NodePos, tilemap_size: &TilemapSize) -> Vec<NodePos>;
 
-    fn get_node_mut(&mut self, node_pos: Self::NodePos) -> Option<&mut Self::MapNode>;
+    fn get_node_mut(&mut self, node_pos: NodePos) -> Option<&mut MapNode>;
 
-    fn new_node(&mut self, new_node_pos: Self::NodePos, prior_node: Self::MapNode);
-    fn set_valid_node(&mut self, node_pos: Self::NodePos) -> Result<(), String>;
-    fn set_calculated_node(&mut self, node_pos: Self::NodePos) -> Result<(), String>;
+    fn new_node(&mut self, new_node_pos: NodePos, prior_node: MapNode);
+    fn set_valid_node(&mut self, node_pos: NodePos) -> Result<(), String>;
+    fn set_calculated_node(&mut self, node_pos: NodePos) -> Result<(), String>;
+    fn get_output(&mut self) -> PathfindOutput;
 }
 
 /// Trait that represents a node in the graph
@@ -102,14 +133,12 @@ pub trait MapNode {
     fn set_cost(&mut self, cost: u32);
 }
 
-pub trait PathfindCallback {
-    type NodePos;
-
+pub trait PathfindCallback<NodePos> {
     fn foreach_tile(
         &mut self,
         pathfinding_entity: Entity,
         node_entity: Entity,
-        node_pos: Self::NodePos,
+        node_pos: NodePos,
         world: &mut World,
     );
 }
