@@ -4,7 +4,7 @@ use crate::movement::{AvailableMove, ObjectMovement, TileMoveChecks, TileMovemen
 use crate::object::ObjectGridPosition;
 use crate::pathfinding::{MapNode, PathfindAlgorithm, PathfindCallback, PathfindMap};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{Entity, Query, World};
+use bevy::prelude::{Component, Entity, Query, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy::utils::petgraph::visit::Walker;
 use bevy_ecs_tilemap::map::TilemapSize;
@@ -58,10 +58,13 @@ pub struct DijkstraSquare {
     pub nodes: HashMap<TilePos, Node>,
 }
 
-impl PathfindAlgorithm<TilePos, Node> for DijkstraSquare {
+impl PathfindAlgorithm<TilePos, Node, ObjectMovement> for DijkstraSquare {
     type PathfindOutput = Vec<AvailableMove>;
 
-    fn pathfind<CB: PathfindCallback<TilePos>, PM: PathfindMap<TilePos, Node, Vec<AvailableMove>>>(
+    fn pathfind<
+        CB: PathfindCallback<TilePos>,
+        PM: PathfindMap<TilePos, Node, Vec<AvailableMove>, ObjectMovement>,
+    >(
         &mut self,
         on_map: MapId,
         pathfind_entity: Entity,
@@ -179,7 +182,7 @@ pub struct PathfindMapDijkstra {
     pub diagonals: bool,
 }
 
-impl PathfindMap<TilePos, Node, Vec<AvailableMove>> for PathfindMapDijkstra {
+impl PathfindMap<TilePos, Node, Vec<AvailableMove>, ObjectMovement> for PathfindMapDijkstra {
     fn new_pathfind_map(&mut self, starting_pos: TilePos) {
         let mut map: HashMap<TilePos, Node> = HashMap::default();
 

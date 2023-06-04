@@ -1,8 +1,8 @@
 ﻿mod algorithms;
 
-use crate::mapping::MapId;
+use crate::mapping::{Map, MapId};
 use crate::movement::TileMoveChecks;
-use bevy::prelude::{Entity, World};
+use bevy::prelude::{Component, Entity, World};
 use bevy_ecs_tilemap::prelude::TilemapSize;
 use std::marker::PhantomData;
 use std::path::Iter;
@@ -20,11 +20,12 @@ pub use algorithms::dijkstra::DijkstraSquare;
 /// then I want to use the pathfinder to do the color conflicts so for each tile I want to run a set of custom game logic
 
 pub struct PathfindInstance<
-    PF: PathfindAlgorithm<NodePos, MapNode>,
-    PM: PathfindMap<NodePos, MapNode, PF::PathfindOutput>,
+    PF: PathfindAlgorithm<NodePos, MapNode, CostComponent>,
+    PM: PathfindMap<NodePos, MapNode, PF::PathfindOutput, CostComponent>,
     CB: PathfindCallback<NodePos>,
     NodePos,
     MapNode,
+    CostComponent: Component,
 > {
     pub pathfind_algorithm: PF,
     pub node_validity_checks: TileMoveChecks,
@@ -34,10 +35,11 @@ pub struct PathfindInstance<
     phantom_data_2: PhantomData<MapNode>,
 }
 
-impl<PF, PM, NodePos, MapNode, CB> PathfindInstance<PF, PM, CB, NodePos, MapNode>
+impl<PF, PM, NodePos, MapNode, CB, CostComponent: Component>
+    PathfindInstance<PF, PM, CB, NodePos, MapNode, CostComponent>
 where
-    PF: PathfindAlgorithm<NodePos, MapNode>,
-    PM: PathfindMap<NodePos, MapNode, PF::PathfindOutput>,
+    PF: PathfindAlgorithm<NodePos, MapNode, CostComponent>,
+    PM: PathfindMap<NodePos, MapNode, PF::PathfindOutput, CostComponent>,
     CB: PathfindCallback<NodePos>,
 {
     /// Construct a new pathfind instance
@@ -76,14 +78,14 @@ where
 }
 
 /// Core trait that represents the base algorithm
-pub trait PathfindAlgorithm<NodePos, MapNode> {
+pub trait PathfindAlgorithm<NodePos, MapNode, CostComponent: Component> {
     /// The output that your pathfind algorithm will output.
     type PathfindOutput;
     /// The main component of the pathfinding system. This is what computes the pathfinder and runs
     /// the rest of the components of the systems
     fn pathfind<
         CB: PathfindCallback<NodePos>,
-        PM: PathfindMap<NodePos, MapNode, Self::PathfindOutput>,
+        PM: PathfindMap<NodePos, MapNode, Self::PathfindOutput, CostComponent>,
     >(
         &mut self,
         on_map: MapId,
@@ -95,7 +97,7 @@ pub trait PathfindAlgorithm<NodePos, MapNode> {
     ) -> Self::PathfindOutput;
 }
 
-pub trait PathfindMap<NodePos, MapNode, PathfindOutput> {
+pub trait PathfindMap<NodePos, MapNode, PathfindOutput, CostComponent: Component> {
     fn new_pathfind_map(&mut self, starting_pos: NodePos);
 
     fn node_cost_calculation(
