@@ -33,6 +33,7 @@ pub struct PathfindInstance<
     pub pathfind_map: PM,
     phantom_data: PhantomData<NodePos>,
     phantom_data_2: PhantomData<MapNode>,
+    phantom_data_3: PhantomData<CostComponent>,
 }
 
 impl<PF, PM, NodePos, MapNode, CB, CostComponent: Component>
@@ -56,6 +57,7 @@ where
             pathfind_map,
             phantom_data: Default::default(),
             phantom_data_2: Default::default(),
+            phantom_data_3: Default::default(),
         }
     }
 
