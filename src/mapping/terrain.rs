@@ -19,10 +19,11 @@
 
 use bevy::prelude::{Component, ReflectComponent};
 use bevy::reflect::{FromReflect, Reflect};
+use serde::{Deserialize, Serialize};
 
 /// Component holding the tile terrain info needed by any built in logic.
 /// Terrain type
-#[derive(Default, Component, Reflect, FromReflect)]
+#[derive(Default, Component, Reflect, FromReflect, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct TileTerrainInfo {
     pub terrain_type: TerrainType,

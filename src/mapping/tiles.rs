@@ -14,6 +14,7 @@ use bevy::reflect::{FromReflect, Reflect};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TileBundle, TilemapId};
 use bevy_ecs_tilemap::tiles::TilePos;
+use serde::{Deserialize, Serialize};
 
 /// Bundle containing all the basic tile components needed for a tile.
 ///
@@ -37,9 +38,48 @@ pub struct BggfTileObjectBundle {
 }
 
 /// Marker component on map tiles for ease of query and accessing
-#[derive(Default, Component, Reflect, FromReflect)]
+#[derive(Default, Component, Reflect, FromReflect, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct Tile;
+
+/// Marker component on map tiles for ease of query and accessing
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
+#[reflect(Component)]
+pub struct TilePosition {
+    pub x: u32,
+    pub y: u32,
+}
+
+impl Into<TilePos> for TilePosition {
+    fn into(self) -> TilePos {
+        TilePos::new(self.x, self.y)
+    }
+}
+
+impl From<TilePos> for TilePosition {
+    fn from(value: TilePos) -> Self {
+        TilePosition::new(value.x, value.y)
+    }
+}
+
+impl TilePosition {
+    pub fn new(x: u32, y: u32) -> TilePosition {
+        TilePosition::new(x, y)
+    }
+}
 
 /// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
 /// using an [`TileObjectStacksCount`] struct.
@@ -139,6 +179,7 @@ fn test_tile_object_stacks() {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
+
 )]
 pub struct StackingClass {
     pub name: String,
@@ -157,6 +198,7 @@ pub struct StackingClass {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
+
 )]
 #[reflect(Component)]
 pub struct ObjectStackingClass {
@@ -177,6 +219,7 @@ pub struct ObjectStackingClass {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
+
 )]
 pub struct TileObjectStacksCount {
     pub current_count: u32,
@@ -194,6 +237,7 @@ pub struct TileObjectStacksCount {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
+
 )]
 #[reflect(Component)]
 pub struct TileObjects {

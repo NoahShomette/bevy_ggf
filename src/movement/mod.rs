@@ -20,6 +20,7 @@ use bevy::prelude::{
 use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
+use serde::{Deserialize, Serialize};
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
@@ -162,8 +163,9 @@ impl GameCommand for MoveObject {
 
                 let Some((entity, id)) = object_query
                     .iter_mut()
-                    .find(|(_, id)| id == &&self.object_moving) else {
-                    return Err(String::from("Objet not found"))
+                    .find(|(_, id)| id == &&self.object_moving)
+                else {
+                    return Err(String::from("Objet not found"));
                 };
 
                 let mut moves: HashMap<TilePos, AvailableMove> = HashMap::new();
