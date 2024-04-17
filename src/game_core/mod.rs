@@ -188,6 +188,10 @@ where
         self.game_world
             .register_component_as::<dyn SaveId, Object>();
         self.game_world
+            .register_component_as::<dyn SaveId, ObjectInfo>();
+        self.game_world
+            .register_component_as::<dyn SaveId, Player>();
+        self.game_world
             .register_component_as::<dyn SaveId, ObjectStackingClass>();
         self.game_world
             .register_component_as::<dyn SaveId, PlayerMarker>();
@@ -240,6 +244,7 @@ where
     {
         self.game_serde_registry.register_component::<Type>();
         self.game_world.register_component_as::<dyn SaveId, Type>();
+        self.register_component_track_changes::<Type>();
     }
 
     pub fn default_setup_schedule() -> Schedule {

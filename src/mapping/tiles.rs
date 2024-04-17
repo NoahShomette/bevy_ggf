@@ -77,7 +77,7 @@ impl From<TilePos> for TilePosition {
 
 impl TilePosition {
     pub fn new(x: u32, y: u32) -> TilePosition {
-        TilePosition::new(x, y)
+        TilePosition { x: x, y: y }
     }
 }
 
@@ -179,7 +179,6 @@ fn test_tile_object_stacks() {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
-
 )]
 pub struct StackingClass {
     pub name: String,
@@ -198,7 +197,6 @@ pub struct StackingClass {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
-
 )]
 #[reflect(Component)]
 pub struct ObjectStackingClass {
@@ -219,7 +217,6 @@ pub struct ObjectStackingClass {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
-
 )]
 pub struct TileObjectStacksCount {
     pub current_count: u32,
@@ -237,7 +234,6 @@ pub struct TileObjectStacksCount {
     FromReflect,
     serde::Deserialize,
     serde::Serialize,
-
 )]
 #[reflect(Component)]
 pub struct TileObjects {
