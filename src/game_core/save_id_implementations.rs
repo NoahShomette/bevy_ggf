@@ -4,7 +4,7 @@ use crate::{
         tiles::{ObjectStackingClass, Tile, TileObjects, TilePosition},
     },
     movement::TileMovementCosts,
-    object::{Object, ObjectGridPosition, ObjectId}, player::PlayerMarker,
+    object::{Object, ObjectGridPosition, ObjectId, ObjectInfo}, player::{Player, PlayerMarker},
 };
 
 use super::saving::{BinaryComponentId, SaveId};
@@ -181,6 +181,42 @@ impl SaveId for PlayerMarker {
         Self: Sized,
     {
         9
+    }
+
+    #[doc = r" Serializes the state of the object at the given tick into binary. Only saves the keyframe and not the curve itself"]
+    fn to_binary(&self) -> Option<Vec<u8>> {
+        bincode::serialize(self).ok()
+    }
+}
+
+impl SaveId for Player {
+    fn save_id(&self) -> BinaryComponentId {
+        10
+    }
+
+    fn save_id_const() -> BinaryComponentId
+    where
+        Self: Sized,
+    {
+        10
+    }
+
+    #[doc = r" Serializes the state of the object at the given tick into binary. Only saves the keyframe and not the curve itself"]
+    fn to_binary(&self) -> Option<Vec<u8>> {
+        bincode::serialize(self).ok()
+    }
+}
+
+impl SaveId for ObjectInfo {
+    fn save_id(&self) -> BinaryComponentId {
+        11
+    }
+
+    fn save_id_const() -> BinaryComponentId
+    where
+        Self: Sized,
+    {
+        11
     }
 
     #[doc = r" Serializes the state of the object at the given tick into binary. Only saves the keyframe and not the curve itself"]
