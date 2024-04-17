@@ -11,7 +11,7 @@ use bevy_ecs_tilemap::tiles::TilePos;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 
-use super::saving::{ComponentBinaryState, GameSerDeRegistry, SaveId};
+use super::saving::{ComponentBinaryState, GameSerDeRegistry, ResourceId, SaveId};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum StateSystems {
@@ -103,6 +103,7 @@ impl GameStateHandler {
             &dyn SaveId,
             &mut Changed,
             Option<&Tile>,
+            Option<&Player>,
             Option<&TilePos>,
             Option<&ObjectId>,
             Option<&ObjectGridPosition>,
@@ -112,6 +113,7 @@ impl GameStateHandler {
             saveable_components,
             mut changed,
             opt_tile,
+            opt_player,
             opt_tilepos,
             opt_object_id,
             opt_object_grid_pos,
@@ -159,16 +161,14 @@ impl GameStateHandler {
                 }
             }
 
-            if let Some(player) = world.get::<Player>(entity) {
-                let mut components: Vec<Box<dyn Reflect>> = vec![];
-                for component in world.inspect_entity(entity).iter() {
-                    let reflect_component = type_registry
-                        .get(ComponentInfo::type_id(component).unwrap())
-                        .and_then(|registration| registration.data::<ReflectComponent>());
-                    if let Some(reflect_component) = reflect_component {
-                        if let Some(component) = reflect_component.reflect(world.entity(entity)) {
-                            components.push(component.clone_value());
-                        }
+            if let Some(player) = opt_player {
+                let mut components: Vec<ComponentBinaryState> = vec![];
+                for component in saveable_components.iter() {
+                    if let Some((id, binary)) = component.save() {
+                        components.push(ComponentBinaryState {
+                            id,
+                            component: binary,
+                        });
                     }
                 }
 
@@ -179,35 +179,10 @@ impl GameStateHandler {
             }
         }
 
-        world.resource_scope(|world, mut despawned_objects: Mut<DespawnedObjects>| {
-            for (id, mut changed) in despawned_objects.despawned_objects.iter_mut() {
+        world.resource_scope(|_, mut despawned_objects: Mut<DespawnedObjects>| {
+            for (id, changed) in despawned_objects.despawned_objects.iter_mut() {
                 if !changed.check_and_register_seen(for_player_id) {
                     state.despawned_objects.push(*id);
-                }
-            }
-        });
-
-        world.resource_scope(|world, mut resources: Mut<ResourceChangeTracking>| {
-            for (id, changed) in resources.resources.iter_mut() {
-                if !changed.check_and_register_seen(for_player_id) {
-                    // go through all resources and clone those that are registered
-                    for (component_id, _) in world.storages().resources.iter() {
-                        let reflect_component = world
-                            .storages()
-                            .resources
-                            .get(component_id)
-                            .and_then(|info| type_registry.get(info.type_id().to_owned()))
-                            .and_then(|registration| registration.data::<ReflectResource>());
-                        if let Some(reflect_resource) = reflect_component {
-                            if let Some(resource) = reflect_resource.reflect(world) {
-                                if component_id == *id {
-                                    state.resources.push(ResourceState {
-                                        resource: resource.clone_value(),
-                                    })
-                                }
-                            }
-                        }
-                    }
                 }
             }
         });
@@ -299,13 +274,14 @@ impl GameStateHandler {
 #[derive(Debug)]
 pub struct PlayerState {
     pub player_id: Player,
-    pub components: Vec<Box<dyn Reflect>>,
+    pub components: Vec<ComponentBinaryState>,
 }
 
 /// Contains the state of a [`Resource`]
 #[derive(Debug)]
 pub struct ResourceState {
-    pub resource: Box<dyn Reflect>,
+    pub resource_id: ResourceId,
+    pub resource: Vec<u8>,
 }
 
 /// Contains an objects state, identified via its [`ObjectId`] component

@@ -9,7 +9,9 @@ use crate::game_core::state::{
     DespawnedObjects, GameStateHandler, ResourceChangeTracking, StateEvents,
 };
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjectStacksCount, TileObjects};
+use crate::mapping::tiles::{
+    ObjectStackingClass, Tile, TileObjectStacksCount, TileObjects, TilePosition,
+};
 use crate::mapping::MapIdProvider;
 use crate::movement::TileMovementCosts;
 use crate::object::{
@@ -240,17 +242,6 @@ where
         self.game_world.register_component_as::<dyn SaveId, Type>();
     }
 
-    /// Registers a resource that will be tracked and reported as part of the state. Also adds
-    /// the resource to change detection
-    pub fn register_resource<Type>(&mut self)
-    where
-        Type: Component + SaveId + Serialize + DeserializeOwned,
-    {
-
-        self.game_serde_registry.register_component::<Type>();
-        self.game_world.register_component_as::<dyn SaveId, Type>();
-    }
-
     pub fn default_setup_schedule() -> Schedule {
         let mut schedule = Schedule::default();
 
@@ -311,7 +302,6 @@ where
         (new_player_id, player_entity)
     }
 
-
     pub fn build(mut self, main_world: &mut World) {
         self.setup_schedule.run(&mut self.game_world);
         main_world.insert_resource::<GameRuntime<GR>>(GameRuntime {
@@ -328,7 +318,6 @@ where
             resources: Default::default(),
         });
         self.game_world.insert_resource(self.player_list.clone());
-
 
         if let Some(commands) = self.commands.as_mut() {
             commands.execute_buffer(&mut self.game_world);

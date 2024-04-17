@@ -93,14 +93,14 @@ impl PathfindAlgorithm<TilePos, Node, ObjectMovement> for DijkstraSquare {
         let tile_storage = tile_storage.clone();
         let tilemap_size = tilemap_size.clone();
 
-        pathfind_map.new_pathfind_map(object_grid_position.tile_position);
+        pathfind_map.new_pathfind_map(object_grid_position.tile_position.into());
 
         let mut available_moves: Vec<TilePos> = vec![];
 
         // unvisited nodes
         let mut unvisited_nodes: Vec<Node> = vec![Node {
-            node_pos: object_grid_position.tile_position,
-            prior_node_pos: object_grid_position.tile_position,
+            node_pos: object_grid_position.tile_position.into(),
+            prior_node_pos: object_grid_position.tile_position.into(),
             move_cost: 0,
             valid_move: false,
             calculated: false,

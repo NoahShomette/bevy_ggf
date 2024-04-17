@@ -4,17 +4,17 @@ use crate::{
         tiles::{ObjectStackingClass, Tile, TileObjects, TilePosition},
     },
     movement::TileMovementCosts,
-    object::{Object, ObjectGridPosition, ObjectId},
+    object::{Object, ObjectGridPosition, ObjectId}, player::PlayerMarker,
 };
 
-use super::saving::{ComponentId, SaveId};
+use super::saving::{BinaryComponentId, SaveId};
 
 impl SaveId for TilePosition {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         Self::save_id_const()
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -28,11 +28,11 @@ impl SaveId for TilePosition {
 }
 
 impl SaveId for Tile {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         1
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -46,11 +46,11 @@ impl SaveId for Tile {
 }
 
 impl SaveId for TileTerrainInfo {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         2
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -64,11 +64,11 @@ impl SaveId for TileTerrainInfo {
 }
 
 impl SaveId for TileObjects {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         3
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -82,11 +82,11 @@ impl SaveId for TileObjects {
 }
 
 impl SaveId for TileMovementCosts {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         4
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -100,11 +100,11 @@ impl SaveId for TileMovementCosts {
 }
 
 impl SaveId for ObjectId {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         5
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -118,11 +118,11 @@ impl SaveId for ObjectId {
 }
 
 impl SaveId for ObjectGridPosition {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         6
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -136,11 +136,11 @@ impl SaveId for ObjectGridPosition {
 }
 
 impl SaveId for Object {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         7
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
@@ -154,15 +154,33 @@ impl SaveId for Object {
 }
 
 impl SaveId for ObjectStackingClass {
-    fn save_id(&self) -> ComponentId {
+    fn save_id(&self) -> BinaryComponentId {
         8
     }
 
-    fn save_id_const() -> ComponentId
+    fn save_id_const() -> BinaryComponentId
     where
         Self: Sized,
     {
         8
+    }
+
+    #[doc = r" Serializes the state of the object at the given tick into binary. Only saves the keyframe and not the curve itself"]
+    fn to_binary(&self) -> Option<Vec<u8>> {
+        bincode::serialize(self).ok()
+    }
+}
+
+impl SaveId for PlayerMarker {
+    fn save_id(&self) -> BinaryComponentId {
+        9
+    }
+
+    fn save_id_const() -> BinaryComponentId
+    where
+        Self: Sized,
+    {
+        9
     }
 
     #[doc = r" Serializes the state of the object at the given tick into binary. Only saves the keyframe and not the curve itself"]
