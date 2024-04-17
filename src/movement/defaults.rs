@@ -67,10 +67,10 @@ impl MovementCalculator for SquareMovementCalculator {
 
         // insert the starting node at the moving objects grid position
         move_info.move_nodes.insert(
-            object_grid_position.tile_position,
+            object_grid_position.tile_position.into(),
             MoveNode {
-                node_pos: object_grid_position.tile_position,
-                prior_node: object_grid_position.tile_position,
+                node_pos: object_grid_position.tile_position.into(),
+                prior_node: object_grid_position.tile_position.into(),
                 move_cost: Some(0),
                 valid_move: true,
             },
@@ -78,8 +78,8 @@ impl MovementCalculator for SquareMovementCalculator {
 
         // unvisited nodes
         let mut unvisited_nodes: Vec<MoveNode> = vec![MoveNode {
-            node_pos: object_grid_position.tile_position,
-            prior_node: object_grid_position.tile_position,
+            node_pos: object_grid_position.tile_position.into(),
+            prior_node: object_grid_position.tile_position.into(),
             move_cost: Some(0),
             valid_move: false,
         }];

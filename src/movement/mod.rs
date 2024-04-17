@@ -10,6 +10,7 @@ use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
 use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
+use crate::player::PlayerList;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
     info, App, Bundle, Component, Entity, EventWriter, Events, IntoSystemConfig,
@@ -19,7 +20,7 @@ use bevy::prelude::{
 use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
-use crate::player::PlayerList;
+use serde::{Deserialize, Serialize};
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
@@ -71,8 +72,6 @@ where
             map_type,
             tile_move_checks: TileMoveChecks { tile_move_checks },
         });
-
-      
     }
 
     fn setup_movement(&mut self, tile_movement_costs: Vec<(TerrainType, TileMovementCosts)>)
@@ -81,7 +80,7 @@ where
     {
         self.game_world
             .insert_resource(TerrainMovementCosts::from_vec(tile_movement_costs));
-        
+
         self.game_world.init_resource::<Events<MoveEvent>>();
         self.game_world.init_resource::<Events<MoveError>>();
     }
@@ -164,8 +163,9 @@ impl GameCommand for MoveObject {
 
                 let Some((entity, id)) = object_query
                     .iter_mut()
-                    .find(|(_, id)| id == &&self.object_moving) else {
-                    return Err(String::from("Objet not found"))
+                    .find(|(_, id)| id == &&self.object_moving)
+                else {
+                    return Err(String::from("Objet not found"));
                 };
 
                 let mut moves: HashMap<TilePos, AvailableMove> = HashMap::new();
@@ -197,7 +197,7 @@ impl GameCommand for MoveObject {
                     move_event.send(MoveEvent::MoveComplete {
                         object_moved: self.object_moving,
                     });
-                    
+
                     system_state.apply(world);
                     Ok(())
                 } else {
@@ -480,7 +480,9 @@ impl MovementTypes {
 
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly
-#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(
+    Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect, Serialize, Deserialize,
+)]
 pub struct MovementType {
     pub name: String,
 }
@@ -489,7 +491,9 @@ pub struct MovementType {
 ///
 /// Contains a hashmap that holds a reference to a [`MovementType`] as a key and a u32 as the value. The u32 is used
 /// in pathfinding as the cost to move into that tile.
-#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[derive(
+    Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect, Serialize, Deserialize,
+)]
 #[reflect(Component)]
 pub struct TileMovementCosts {
     pub movement_type_cost: HashMap<MovementType, u32>,

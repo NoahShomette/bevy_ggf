@@ -2,9 +2,9 @@
 //! a tile and resides on the map. This system is built on top of Bevy_ECS and is based on the entity
 //! component system.
 
-use crate::mapping::tiles::ObjectStackingClass;
+use crate::mapping::tiles::{ObjectStackingClass, TilePosition};
 use crate::movement::ObjectMovementBundle;
-use bevy::prelude::{Bundle, Component, Resource, ReflectComponent};
+use bevy::prelude::{Bundle, Component, ReflectComponent, Resource};
 use bevy::reflect::{FromReflect, Reflect};
 use bevy_ecs_tilemap::prelude::TilePos;
 use serde::{Deserialize, Serialize};
@@ -109,14 +109,40 @@ impl ObjectIdProvider {
 
 /// Provides a way to track entities through potential despawns, spawns, and other shenanigans. Use
 /// this to reference entities and then query for the entity that it is attached to.
-#[derive(Default, Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
 #[reflect(Component)]
 pub struct ObjectId {
     pub id: usize,
 }
 
 ///Marker component for an entity signifying it as an Object
-#[derive(Default, Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
 #[reflect(Component)]
 pub struct Object;
 
@@ -223,10 +249,12 @@ pub struct GameObjectInfo {
 }
 
 /// The position of the Object on the Tilemap.
-#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect)]
+#[derive(
+    Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect, Serialize, Deserialize,
+)]
 #[reflect(Component)]
 pub struct ObjectGridPosition {
-    pub tile_position: TilePos,
+    pub tile_position: TilePosition,
 }
 
 // TODO: Implement building objects eventually
