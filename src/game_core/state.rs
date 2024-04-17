@@ -119,7 +119,7 @@ impl GameStateHandler {
             opt_object_grid_pos,
         ) in query.iter_mut(world)
         {
-            if changed.was_seen(for_player_id) {
+            if changed.check_and_register_seen(for_player_id) {
                 continue;
             }
             if opt_tile.is_some() {
