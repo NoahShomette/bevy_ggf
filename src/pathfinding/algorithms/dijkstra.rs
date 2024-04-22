@@ -44,7 +44,7 @@ impl MapNode for Node {
         self.prior_node_pos = node_pos;
     }
 
-    fn cost(&mut self) -> u32 {
+    fn cost(&self) -> u32 {
         self.move_cost
     }
 
@@ -79,15 +79,15 @@ impl PathfindAlgorithm<TilePos, Node, ObjectMovement> for DijkstraSquare {
         )> = SystemState::new(world);
         let (mut tile_storage_query, mut object_query) = system_state.get_mut(world);
 
-        let Ok(object_grid_position) = object_query.get(pathfind_entity) else{
+        let Ok(object_grid_position) = object_query.get(pathfind_entity) else {
             return vec![];
         };
 
         let Some((_, _, tile_storage, tilemap_size)) = tile_storage_query
             .iter_mut()
-            .find(|(_, id, _, _)| id == &&on_map)else{
+            .find(|(_, id, _, _)| id == &&on_map)
+        else {
             return vec![];
-
         };
 
         let tile_storage = tile_storage.clone();
@@ -165,7 +165,13 @@ impl PathfindAlgorithm<TilePos, Node, ObjectMovement> for DijkstraSquare {
                 available_moves.push(neighbor.0);
 
                 if let Some(callback) = pathfind_callback {
-                    callback.foreach_tile(pathfind_entity, neighbor.1, neighbor.0, &mut world);
+                    callback.foreach_tile(
+                        pathfind_entity,
+                        neighbor.1,
+                        neighbor.0,
+                        pathfind_map.get_node(neighbor.0).unwrap().cost(),
+                        &mut world,
+                    );
                 }
             }
 
@@ -217,7 +223,8 @@ impl PathfindMap<TilePos, Node, Vec<AvailableMove>, ObjectMovement> for Pathfind
         };
 
         let Some([tile_node, move_from_tile_node]) =
-            self.map.get_many_mut([&tile_pos, &move_from_tile_pos]) else{
+            self.map.get_many_mut([&tile_pos, &move_from_tile_pos])
+        else {
             return false;
         };
 
@@ -317,6 +324,10 @@ impl PathfindMap<TilePos, Node, Vec<AvailableMove>, ObjectMovement> for Pathfind
 
     fn get_node_mut(&mut self, node_pos: TilePos) -> Option<&mut Node> {
         self.map.get_mut(&node_pos)
+    }
+
+    fn get_node(&self, node_pos: TilePos) -> Option<&Node> {
+        self.map.get(&node_pos)
     }
 
     fn new_node(&mut self, new_node_pos: TilePos, prior_node: Node) {
