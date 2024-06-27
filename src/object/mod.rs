@@ -6,7 +6,6 @@ use crate::mapping::tiles::{ObjectStackingClass, TilePosition};
 use crate::movement::ObjectMovementBundle;
 use bevy::prelude::{Bundle, Component, ReflectComponent, Resource};
 use bevy::reflect::{FromReflect, Reflect};
-use bevy_ecs_tilemap::prelude::TilePos;
 use serde::{Deserialize, Serialize};
 
 // Default Components that we should have for objects

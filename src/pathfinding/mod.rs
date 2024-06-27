@@ -64,7 +64,7 @@ where
         &mut self,
         on_map: MapId,
         pathfind_entity: Entity,
-        mut world: &mut World,
+        world: &mut World,
     ) -> PF::PathfindOutput {
         self.pathfind_algorithm.pathfind(
             on_map,

@@ -1,15 +1,12 @@
-﻿use crate::mapping::tiles::Tile;
-use crate::mapping::MapId;
+﻿use crate::mapping::MapId;
 use crate::movement::{AvailableMove, ObjectMovement, TileMoveChecks, TileMovementCosts};
 use crate::object::ObjectGridPosition;
 use crate::pathfinding::{MapNode, PathfindAlgorithm, PathfindCallback, PathfindMap};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{Component, Entity, Query, World};
+use bevy::prelude::{Entity, Query, World};
 use bevy::utils::hashbrown::HashMap;
-use bevy::utils::petgraph::visit::Walker;
 use bevy_ecs_tilemap::map::TilemapSize;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage};
-use std::path::Iter;
 
 #[derive(Clone, Copy)]
 pub struct Node {
@@ -77,7 +74,7 @@ impl PathfindAlgorithm<TilePos, Node, ObjectMovement> for DijkstraSquare {
             Query<(Entity, &MapId, &TileStorage, &TilemapSize)>,
             Query<&ObjectGridPosition>,
         )> = SystemState::new(world);
-        let (mut tile_storage_query, mut object_query) = system_state.get_mut(world);
+        let (mut tile_storage_query, object_query) = system_state.get_mut(world);
 
         let Ok(object_grid_position) = object_query.get(pathfind_entity) else {
             return vec![];

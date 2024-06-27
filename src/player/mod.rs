@@ -1,6 +1,4 @@
-use crate::game_core::state::Changed;
 use bevy::prelude::{Component, FromReflect, Reflect, Resource};
-use bevy::utils::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// A list of all players in the game. This is copied into the game world to allow accessing it

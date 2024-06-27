@@ -1,7 +1,7 @@
 ﻿use crate::mapping::tiles::Tile;
 use crate::object::{ObjectGridPosition, ObjectId};
 use crate::player::{Player, PlayerList};
-use bevy::ecs::component::{ComponentId, ComponentInfo};
+use bevy::ecs::component::ComponentId;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
     Commands, Component, Entity, FromReflect, Mut, Query, Reflect, Resource, SystemSet, With, World,
@@ -9,9 +9,8 @@ use bevy::prelude::{
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::tiles::TilePos;
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 
-use super::saving::{ComponentBinaryState, GameSerDeRegistry, ResourceId, SaveId};
+use super::saving::{ComponentBinaryState, ResourceId, SaveId};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum StateSystems {
@@ -204,7 +203,7 @@ impl GameStateHandler {
 
         world.resource_scope(|_world, mut despawned_objects: Mut<DespawnedObjects>| {
             let mut index_to_remove: Vec<ObjectId> = vec![];
-            for (id, mut changed) in despawned_objects.despawned_objects.iter_mut() {
+            for (id, changed) in despawned_objects.despawned_objects.iter_mut() {
                 if changed.all_seen(&player_list.players) {
                     index_to_remove.push(*id);
                 }
@@ -217,7 +216,7 @@ impl GameStateHandler {
         world.resource_scope(
             |_world, mut resource_change_tracking: Mut<ResourceChangeTracking>| {
                 let mut index_to_remove: Vec<ComponentId> = vec![];
-                for (id, mut changed) in resource_change_tracking.resources.iter_mut() {
+                for (id, changed) in resource_change_tracking.resources.iter_mut() {
                     if changed.all_seen(&player_list.players) {
                         index_to_remove.push(*id);
                     }

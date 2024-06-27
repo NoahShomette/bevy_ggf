@@ -9,24 +9,16 @@ use crate::game_core::state::{
     DespawnedObjects, GameStateHandler, ResourceChangeTracking, StateEvents,
 };
 use crate::mapping::terrain::TileTerrainInfo;
-use crate::mapping::tiles::{
-    ObjectStackingClass, Tile, TileObjectStacksCount, TileObjects, TilePosition,
-};
+use crate::mapping::tiles::{ObjectStackingClass, Tile, TileObjects, TilePosition};
 use crate::mapping::MapIdProvider;
 use crate::movement::TileMovementCosts;
-use crate::object::{
-    Object, ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectIdProvider, ObjectInfo,
-    ObjectType,
-};
+use crate::object::{Object, ObjectGridPosition, ObjectId, ObjectIdProvider, ObjectInfo};
 use crate::player::{Player, PlayerList, PlayerMarker};
-use bevy::app::{App, Plugin};
 use bevy::ecs::world::EntityMut;
 use bevy::prelude::*;
-use bevy::reflect::{FromType, GetTypeRegistration, Reflect, TypeRegistry, TypeRegistryInternal};
 use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_trait_query::RegisterExt;
 use chrono::{DateTime, Utc};
-use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::default::Default;
@@ -40,12 +32,6 @@ pub mod runner;
 pub mod save_id_implementations;
 pub mod saving;
 pub mod state;
-
-pub struct BggfGamePlugin {}
-
-impl Plugin for BggfGamePlugin {
-    fn build(&self, app: &mut App) {}
-}
 
 /// Holds all the actual game information
 #[derive(Resource)]
@@ -248,7 +234,7 @@ where
     }
 
     pub fn default_setup_schedule() -> Schedule {
-        let mut schedule = Schedule::default();
+        let schedule = Schedule::default();
 
         schedule
     }

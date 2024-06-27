@@ -9,10 +9,10 @@
 
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::object::ObjectId;
-use bevy::prelude::{Bundle, Component, Entity, ReflectComponent};
+use bevy::prelude::{Bundle, Component, ReflectComponent};
 use bevy::reflect::{FromReflect, Reflect};
 use bevy::utils::hashbrown::HashMap;
-use bevy_ecs_tilemap::prelude::{TileBundle, TilemapId};
+use bevy_ecs_tilemap::prelude::TilemapId;
 use bevy_ecs_tilemap::tiles::TilePos;
 use serde::{Deserialize, Serialize};
 

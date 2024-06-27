@@ -10,17 +10,14 @@ use crate::mapping::terrain::{TerrainClass, TerrainType, TileTerrainInfo};
 use crate::mapping::MapId;
 use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
-use crate::player::PlayerList;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    info, App, Bundle, Component, Entity, EventWriter, Events, IntoSystemConfig,
-    IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Reflect, ReflectComponent,
-    Resource, SystemSet, World,
+    info, App, Bundle, Component, Entity, EventWriter, Events, Mut, Plugin, Query, Reflect,
+    ReflectComponent, Resource, SystemSet, World,
 };
 use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
-use serde::{Deserialize, Serialize};
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
@@ -764,7 +761,7 @@ impl ObjectTerrainMovementRules {
 
 #[test]
 fn test_terrain_rules() {
-    let TERRAIN_CLASSES: Vec<TerrainClass> = vec![
+    let terrain_classes: Vec<TerrainClass> = vec![
         TerrainClass {
             name: String::from("Ground"),
         },
@@ -773,27 +770,27 @@ fn test_terrain_rules() {
         },
     ];
 
-    let TERRAIN_TYPES: Vec<TerrainType> = vec![
+    let terrain_types: Vec<TerrainType> = vec![
         TerrainType {
             name: String::from("Grassland"),
-            terrain_class: TERRAIN_CLASSES[0].clone(),
+            terrain_class: terrain_classes[0].clone(),
         },
         TerrainType {
             name: String::from("Forest"),
-            terrain_class: TERRAIN_CLASSES[0].clone(),
+            terrain_class: terrain_classes[0].clone(),
         },
         TerrainType {
             name: String::from("Mountain"),
-            terrain_class: TERRAIN_CLASSES[0].clone(),
+            terrain_class: terrain_classes[0].clone(),
         },
     ];
     let movement_rules = ObjectTerrainMovementRules::new(
-        vec![TERRAIN_CLASSES[0].clone(), TERRAIN_CLASSES[1].clone()],
-        vec![(TERRAIN_TYPES[2].clone(), false)],
+        vec![terrain_classes[0].clone(), terrain_classes[1].clone()],
+        vec![(terrain_types[2].clone(), false)],
     );
 
     let tile_terrain_info = TileTerrainInfo {
-        terrain_type: TERRAIN_TYPES[2].clone(),
+        terrain_type: terrain_types[2].clone(),
     };
 
     // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2]

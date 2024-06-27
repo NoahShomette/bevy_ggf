@@ -58,26 +58,23 @@
 
 use crate::game_core::state::DespawnedObjects;
 use crate::game_core::{Game, ObjectIdProvider};
-use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects, TilePosition};
+use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::mapping::MapId;
 use crate::object::{Object, ObjectGridPosition, ObjectId};
-use crate::player::{PlayerList, PlayerMarker};
+use crate::player::PlayerMarker;
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
 use bevy::prelude::{
-    Bundle, Commands, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without,
-    World,
+    Bundle, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without, World,
 };
-use bevy::reflect::FromReflect;
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;
-use std::thread::spawn;
 
 /// Executes all stored game commands by calling the command queue execute buffer function
 pub fn execute_game_commands_buffer(world: &mut World) {
     world.resource_scope(|world, mut game_commands: Mut<GameCommands>| {
-        world.resource_scope(|world, mut game: Mut<Game>| {
+        world.resource_scope(|_world, mut game: Mut<Game>| {
             game_commands.execute_buffer(&mut game.game_world);
         });
     });
@@ -157,7 +154,7 @@ pub trait GameCommand: Send + GameCommandClone + Sync + Reflect + 'static {
     /// dont want to use rollback you aren't required to implement it for your commands. However if
     /// you **do** want to use it make sure you implement it correctly.
     //#[cfg(feature = "command_rollback")]
-    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+    fn rollback(&mut self, _world: &mut World) -> Result<(), String> {
         Ok(())
     }
 }
@@ -289,71 +286,6 @@ impl GameCommands {
                     info!("execution failed with: {:?}", error);
                 }
             }
-            self.history.clear_rollback_history();
-        }
-    }
-
-    /// Drains the command buffer and attempts to execute each command. Will only push commands that
-    /// succeed to the history. If commands dont succeed they are silently failed.
-    /// If [`Game`].game_type is set to Networked: Automatically checks if the new commands occured
-    /// before any old commands and will rollback the world and then replay commands to ensure proper
-    /// timeline
-    fn execute_buffer_options(&mut self, world: &mut World) {
-        let mut temp_rb_commands: Vec<GameCommandMeta> = vec![];
-        for mut command in self.queue.queue.drain(..).into_iter() {
-            /*
-            match world.resource::<Game>().game_type {
-                GameType::Networked => {
-                    let mut amount_to_rollback = 0;
-                    'old_check: for old_command in self.history.history.iter().rev() {
-                        if command.command_time < old_command.command_time {
-                            amount_to_rollback += 1;
-                        } else {
-                            break 'old_check;
-                        }
-                    }
-
-                    for mut rb_command in self
-                        .history
-                        .history
-                        .drain(
-                            self.history.history.len() - amount_to_rollback
-                                ..self.history.history.len(),
-                        )
-                        .into_iter()
-                    {
-                        rb_command
-                            .command
-                            .rollback(world)
-                            .expect("Failed to rollback command");
-                        temp_rb_commands.push(rb_command);
-                    }
-
-                    if let Ok(_) = command.command.execute(world) {
-                        self.history.push(command);
-                    } else {
-                        info!("execution failed ");
-                    }
-
-                    for mut rb_command in temp_rb_commands.drain(..).into_iter() {
-                        rb_command
-                            .command
-                            .execute(world)
-                            .expect("Failed to rollback command");
-                        self.history.history.push(rb_command);
-                    }
-                }
-                GameType::Local => {
-                    if let Ok(_) = command.command.execute(world) {
-                        self.history.push(command);
-                    } else {
-                        info!("execution failed ");
-                    }
-                }
-            }
-
-             */
-
             self.history.clear_rollback_history();
         }
     }
@@ -598,7 +530,7 @@ impl GameCommand for AddObjectToTile {
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
-        let Some((entity, _, mut object_grid_position, object_stacking_class)) = object_query
+        let Some((_entity, _, mut object_grid_position, object_stacking_class)) = object_query
             .iter_mut()
             .find(|(_, id, _, _)| id == &&self.object_game_id)
         else {

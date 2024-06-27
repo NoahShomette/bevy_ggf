@@ -50,7 +50,7 @@ pub fn track_resource_changes<R: Resource>(world: &mut World) {
                 panic!("resource does not exist: {}", std::any::type_name::<R>())
             });
 
-            world.resource_scope(|world, mut resources: Mut<ResourceChangeTracking>| {
+            world.resource_scope(|_world, mut resources: Mut<ResourceChangeTracking>| {
                 if let Some(_) = resources.resources.get(&component_id) {
                     resources.resources.insert(component_id, Changed::default());
                 } else {
