@@ -9,7 +9,7 @@
 use crate::combat::BggfCombatPlugin;
 use crate::mapping::BggfMappingPlugin;
 use crate::movement::BggfMovementPlugin;
-use bevy::app::{App, Plugin, PluginGroupBuilder};
+use bevy::app::PluginGroupBuilder;
 use bevy::prelude::PluginGroup;
 
 pub mod combat;
@@ -17,21 +17,14 @@ pub mod game_core;
 pub mod mapping;
 pub mod movement;
 pub mod object;
-pub mod player;
 pub mod pathfinding;
-
-pub struct BggfCorePlugin;
-
-impl Plugin for BggfCorePlugin {
-    fn build(&self, app: &mut App) {}
-}
+pub mod player;
 
 pub struct BggfDefaultPlugins;
 
 impl PluginGroup for BggfDefaultPlugins {
     fn build(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
-            .add(BggfCorePlugin)
             .add(BggfMovementPlugin::default())
             .add(BggfMappingPlugin)
             .add(BggfCombatPlugin::default())

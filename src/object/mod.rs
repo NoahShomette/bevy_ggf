@@ -2,11 +2,10 @@
 //! a tile and resides on the map. This system is built on top of Bevy_ECS and is based on the entity
 //! component system.
 
-use crate::mapping::tiles::ObjectStackingClass;
+use crate::mapping::tiles::{ObjectStackingClass, TilePosition};
 use crate::movement::ObjectMovementBundle;
 use bevy::prelude::{Bundle, Component, ReflectComponent, Resource};
 use bevy::reflect::{FromReflect, Reflect};
-use bevy_ecs_tilemap::prelude::TilePos;
 use serde::{Deserialize, Serialize};
 
 // Default Components that we should have for objects
@@ -129,7 +128,20 @@ pub struct ObjectId {
 }
 
 ///Marker component for an entity signifying it as an Object
-#[derive(Default, Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
 #[reflect(Component)]
 pub struct Object;
 
@@ -281,10 +293,12 @@ pub struct GameObjectInfo {
 }
 
 /// The position of the Object on the Tilemap.
-#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect)]
+#[derive(
+    Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect, Serialize, Deserialize,
+)]
 #[reflect(Component)]
 pub struct ObjectGridPosition {
-    pub tile_position: TilePos,
+    pub tile_position: TilePosition,
 }
 
 // TODO: Implement building objects eventually

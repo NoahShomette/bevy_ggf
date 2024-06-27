@@ -1,13 +1,11 @@
 ﻿mod algorithms;
 
-use crate::mapping::{Map, MapId};
+use crate::mapping::MapId;
 use crate::movement::TileMoveChecks;
 use bevy::prelude::{Component, Entity, World};
 use bevy_ecs_tilemap::prelude::TilemapSize;
 use std::marker::PhantomData;
-use std::path::Iter;
 
-use crate::pathfinding;
 pub use algorithms::dijkstra;
 pub use algorithms::dijkstra::DijkstraSquare;
 
@@ -66,7 +64,7 @@ where
         &mut self,
         on_map: MapId,
         pathfind_entity: Entity,
-        mut world: &mut World,
+        world: &mut World,
     ) -> PF::PathfindOutput {
         self.pathfind_algorithm.pathfind(
             on_map,
@@ -114,6 +112,7 @@ pub trait PathfindMap<NodePos, MapNode, PathfindOutput, CostComponent: Component
     fn get_neighbors(&self, node_pos: NodePos, tilemap_size: &TilemapSize) -> Vec<NodePos>;
 
     fn get_node_mut(&mut self, node_pos: NodePos) -> Option<&mut MapNode>;
+    fn get_node(&self, node_pos: NodePos) -> Option<&MapNode>;
 
     fn new_node(&mut self, new_node_pos: NodePos, prior_node: MapNode);
     fn set_valid_node(&mut self, node_pos: NodePos) -> Result<(), String>;
@@ -132,7 +131,7 @@ pub trait MapNode {
     /// sets the previous node that led to this one
     fn set_previous_node(&mut self, node: Self::NodePos);
 
-    fn cost(&mut self) -> u32;
+    fn cost(&self) -> u32;
 
     fn set_cost(&mut self, cost: u32);
 }
@@ -143,6 +142,7 @@ pub trait PathfindCallback<NodePos> {
         pathfinding_entity: Entity,
         node_entity: Entity,
         node_pos: NodePos,
+        node_cost: u32,
         world: &mut World,
     );
 }

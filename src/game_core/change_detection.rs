@@ -1,12 +1,9 @@
-use crate::game_core::runner::{GameRuntime, TurnBasedGameRunner};
 use crate::game_core::state::{Changed, DespawnedObjects, ResourceChangeTracking};
-use crate::game_core::{Game, GameBuilder, GameTypeRegistry};
-use crate::object::{Object, ObjectGridPosition, ObjectId};
+use crate::object::{Object, ObjectId};
 use bevy::prelude::{
     Commands, Component, DespawnRecursiveExt, DetectChanges, Entity, FromReflect, Mut, Query,
-    Reflect, RemovedComponents, Res, ResMut, Resource, With, World,
+    Reflect, RemovedComponents, ResMut, Resource, With, World,
 };
-use std::any::TypeId;
 
 #[derive(Component)]
 pub struct DespawnObject;
@@ -53,7 +50,7 @@ pub fn track_resource_changes<R: Resource>(world: &mut World) {
                 panic!("resource does not exist: {}", std::any::type_name::<R>())
             });
 
-            world.resource_scope(|world, mut resources: Mut<ResourceChangeTracking>| {
+            world.resource_scope(|_world, mut resources: Mut<ResourceChangeTracking>| {
                 if let Some(_) = resources.resources.get(&component_id) {
                     resources.resources.insert(component_id, Changed::default());
                 } else {
@@ -118,7 +115,9 @@ fn test_component_change_tracking() {
             false
         })
         .unwrap();
-    let Some(test_component_1) = <TestComponent as FromReflect>::from_reflect(&*test_component_1.clone_value()) else {
+    let Some(test_component_1) =
+        <TestComponent as FromReflect>::from_reflect(&*test_component_1.clone_value())
+    else {
         panic!("Couldn't find component")
     };
 
@@ -133,7 +132,9 @@ fn test_component_change_tracking() {
             false
         })
         .unwrap();
-    let Some(test_component_2) = <TestComponent as FromReflect>::from_reflect(&*test_component_2.clone_value()) else {
+    let Some(test_component_2) =
+        <TestComponent as FromReflect>::from_reflect(&*test_component_2.clone_value())
+    else {
         panic!("Couldn't find component")
     };
 
@@ -179,13 +180,17 @@ fn test_resource_change_tracking() {
 
     let resource = first_state.resources.pop().unwrap();
 
-    let Some(test_component_1) = <TestResource as FromReflect>::from_reflect(&*resource.resource.clone_value()) else {
+    let Some(test_component_1) =
+        <TestResource as FromReflect>::from_reflect(&*resource.resource.clone_value())
+    else {
         panic!("Couldn't find component")
     };
 
     let resource = second_state.resources.pop().unwrap();
 
-    let Some(test_component_2) = <TestResource as FromReflect>::from_reflect(&*resource.resource.clone_value()) else {
+    let Some(test_component_2) =
+        <TestResource as FromReflect>::from_reflect(&*resource.resource.clone_value())
+    else {
         panic!("Couldn't find component")
     };
 

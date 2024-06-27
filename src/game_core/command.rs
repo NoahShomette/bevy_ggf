@@ -61,23 +61,20 @@ use crate::game_core::{Game, ObjectIdProvider};
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
 use crate::mapping::MapId;
 use crate::object::{Object, ObjectGridPosition, ObjectId};
-use crate::player::{PlayerList, PlayerMarker};
+use crate::player::PlayerMarker;
 use bevy::ecs::system::SystemState;
 use bevy::log::info;
 use bevy::prelude::{
-    Bundle, Commands, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without,
-    World,
+    Bundle, DespawnRecursiveExt, Entity, Mut, Query, Reflect, Resource, With, Without, World,
 };
-use bevy::reflect::FromReflect;
 use bevy_ecs_tilemap::tiles::{TilePos, TileStorage};
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;
-use std::thread::spawn;
 
 /// Executes all stored game commands by calling the command queue execute buffer function
 pub fn execute_game_commands_buffer(world: &mut World) {
     world.resource_scope(|world, mut game_commands: Mut<GameCommands>| {
-        world.resource_scope(|world, mut game: Mut<Game>| {
+        world.resource_scope(|_world, mut game: Mut<Game>| {
             game_commands.execute_buffer(&mut game.game_world);
         });
     });
@@ -157,7 +154,7 @@ pub trait GameCommand: Send + GameCommandClone + Sync + Reflect + 'static {
     /// dont want to use rollback you aren't required to implement it for your commands. However if
     /// you **do** want to use it make sure you implement it correctly.
     //#[cfg(feature = "command_rollback")]
-    fn rollback(&mut self, world: &mut World) -> Result<(), String> {
+    fn rollback(&mut self, _world: &mut World) -> Result<(), String> {
         Ok(())
     }
 }
@@ -293,71 +290,6 @@ impl GameCommands {
         }
     }
 
-    /// Drains the command buffer and attempts to execute each command. Will only push commands that
-    /// succeed to the history. If commands dont succeed they are silently failed.
-    /// If [`Game`].game_type is set to Networked: Automatically checks if the new commands occured
-    /// before any old commands and will rollback the world and then replay commands to ensure proper
-    /// timeline
-    fn execute_buffer_options(&mut self, world: &mut World) {
-        let mut temp_rb_commands: Vec<GameCommandMeta> = vec![];
-        for mut command in self.queue.queue.drain(..).into_iter() {
-            /*
-            match world.resource::<Game>().game_type {
-                GameType::Networked => {
-                    let mut amount_to_rollback = 0;
-                    'old_check: for old_command in self.history.history.iter().rev() {
-                        if command.command_time < old_command.command_time {
-                            amount_to_rollback += 1;
-                        } else {
-                            break 'old_check;
-                        }
-                    }
-
-                    for mut rb_command in self
-                        .history
-                        .history
-                        .drain(
-                            self.history.history.len() - amount_to_rollback
-                                ..self.history.history.len(),
-                        )
-                        .into_iter()
-                    {
-                        rb_command
-                            .command
-                            .rollback(world)
-                            .expect("Failed to rollback command");
-                        temp_rb_commands.push(rb_command);
-                    }
-
-                    if let Ok(_) = command.command.execute(world) {
-                        self.history.push(command);
-                    } else {
-                        info!("execution failed ");
-                    }
-
-                    for mut rb_command in temp_rb_commands.drain(..).into_iter() {
-                        rb_command
-                            .command
-                            .execute(world)
-                            .expect("Failed to rollback command");
-                        self.history.history.push(rb_command);
-                    }
-                }
-                GameType::Local => {
-                    if let Ok(_) = command.command.execute(world) {
-                        self.history.push(command);
-                    } else {
-                        info!("execution failed ");
-                    }
-                }
-            }
-
-             */
-
-            self.history.clear_rollback_history();
-        }
-    }
-
     /// Request a single rollback - The game will attempt to rollback the next time
     /// [`execute_game_rollbacks_buffer`] is called
     pub fn rollback_one(&mut self) {
@@ -440,14 +372,14 @@ impl GameCommands {
     {
         self.queue.push(SpawnObject {
             bundle: bundle.clone(),
-            tile_pos,
+            tile_pos: tile_pos,
             on_map,
             player_team,
             object_game_id: None,
         });
         SpawnObject {
             bundle,
-            tile_pos,
+            tile_pos: tile_pos,
             on_map,
             player_team,
             object_game_id: None,
@@ -491,16 +423,18 @@ impl GameCommand for RemoveObjectFromTile {
 
         let Some((entity, _, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(_, id, _)| id == &&self.object_game_id)else {
+            .find(|(_, id, _)| id == &&self.object_game_id)
+        else {
             return Err(String::from("No object components found"));
         };
         let Some((_, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.on_map)else {
+            .find(|(id, _)| id == &&self.on_map)
+        else {
             return Err(String::from("No tile components found"));
         };
 
-        let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
+        let tile_entity = tile_storage.get(&self.tile_pos.into()).unwrap();
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
             return Err(String::from("No tile stack rules found"));
         };
@@ -514,7 +448,6 @@ impl GameCommand for RemoveObjectFromTile {
         world
             .entity_mut(entity)
             .insert(crate::game_core::state::Changed::default());
-
         return Ok(());
     }
 
@@ -535,23 +468,25 @@ impl GameCommand for RemoveObjectFromTile {
 
         let Some((entity, _, mut object_grid_position, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(_, id, _, _)| id == &&self.object_game_id)else {
+            .find(|(_, id, _, _)| id == &&self.object_game_id)
+        else {
             return Err(String::from("No object components found"));
         };
         let Some((_, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.on_map)else {
+            .find(|(id, _)| id == &&self.on_map)
+        else {
             return Err(String::from("No tile components found found"));
         };
 
-        let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
+        let tile_entity = tile_storage.get(&self.tile_pos.into()).unwrap();
 
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
             return Err(String::from("No tile stack rules found"));
         };
 
         tile_objects.add_object(self.object_game_id);
-        object_grid_position.tile_position = self.tile_pos;
+        object_grid_position.tile_position = self.tile_pos.into();
         tile_stack_rules.increment_object_class_count(object_stacking_class);
 
         world
@@ -560,7 +495,6 @@ impl GameCommand for RemoveObjectFromTile {
         world
             .entity_mut(entity)
             .insert(crate::game_core::state::Changed::default());
-
         Ok(())
     }
 }
@@ -596,26 +530,33 @@ impl GameCommand for AddObjectToTile {
         let (mut object_query, mut tile_query, mut tile_storage_query) =
             system_state.get_mut(&mut world);
 
-        let Some((entity, _, mut object_grid_position, object_stacking_class)) =
-            object_query
-                .iter_mut()
-                .find(|(_, id, _, _)| id == &&self.object_game_id) else {
-            return Err(String::from(format!("No Object Components found for ObjectId: {:?}", self.object_game_id)));
+        let Some((_entity, _, mut object_grid_position, object_stacking_class)) = object_query
+            .iter_mut()
+            .find(|(_, id, _, _)| id == &&self.object_game_id)
+        else {
+            return Err(String::from(format!(
+                "No Object Components found for ObjectId: {:?}",
+                self.object_game_id
+            )));
         };
         let Some((entity, _, tile_storage, _)) = tile_storage_query
             .iter_mut()
-            .find(|(_, id, _, _)| id == &&self.on_map) else {
-            return Err(String::from(format!("No Map Components found for ObjectId: {:?}", self.on_map)));
+            .find(|(_, id, _, _)| id == &&self.on_map)
+        else {
+            return Err(String::from(format!(
+                "No Map Components found for ObjectId: {:?}",
+                self.on_map
+            )));
         };
 
-        let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
+        let tile_entity = tile_storage.get(&self.tile_pos.into()).unwrap();
 
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
             return Err(String::from("No tile components found"));
         };
 
         tile_objects.add_object(self.object_game_id);
-        object_grid_position.tile_position = self.tile_pos;
+        object_grid_position.tile_position = self.tile_pos.into();
         tile_stack_rules.increment_object_class_count(object_stacking_class);
 
         world
@@ -640,16 +581,18 @@ impl GameCommand for AddObjectToTile {
 
         let Some((entity, _, object_stacking_class)) = object_query
             .iter_mut()
-            .find(|(_, id, _)| id == &&self.object_game_id)else {
+            .find(|(_, id, _)| id == &&self.object_game_id)
+        else {
             return Err(String::from("No object components found found"));
         };
         let Some((_, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.on_map)else {
+            .find(|(id, _)| id == &&self.on_map)
+        else {
             return Err(String::from("No tile components found"));
         };
 
-        let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
+        let tile_entity = tile_storage.get(&self.tile_pos.into()).unwrap();
 
         let Ok((mut tile_stack_rules, mut tile_objects)) = tile_query.get_mut(tile_entity) else {
             return Err(String::from("No tile components found"));
@@ -706,12 +649,15 @@ where
             system_state.get_mut(&mut world);
 
         let Ok(object_stacking_class) = object_query.get(entity) else {
-            return Err(String::from("Object does not have required ObjectStackingClass component"));
+            return Err(String::from(
+                "Object does not have required ObjectStackingClass component",
+            ));
         };
 
         let Some((_, tile_storage)) = tile_storage_query
             .iter_mut()
-            .find(|(id, _)| id == &&self.on_map)else {
+            .find(|(id, _)| id == &&self.on_map)
+        else {
             return Err(String::from("TileStorage not found"));
         };
         let tile_entity = tile_storage.get(&self.tile_pos).unwrap();
@@ -745,7 +691,7 @@ where
             id == &&self
                 .object_game_id
                 .expect("Rollback can only be called after execute which returns an entity id")
-        })else {
+        }) else {
             return Err(String::from("No object components found"));
         };
 
@@ -754,7 +700,7 @@ where
                 .object_game_id
                 .expect("Rollback can only be called after execute which returns an entity id"),
             on_map: self.on_map,
-            tile_pos: self.tile_pos,
+            tile_pos: self.tile_pos.into(),
         };
         let _ = remove.execute(world);
         world.entity_mut(entity).despawn_recursive();
@@ -788,10 +734,10 @@ impl GameCommand for DespawnObject {
             SystemState::new(world);
         let mut object_query = system_state.get_mut(world);
 
-        let Some((entity, _, tile_pos)) = object_query.iter_mut().find(|(_, id, _)| {
-            id == &&self
-                .object_game_id
-        })else {
+        let Some((entity, _, tile_pos)) = object_query
+            .iter_mut()
+            .find(|(_, id, _)| id == &&self.object_game_id)
+        else {
             return Err(String::from("No object components found"));
         };
 
@@ -824,10 +770,10 @@ impl GameCommand for DespawnObject {
             SystemState::new(&mut world);
         let mut object_query = system_state.get_mut(&mut world);
 
-        let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| {
-            id == &&self
-                .object_game_id
-        })else {
+        let Some((entity, _)) = object_query
+            .iter_mut()
+            .find(|(_, id)| id == &&self.object_game_id)
+        else {
             return Err(String::from("No object components found"));
         };
 

@@ -9,11 +9,12 @@
 
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::object::ObjectId;
-use bevy::prelude::{Bundle, Component, Entity, ReflectComponent};
+use bevy::prelude::{Bundle, Component, ReflectComponent};
 use bevy::reflect::{FromReflect, Reflect};
 use bevy::utils::hashbrown::HashMap;
-use bevy_ecs_tilemap::prelude::{TileBundle, TilemapId};
+use bevy_ecs_tilemap::prelude::TilemapId;
 use bevy_ecs_tilemap::tiles::TilePos;
+use serde::{Deserialize, Serialize};
 
 /// Bundle containing all the basic tile components needed for a tile.
 ///
@@ -37,9 +38,48 @@ pub struct BggfTileObjectBundle {
 }
 
 /// Marker component on map tiles for ease of query and accessing
-#[derive(Default, Component, Reflect, FromReflect)]
+#[derive(Default, Component, Reflect, FromReflect, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct Tile;
+
+/// Marker component on map tiles for ease of query and accessing
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
+#[reflect(Component)]
+pub struct TilePosition {
+    pub x: u32,
+    pub y: u32,
+}
+
+impl Into<TilePos> for TilePosition {
+    fn into(self) -> TilePos {
+        TilePos::new(self.x, self.y)
+    }
+}
+
+impl From<TilePos> for TilePosition {
+    fn from(value: TilePos) -> Self {
+        TilePosition::new(value.x, value.y)
+    }
+}
+
+impl TilePosition {
+    pub fn new(x: u32, y: u32) -> TilePosition {
+        TilePosition { x: x, y: y }
+    }
+}
 
 /// Defines a new stacking rule for objects based on a [`StackingClass`]. The count of objects in the tile is kept
 /// using an [`TileObjectStacksCount`] struct.

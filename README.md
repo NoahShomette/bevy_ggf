@@ -29,7 +29,7 @@ list!
 
 | Bevy Version | Crate Version |
 |--------------|---------------|
-| `0.9`        | `main`        |
+| `0.10`        | `main`        |
 
 ---
 

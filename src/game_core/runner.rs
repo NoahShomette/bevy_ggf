@@ -1,4 +1,3 @@
-use crate::game_core::Game;
 use bevy::prelude::{Resource, Schedule, SystemSet, World};
 
 /// Runtime that is used to drive the game. Users can implement whatever the want onto the GameRunner
