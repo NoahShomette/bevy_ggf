@@ -1,13 +1,13 @@
 use crate::combat::battle_resolver::{
     AttackPowerCalculator, BattleCalculator, BattleError, BattleResult, Combat,
 };
+use crate::combat::commands::GameCommandsExt;
 use crate::combat::{AttackPower, BaseAttackPower, Health, OnDeath};
+use crate::game_core::command::GameCommands;
 use crate::object::{ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{Component, Entity, Mut, Query, ResMut, World};
 use bevy::utils::HashMap;
-use crate::combat::commands::GameCommandsExt;
-use crate::game_core::command::GameCommands;
 
 /// A simple default struct implementing [`BaseAttackPower`]. Holds a hashmap that must contain a reference
 /// to every ObjectType in the game. Returns the u32 saved in the hashmap corresponding to the given
@@ -121,8 +121,10 @@ impl BattleCalculator for BasicBattleCalculator {
                 .calculate_object_attack_power(defending_id, attacking_id, world);
         });
 
-        let mut system_state: SystemState<(Query<(Entity, &ObjectId, &mut Health)>, ResMut<GameCommands>)> =
-            SystemState::new(world);
+        let mut system_state: SystemState<(
+            Query<(Entity, &ObjectId, &mut Health)>,
+            ResMut<GameCommands>,
+        )> = SystemState::new(world);
         let (mut object_query, mut game_commands) = system_state.get_mut(world);
 
         let Some((attacking_entity, _, mut attacking_health)) = object_query.iter_mut().find(|(_, id, _)| {

@@ -2,11 +2,10 @@
 //! a tile and resides on the map. This system is built on top of Bevy_ECS and is based on the entity
 //! component system.
 
-use crate::mapping::tiles::ObjectStackingClass;
+use crate::mapping::tiles::{ObjectStackingClass, TilePosition};
 use crate::movement::ObjectMovementBundle;
-use bevy::prelude::{Bundle, Component, Resource, ReflectComponent};
+use bevy::prelude::{Bundle, Component, ReflectComponent, Resource};
 use bevy::reflect::{FromReflect, Reflect};
-use bevy_ecs_tilemap::prelude::TilePos;
 use serde::{Deserialize, Serialize};
 
 // Default Components that we should have for objects
@@ -109,14 +108,40 @@ impl ObjectIdProvider {
 
 /// Provides a way to track entities through potential despawns, spawns, and other shenanigans. Use
 /// this to reference entities and then query for the entity that it is attached to.
-#[derive(Default, Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
 #[reflect(Component)]
 pub struct ObjectId {
     pub id: usize,
 }
 
 ///Marker component for an entity signifying it as an Object
-#[derive(Default, Clone, Copy, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
 #[reflect(Component)]
 pub struct Object;
 
@@ -139,7 +164,18 @@ impl Object {
 ///     ObjectClass { name: String::from("Building") },
 /// ];
 /// ```
-#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct ObjectClass {
     pub name: String,
 }
@@ -156,7 +192,18 @@ pub struct ObjectClass {
 /// pub const OBJECT_GROUP_INFANTRY: ObjectGroup = ObjectGroup{name: String::from("Infantry"), object_class: OBJECT_CLASS_GROUND};
 ///
 /// ```
-#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct ObjectGroup {
     pub name: String,
     pub object_class: ObjectClass,
@@ -198,7 +245,18 @@ pub struct ObjectGroup {
 /// }
 ///
 /// ```
-#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct ObjectType {
     pub name: String,
     pub object_group: ObjectGroup,
@@ -207,7 +265,19 @@ pub struct ObjectType {
 /// Holds a reference to a [`ObjectType`]. Is used to explicitly determine what an entity is from other
 /// Objects and enable logic based on a specific object type. Use this with a distinct [`ObjectType`] to
 /// define objects that might have exact same components and stats but you want different
-#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Component,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 #[reflect(Component)]
 pub struct ObjectInfo {
     pub object_type: ObjectType,
@@ -223,15 +293,29 @@ pub struct GameObjectInfo {
 }
 
 /// The position of the Object on the Tilemap.
-#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect)]
+#[derive(
+    Default, Clone, Copy, Eq, Hash, PartialEq, Debug, Component, Reflect, Serialize, Deserialize,
+)]
 #[reflect(Component)]
 pub struct ObjectGridPosition {
-    pub tile_position: TilePos,
+    pub tile_position: TilePosition,
 }
 
 // TODO: Implement building objects eventually
 /// Allows this object to build other objects. Not currently implemented
-#[derive(Default, Clone, Eq, Hash, Debug, PartialEq, Component, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    Debug,
+    PartialEq,
+    Component,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 #[reflect(Component)]
 struct Builder {
     pub can_build: Vec<ObjectType>,

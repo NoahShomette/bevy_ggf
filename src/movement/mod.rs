@@ -12,14 +12,12 @@ use crate::movement::backend::{MoveNode, MovementNodes};
 use crate::object::{ObjectClass, ObjectGroup, ObjectId, ObjectInfo, ObjectType};
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    info, App, Bundle, Component, Entity, EventWriter, Events, IntoSystemConfig,
-    IntoSystemSetConfig, IntoSystemSetConfigs, Mut, Plugin, Query, Reflect, ReflectComponent,
-    Resource, SystemSet, World,
+    info, App, Bundle, Component, Entity, EventWriter, Events, Mut, Plugin, Query, Reflect,
+    ReflectComponent, Resource, SystemSet, World,
 };
 use bevy::reflect::FromReflect;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapType};
-use crate::player::PlayerList;
 
 /// Core plugin for the bevy_ggf Movement System. Contains basic needed functionality.
 /// Does not contain a MovementSystem. You have to insert that yourself
@@ -71,8 +69,6 @@ where
             map_type,
             tile_move_checks: TileMoveChecks { tile_move_checks },
         });
-
-      
     }
 
     fn setup_movement(&mut self, tile_movement_costs: Vec<(TerrainType, TileMovementCosts)>)
@@ -81,7 +77,7 @@ where
     {
         self.game_world
             .insert_resource(TerrainMovementCosts::from_vec(tile_movement_costs));
-        
+
         self.game_world.init_resource::<Events<MoveEvent>>();
         self.game_world.init_resource::<Events<MoveError>>();
     }
@@ -164,8 +160,9 @@ impl GameCommand for MoveObject {
 
                 let Some((entity, id)) = object_query
                     .iter_mut()
-                    .find(|(_, id)| id == &&self.object_moving) else {
-                    return Err(String::from("Objet not found"))
+                    .find(|(_, id)| id == &&self.object_moving)
+                else {
+                    return Err(String::from("Objet not found"));
                 };
 
                 let mut moves: HashMap<TilePos, AvailableMove> = HashMap::new();
@@ -197,7 +194,7 @@ impl GameCommand for MoveObject {
                     move_event.send(MoveEvent::MoveComplete {
                         object_moved: self.object_moving,
                     });
-                    
+
                     system_state.apply(world);
                     Ok(())
                 } else {
@@ -480,7 +477,18 @@ impl MovementTypes {
 
 /// Struct used to define a new [`MovementType`]. MovementType represents how a unit moves and is used
 /// for movement costs chiefly
-#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct MovementType {
     pub name: String,
 }
@@ -489,7 +497,18 @@ pub struct MovementType {
 ///
 /// Contains a hashmap that holds a reference to a [`MovementType`] as a key and a u32 as the value. The u32 is used
 /// in pathfinding as the cost to move into that tile.
-#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    PartialEq,
+    Debug,
+    Component,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 #[reflect(Component)]
 pub struct TileMovementCosts {
     pub movement_type_cost: HashMap<MovementType, u32>,
@@ -547,7 +566,18 @@ pub struct ObjectMovementBundle {
 /// **object_terrain_movement_rules** - defines a list of rules based on TerrainType and TerrainClass
 /// that the object follows. If you want to declare movement rules based on the type of object that
 /// is in the tile that is getting checked, use ObjectTypeMovementRules
-#[derive(Default, Clone, Eq, PartialEq, Debug, Component, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    PartialEq,
+    Debug,
+    Component,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 #[reflect(Component)]
 pub struct ObjectMovement {
     pub move_points: i32,
@@ -679,7 +709,9 @@ impl ObjectTypeMovementRules {
 /// added to terrain_class_rules denotes that the object can move onto any TerrainTypes that has a reference
 /// to that TerrainClass.
 ///
-#[derive(Default, Clone, Eq, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(
+    Default, Clone, Eq, PartialEq, Debug, Reflect, FromReflect, serde::Deserialize, serde::Serialize,
+)]
 pub struct ObjectTerrainMovementRules {
     terrain_class_rules: Vec<TerrainClass>,
     terrain_type_rules: HashMap<TerrainType, bool>,
@@ -729,7 +761,7 @@ impl ObjectTerrainMovementRules {
 
 #[test]
 fn test_terrain_rules() {
-    let TERRAIN_CLASSES: Vec<TerrainClass> = vec![
+    let terrain_classes: Vec<TerrainClass> = vec![
         TerrainClass {
             name: String::from("Ground"),
         },
@@ -738,27 +770,27 @@ fn test_terrain_rules() {
         },
     ];
 
-    let TERRAIN_TYPES: Vec<TerrainType> = vec![
+    let terrain_types: Vec<TerrainType> = vec![
         TerrainType {
             name: String::from("Grassland"),
-            terrain_class: TERRAIN_CLASSES[0].clone(),
+            terrain_class: terrain_classes[0].clone(),
         },
         TerrainType {
             name: String::from("Forest"),
-            terrain_class: TERRAIN_CLASSES[0].clone(),
+            terrain_class: terrain_classes[0].clone(),
         },
         TerrainType {
             name: String::from("Mountain"),
-            terrain_class: TERRAIN_CLASSES[0].clone(),
+            terrain_class: terrain_classes[0].clone(),
         },
     ];
     let movement_rules = ObjectTerrainMovementRules::new(
-        vec![TERRAIN_CLASSES[0].clone(), TERRAIN_CLASSES[1].clone()],
-        vec![(TERRAIN_TYPES[2].clone(), false)],
+        vec![terrain_classes[0].clone(), terrain_classes[1].clone()],
+        vec![(terrain_types[2].clone(), false)],
     );
 
     let tile_terrain_info = TileTerrainInfo {
-        terrain_type: TERRAIN_TYPES[2].clone(),
+        terrain_type: terrain_types[2].clone(),
     };
 
     // this expression should be negative because in the given ObjectTerrainMovementRules TERRAIN_TYPES[2]

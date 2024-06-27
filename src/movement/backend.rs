@@ -1,12 +1,8 @@
-use crate::movement::{
-    AvailableMove, MoveEvent, MovementSystem, ObjectMoved,
-    ObjectMovement, TileMovementCosts,
-};
-use bevy::ecs::system::SystemState;
-use bevy::prelude::{Commands, Entity, EventReader, Mut, Query, Res, World};
+use crate::movement::{MoveEvent, ObjectMoved, ObjectMovement, TileMovementCosts};
+use crate::object::ObjectId;
+use bevy::prelude::{Commands, Entity, EventReader, Query, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TilemapSize};
-use crate::object::ObjectId;
 
 /// Provided function that can be used in a [`MovementCalculator`](crate::movement::MovementCalculator) to keep track of the nodes in a pathfinding node,
 /// their associated movement costs, and which is the node that has the shortest path to that specific
@@ -26,7 +22,9 @@ pub fn tile_movement_cost_check(
         return false;
     };
 
-    let Some((tile_node, move_from_tile_node)) = movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos) else {
+    let Some((tile_node, move_from_tile_node)) =
+        movement_nodes.get_two_node_mut(tile_pos, move_from_tile_pos)
+    else {
         return false;
     };
 
@@ -223,7 +221,8 @@ pub fn add_object_moved_component_on_moves(
 ) {
     for event in move_events.iter() {
         if let MoveEvent::MoveComplete { object_moved } = event {
-            let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| id == &object_moved) else{
+            let Some((entity, _)) = object_query.iter_mut().find(|(_, id)| id == &object_moved)
+            else {
                 continue;
             };
             commands.entity(entity).insert(ObjectMoved);

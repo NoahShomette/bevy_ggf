@@ -1,4 +1,5 @@
-﻿use bevy::ecs::system::SystemState;
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+use bevy::ecs::system::SystemState;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::Input;
 use bevy::prelude::{
@@ -7,16 +8,15 @@ use bevy::prelude::{
 };
 use bevy::reflect::{Reflect, TypeData};
 use bevy::{DefaultPlugins, MinimalPlugins};
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy_ascii_terminal::{
     AutoCamera, Border, Terminal, TerminalBundle, TerminalPlugin, TileFormatter,
 };
 use bevy_ecs_tilemap::prelude::{TilemapSize, TilemapTileSize, TilemapType};
 use bevy_ecs_tilemap::tiles::TilePos;
 use bevy_ggf::game_core::command::GameCommands;
-use bevy_ggf::game_core::runner::GameRunner;
+use bevy_ggf::game_core::runner::{GameRunner, GameRuntime};
 use bevy_ggf::game_core::state::{ObjectState, TileState};
-use bevy_ggf::game_core::{Game, GameBuilder, GameRuntime};
+use bevy_ggf::game_core::{Game, GameBuilder};
 use bevy_ggf::mapping::terrain::{TerrainClass, TerrainType};
 use bevy_ggf::mapping::tiles::{
     ObjectStackingClass, StackingClass, Tile, TileObjectStacks, TileObjectStacksCount, TileObjects,
@@ -28,6 +28,7 @@ use bevy_ggf::movement::{
     ObjectTerrainMovementRules, TileMovementCosts,
 };
 use bevy_ggf::object::{ObjectClass, ObjectGridPosition, ObjectGroup, ObjectId, ObjectType};
+use bevy_ggf::player::PlayerList;
 use bevy_ggf::{object, BggfDefaultPlugins};
 
 fn main() {
@@ -42,10 +43,10 @@ fn main() {
     app.add_system(update_game_state);
     app.add_system(handle_input);
     app.add_system(draw_world);
-    
+
     app.add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(FrameTimeDiagnosticsPlugin::default());
-    
+
     app.run();
 }
 
@@ -287,6 +288,7 @@ fn setup(mut world: &mut World) {
         ),
         player_spawn_pos,
         MapId { id: 1 },
+        0,
     );
     world.insert_resource(PlayerPos {
         object_grid_position: ObjectGridPosition {
@@ -429,7 +431,8 @@ fn update_game_state(world: &mut World) {
 
         world.insert_resource(player_pos);
         drop(registration);
-        game.game_state_handler.clear_changed(world);
+        let player_list = game.player_list.clone();
+        game.game_state_handler.clear_changed(world, &player_list);
     });
 }
 

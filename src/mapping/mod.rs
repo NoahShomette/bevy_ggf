@@ -2,19 +2,19 @@ pub mod object;
 pub mod terrain;
 pub mod tiles;
 
+use self::tiles::TilePosition;
 use crate::game_core::command::{GameCommand, GameCommands};
+use crate::game_core::runner::GameRunner;
+use crate::game_core::GameBuilder;
 use crate::mapping::terrain::{TerrainType, TileTerrainInfo};
 use crate::mapping::tiles::{
     BggfTileBundle, BggfTileObjectBundle, Tile, TileObjectStacks, TileObjects,
 };
-use crate::movement::{MoveError, MoveEvent, MovementCalculator, MovementSystem, TerrainMovementCosts, TileMoveCheckMeta, TileMoveChecks, TileMovementCosts};
+use crate::movement::TerrainMovementCosts;
 use bevy::ecs::system::SystemState;
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use crate::game_core::GameBuilder;
-use crate::game_core::runner::GameRunner;
-use crate::player::PlayerList;
 
 /// Bundle for Mapping
 pub struct BggfMappingPlugin;
@@ -29,18 +29,17 @@ impl Plugin for BggfMappingPlugin {
 
 pub trait GameBuilderMappingExt {
     fn setup_mapping(&mut self)
-        where
-            Self: Sized;
+    where
+        Self: Sized;
 }
 
 impl<T: GameRunner + 'static> GameBuilderMappingExt for GameBuilder<T>
-    where
-        T: GameRunner + 'static,
+where
+    T: GameRunner + 'static,
 {
-    
     fn setup_mapping(&mut self)
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         self.game_world.init_resource::<Events<MapSpawned>>();
         self.game_world.init_resource::<Events<MapDeSpawned>>();
@@ -152,14 +151,11 @@ impl GameCommand for SpawnRandomMap {
         let mut tile_storage = TileStorage::empty(map_size);
         let tilemap_type = self.tilemap_type;
         let tilemap_entity = world.spawn_empty().id();
-
-        let changed_component = world.resource_mut::<PlayerList>().new_changed_component();
-
-
         world.resource_scope(|world, terrain_movement_costs: Mut<TerrainMovementCosts>| {
             for x in 0..map_size.x {
                 for y in 0..map_size.y {
                     let tile_pos = TilePos { x, y };
+                    let tile_position = TilePosition { x, y };
                     let tile_movement_costs = terrain_movement_costs
                         .movement_cost_rules
                         .get(&self.map_terrain_type_vec[0])
@@ -179,7 +175,7 @@ impl GameCommand for SpawnRandomMap {
                             tile_objects: TileObjects::default(),
                         })
                         .insert(tile_movement_costs.clone())
-                        .insert(changed_component.clone())
+                        .insert((crate::game_core::state::Changed::default(), tile_position))
                         .id();
 
                     tile_storage.set(&tile_pos, tile_entity);
@@ -220,7 +216,11 @@ impl GameCommand for SpawnRandomMap {
 
         let (mut map_query, mut commands) = system_state.get_mut(&mut world);
 
-        let Some((entity, _, tile_storage)) = map_query.iter_mut().find(|(_, id, _)| id == &&self.spawned_map_id.expect("Rollback can only be called after execute which returns an entity id")) else {
+        let Some((entity, _, tile_storage)) = map_query.iter_mut().find(|(_, id, _)| {
+            id == &&self
+                .spawned_map_id
+                .expect("Rollback can only be called after execute which returns an entity id")
+        }) else {
             return Err(String::from("No entity found"));
         };
 

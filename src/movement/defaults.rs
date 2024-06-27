@@ -1,16 +1,16 @@
 use crate::mapping::terrain::TileTerrainInfo;
 use crate::mapping::tiles::{ObjectStackingClass, TileObjectStacks, TileObjects};
+use crate::mapping::MapId;
 use crate::movement::backend::{tile_movement_cost_check, MoveNode, MovementNodes};
 use crate::movement::{
-    DiagonalMovement, MovementCalculator, MovementSystem, ObjectMovement, ObjectTypeMovementRules,
-    TileMoveCheck, TileMoveCheckMeta, TileMoveChecks,
+    DiagonalMovement, MovementCalculator, ObjectMovement, ObjectTypeMovementRules, TileMoveCheck,
+    TileMoveChecks,
 };
-use crate::object::{Object, ObjectGridPosition, ObjectId, ObjectInfo};
+use crate::object::{ObjectGridPosition, ObjectId, ObjectInfo};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::{Entity, IVec2, Query, Res, Transform, With, Without, World};
+use bevy::prelude::{Entity, Query, World};
 use bevy::utils::hashbrown::HashMap;
 use bevy_ecs_tilemap::prelude::{TilePos, TileStorage, TilemapSize, TilemapType};
-use crate::mapping::MapId;
 
 // BUILT IN IMPLEMENTATIONS
 
@@ -67,10 +67,10 @@ impl MovementCalculator for SquareMovementCalculator {
 
         // insert the starting node at the moving objects grid position
         move_info.move_nodes.insert(
-            object_grid_position.tile_position,
+            object_grid_position.tile_position.into(),
             MoveNode {
-                node_pos: object_grid_position.tile_position,
-                prior_node: object_grid_position.tile_position,
+                node_pos: object_grid_position.tile_position.into(),
+                prior_node: object_grid_position.tile_position.into(),
                 move_cost: Some(0),
                 valid_move: true,
             },
@@ -78,8 +78,8 @@ impl MovementCalculator for SquareMovementCalculator {
 
         // unvisited nodes
         let mut unvisited_nodes: Vec<MoveNode> = vec![MoveNode {
-            node_pos: object_grid_position.tile_position,
-            prior_node: object_grid_position.tile_position,
+            node_pos: object_grid_position.tile_position.into(),
+            prior_node: object_grid_position.tile_position.into(),
             move_cost: Some(0),
             valid_move: false,
         }];
@@ -207,14 +207,16 @@ impl TileMoveCheck for MoveCheckAllowedTile {
             )>,
             Query<(&TileTerrainInfo, &TileObjects)>,
         )> = SystemState::new(world);
-        let (mut object_query, mut tile_query) = system_state.get_mut(world);
+        let (object_query, tile_query) = system_state.get_mut(world);
 
-        let Ok((entity, object_id, object_type_movement_rules, object_movement, object_info)) = object_query.get(entity_moving) else{
-            return false
+        let Ok((entity, object_id, object_type_movement_rules, object_movement, object_info)) =
+            object_query.get(entity_moving)
+        else {
+            return false;
         };
 
-        let Ok((tile_terrain_info, tile_objects)) = tile_query.get(tile_entity) else{
-            return false
+        let Ok((tile_terrain_info, tile_objects)) = tile_query.get(tile_entity) else {
+            return false;
         };
 
         // if the moving object has the optional type movement rules
@@ -224,10 +226,11 @@ impl TileMoveCheck for MoveCheckAllowedTile {
             // and return the bool if its there, else we just ignore it
             for tile_object in tile_objects.entities_in_tile.iter() {
                 let Some((_, _, _, _, object_info)) = object_query
-                        .iter()
-                        .find(|(_, id, _, _, _)| id == &tile_object) else{
-                        return true;
-                    };
+                    .iter()
+                    .find(|(_, id, _, _, _)| id == &tile_object)
+                else {
+                    return true;
+                };
                 if let Some(object_info) = object_info {
                     if let Some(bool) = object_type_movement_rules.can_move_on_tile(object_info) {
                         return bool;

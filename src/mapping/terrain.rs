@@ -19,10 +19,11 @@
 
 use bevy::prelude::{Component, ReflectComponent};
 use bevy::reflect::{FromReflect, Reflect};
+use serde::{Deserialize, Serialize};
 
 /// Component holding the tile terrain info needed by any built in logic.
 /// Terrain type
-#[derive(Default, Component, Reflect, FromReflect)]
+#[derive(Default, Component, Reflect, FromReflect, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct TileTerrainInfo {
     pub terrain_type: TerrainType,
@@ -30,13 +31,35 @@ pub struct TileTerrainInfo {
 
 /// Defines a new TerrainClass representing a category of [`TerrainType`]s. Used to specify different
 /// class or categories of terrain. Eg Ground, Water, Etc
-#[derive(Default, Clone, Eq, Hash, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    Debug,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct TerrainClass {
     pub name: String,
 }
 
 /// Defines a new TerrainType that is considered a derivative of the assigned terrain_class
-#[derive(Default, Clone, Hash, Eq, PartialEq, Debug, Reflect, FromReflect)]
+#[derive(
+    Default,
+    Clone,
+    Hash,
+    Eq,
+    PartialEq,
+    Debug,
+    Reflect,
+    FromReflect,
+    serde::Deserialize,
+    serde::Serialize,
+)]
 pub struct TerrainType {
     pub name: String,
     pub terrain_class: TerrainClass,

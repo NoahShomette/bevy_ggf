@@ -1,16 +1,16 @@
 ﻿use crate::mapping::tiles::Tile;
 use crate::object::{ObjectGridPosition, ObjectId};
-use crate::player::Player;
+use crate::player::{Player, PlayerList};
+use bevy::ecs::component::ComponentId;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::{
-    Commands, Component, Entity, FromReflect, Mut, Query, Reflect, ReflectComponent, Resource,
-    SystemSet, With, World,
+    Commands, Component, Entity, FromReflect, Mut, Query, Reflect, Resource, SystemSet, With, World,
 };
-use bevy::reflect::{TypeRegistry, TypeRegistryArc};
-use bevy::utils::petgraph::visit::Walker;
 use bevy::utils::HashMap;
 use bevy_ecs_tilemap::tiles::TilePos;
 use serde::{Deserialize, Serialize};
+
+use super::saving::{ComponentBinaryState, ResourceId, SaveId};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum StateSystems {
@@ -27,12 +27,7 @@ pub struct GameStateHandler {
 // the state that changed since last time this system was run
 impl GameStateHandler {
     /// returns the entire game state in a vec
-    pub fn get_entire_state(
-        &mut self,
-        mut world: &World,
-        for_player_id: Option<usize>,
-        type_registry: &TypeRegistryArc,
-    ) -> StateEvents {
+    pub fn get_entire_state(&mut self, world: &mut World) -> StateEvents {
         let mut state: StateEvents = StateEvents {
             players: vec![],
             resources: vec![],
@@ -40,114 +35,30 @@ impl GameStateHandler {
             objects: vec![],
             despawned_objects: vec![],
         };
-        // We make a temporary map of tiles so that as we get objects from the world we can insert
-        // them into the right tiles information
 
-        let type_registry = type_registry.read();
+        let mut query = world.query_filtered::<(
+            &dyn SaveId,
+            Option<&Tile>,
+            Option<&TilePos>,
+            Option<&ObjectId>,
+            Option<&ObjectGridPosition>,
+        ), With<Changed>>();
 
-        for archetype in world.archetypes().iter() {
-            for entity in archetype.entities() {
-                let entity_id = entity.entity();
-
-                // tiles
-                if let Some(tile) = world.get::<Tile>(entity_id) {
-                    let mut components: Vec<Box<dyn Reflect>> = vec![];
-                    // fill the component vectors of rollback entities
-                    for component_id in archetype.components() {
-                        let reflect_component = world
-                            .components()
-                            .get_info(component_id)
-                            .and_then(|info| type_registry.get(info.type_id().unwrap()))
-                            .and_then(|registration| registration.data::<ReflectComponent>());
-                        if let Some(reflect_component) = reflect_component {
-                            if let Some(component) =
-                                reflect_component.reflect(world.entity(entity_id))
-                            {
-                                components.push(component.clone_value());
-                            }
-                        }
-                    }
-
-                    if let Some(tile_pos) = world.get::<TilePos>(entity_id) {
-                        state.tiles.push(TileState {
-                            tile_pos: *tile_pos,
-                            components,
+        for (saveable_components, opt_tile, opt_tilepos, opt_object_id, opt_object_grid_pos) in
+            query.iter_mut(world)
+        {
+            if opt_tile.is_some() {
+                let mut components: Vec<ComponentBinaryState> = vec![];
+                for component in saveable_components.iter() {
+                    if let Some((id, binary)) = component.save() {
+                        components.push(ComponentBinaryState {
+                            id,
+                            component: binary,
                         });
                     }
                 }
 
-                if let Some(object_id) = world.get::<ObjectId>(entity_id) {
-                    let mut components: Vec<Box<dyn Reflect>> = vec![];
-                    // fill the component vectors of rollback entities
-                    for component_id in archetype.components() {
-                        let reflect_component = world
-                            .components()
-                            .get_info(component_id)
-                            .and_then(|info| type_registry.get(info.type_id().unwrap()))
-                            .and_then(|registration| registration.data::<ReflectComponent>());
-                        if let Some(reflect_component) = reflect_component {
-                            if let Some(component) =
-                                reflect_component.reflect(world.entity(entity_id))
-                            {
-                                components.push(component.clone_value());
-                            }
-                        }
-                    }
-
-                    if let Some(tile_pos) = world.get::<ObjectGridPosition>(entity_id) {
-                        state.objects.push(ObjectState {
-                            object_id: *object_id,
-                            components,
-                            object_grid_position: *tile_pos,
-                        })
-                    }
-                }
-            }
-        }
-
-        state
-    }
-
-    pub fn get_state_diff(
-        &mut self,
-        world: &mut World,
-        for_player_id: usize,
-        type_registry: &TypeRegistry,
-    ) -> StateEvents {
-        let mut state: StateEvents = StateEvents {
-            players: vec![],
-            resources: vec![],
-            tiles: vec![],
-            objects: vec![],
-            despawned_objects: vec![],
-        };
-
-        let type_registry = type_registry.read();
-        let mut query = world.query_filtered::<Entity, With<Changed>>();
-
-        let entities: Vec<Entity> = query.iter(world).collect();
-
-        for entity in entities.iter() {
-            let entity = *entity;
-            let mut entity_mut = world.entity_mut(entity);
-            let mut changed = entity_mut.get_mut::<Changed>().unwrap();
-            if changed.was_seen(for_player_id) {
-                continue;
-            }
-            if let Some(_) = world.get::<Tile>(entity) {
-                let mut components: Vec<Box<dyn Reflect>> = vec![];
-                for component in world.inspect_entity(entity).iter() {
-                    let reflect_component = type_registry
-                        .get(component.type_id().unwrap())
-                        .and_then(|registration| registration.data::<ReflectComponent>());
-                    if let Some(reflect_component) = reflect_component {
-                        if let Some(component) = reflect_component.reflect(world.entity(entity)) {
-                            components.push(component.clone_value());
-                        }
-                    }
-                }
-
-                if let Some(tile_pos) = world.get::<TilePos>(entity) {
+                if let Some(tile_pos) = opt_tilepos {
                     state.tiles.push(TileState {
                         tile_pos: *tile_pos,
                         components,
@@ -155,20 +66,18 @@ impl GameStateHandler {
                 }
             }
 
-            if let Some(object_id) = world.get::<ObjectId>(entity) {
-                let mut components: Vec<Box<dyn Reflect>> = vec![];
-                for component in world.inspect_entity(entity).iter() {
-                    let reflect_component = type_registry
-                        .get(component.type_id().unwrap())
-                        .and_then(|registration| registration.data::<ReflectComponent>());
-                    if let Some(reflect_component) = reflect_component {
-                        if let Some(component) = reflect_component.reflect(world.entity(entity)) {
-                            components.push(component.clone_value());
-                        }
+            if let Some(object_id) = opt_object_id {
+                let mut components: Vec<ComponentBinaryState> = vec![];
+                for component in saveable_components.iter() {
+                    if let Some((id, binary)) = component.save() {
+                        components.push(ComponentBinaryState {
+                            id,
+                            component: binary,
+                        });
                     }
                 }
 
-                if let Some(tile_pos) = world.get::<ObjectGridPosition>(entity) {
+                if let Some(tile_pos) = opt_object_grid_pos {
                     state.objects.push(ObjectState {
                         object_id: *object_id,
                         components,
@@ -177,10 +86,101 @@ impl GameStateHandler {
                 }
             }
         }
+        state
+    }
 
-        world.resource_scope(|world, mut despawned_objects: Mut<DespawnedObjects>| {
-            for (id, mut changed) in despawned_objects.despawned_objects.iter_mut() {
-                if changed.was_seen(for_player_id) {
+    pub fn get_state_diff(&mut self, world: &mut World, for_player_id: usize) -> StateEvents {
+        let mut state: StateEvents = StateEvents {
+            players: vec![],
+            resources: vec![],
+            tiles: vec![],
+            objects: vec![],
+            despawned_objects: vec![],
+        };
+
+        let mut query = world.query_filtered::<(
+            &dyn SaveId,
+            &mut Changed,
+            Option<&Tile>,
+            Option<&Player>,
+            Option<&TilePos>,
+            Option<&ObjectId>,
+            Option<&ObjectGridPosition>,
+        ), With<Changed>>();
+
+        for (
+            saveable_components,
+            mut changed,
+            opt_tile,
+            opt_player,
+            opt_tilepos,
+            opt_object_id,
+            opt_object_grid_pos,
+        ) in query.iter_mut(world)
+        {
+            if changed.check_and_register_seen(for_player_id) {
+                continue;
+            }
+            if opt_tile.is_some() {
+                let mut components: Vec<ComponentBinaryState> = vec![];
+                for component in saveable_components.iter() {
+                    if let Some((id, binary)) = component.save() {
+                        components.push(ComponentBinaryState {
+                            id,
+                            component: binary,
+                        });
+                    }
+                }
+
+                if let Some(tile_pos) = opt_tilepos {
+                    state.tiles.push(TileState {
+                        tile_pos: *tile_pos,
+                        components,
+                    });
+                }
+            }
+
+            if let Some(object_id) = opt_object_id {
+                let mut components: Vec<ComponentBinaryState> = vec![];
+                for component in saveable_components.iter() {
+                    if let Some((id, binary)) = component.save() {
+                        components.push(ComponentBinaryState {
+                            id,
+                            component: binary,
+                        });
+                    }
+                }
+
+                if let Some(tile_pos) = opt_object_grid_pos {
+                    state.objects.push(ObjectState {
+                        object_id: *object_id,
+                        components,
+                        object_grid_position: *tile_pos,
+                    })
+                }
+            }
+
+            if let Some(player) = opt_player {
+                let mut components: Vec<ComponentBinaryState> = vec![];
+                for component in saveable_components.iter() {
+                    if let Some((id, binary)) = component.save() {
+                        components.push(ComponentBinaryState {
+                            id,
+                            component: binary,
+                        });
+                    }
+                }
+
+                state.players.push(PlayerState {
+                    player_id: *player,
+                    components,
+                })
+            }
+        }
+
+        world.resource_scope(|_, mut despawned_objects: Mut<DespawnedObjects>| {
+            for (id, changed) in despawned_objects.despawned_objects.iter_mut() {
+                if !changed.check_and_register_seen(for_player_id) {
                     state.despawned_objects.push(*id);
                 }
             }
@@ -189,16 +189,44 @@ impl GameStateHandler {
         state
     }
 
-    /// Simple function that will clear all changed components that have been fully seen
-    pub fn clear_changed(&mut self, world: &mut World) {
+    /// Simple function that will clear all changed components that have been fully seen as well as
+    /// the DespawnedObjects resource and the ResourceChangeTracking resource
+    pub fn clear_changed(&mut self, world: &mut World, player_list: &PlayerList) {
         let mut system_state: SystemState<(Query<(Entity, &Changed)>, Commands)> =
             SystemState::new(world);
         let (changed_query, mut commands) = system_state.get(world);
         for (entity, changed) in changed_query.iter() {
-            if changed.all_seen() {
+            if changed.all_seen(&player_list.players) {
                 commands.entity(entity).remove::<Changed>();
             }
         }
+
+        world.resource_scope(|_world, mut despawned_objects: Mut<DespawnedObjects>| {
+            let mut index_to_remove: Vec<ObjectId> = vec![];
+            for (id, changed) in despawned_objects.despawned_objects.iter_mut() {
+                if changed.all_seen(&player_list.players) {
+                    index_to_remove.push(*id);
+                }
+            }
+            for id in index_to_remove {
+                despawned_objects.despawned_objects.remove(&id);
+            }
+        });
+
+        world.resource_scope(
+            |_world, mut resource_change_tracking: Mut<ResourceChangeTracking>| {
+                let mut index_to_remove: Vec<ComponentId> = vec![];
+                for (id, changed) in resource_change_tracking.resources.iter_mut() {
+                    if changed.all_seen(&player_list.players) {
+                        index_to_remove.push(*id);
+                    }
+                }
+                for id in index_to_remove {
+                    resource_change_tracking.resources.remove(&id);
+                }
+            },
+        );
+
         system_state.apply(world);
     }
 
@@ -232,11 +260,7 @@ impl GameStateHandler {
             new_events.despawned_objects = self.state_events.despawned_objects.drain(..).collect();
         }
 
-        if has_state {
-            return Some(new_events);
-        } else {
-            return None;
-        }
+        return if has_state { Some(new_events) } else { None };
     }
 }
 
@@ -249,13 +273,14 @@ impl GameStateHandler {
 #[derive(Debug)]
 pub struct PlayerState {
     pub player_id: Player,
-    pub components: Vec<Box<dyn Reflect>>,
+    pub components: Vec<ComponentBinaryState>,
 }
 
 /// Contains the state of a [`Resource`]
 #[derive(Debug)]
 pub struct ResourceState {
-    pub resource: Box<dyn Reflect>,
+    pub resource_id: ResourceId,
+    pub resource: Vec<u8>,
 }
 
 /// Contains an objects state, identified via its [`ObjectId`] component
@@ -263,7 +288,7 @@ pub struct ResourceState {
 pub struct ObjectState {
     pub object_id: ObjectId,
     pub object_grid_position: ObjectGridPosition,
-    pub components: Vec<Box<dyn Reflect>>,
+    pub components: Vec<ComponentBinaryState>,
 }
 
 /// Contains the entire state of a Tile, identified by its [`TilePos`] component, and all the Objects
@@ -271,7 +296,7 @@ pub struct ObjectState {
 #[derive(Debug)]
 pub struct TileState {
     pub tile_pos: TilePos,
-    pub components: Vec<Box<dyn Reflect>>,
+    pub components: Vec<ComponentBinaryState>,
 }
 
 /// A list of all changed states that occured during the last simulation tick
@@ -284,30 +309,39 @@ pub struct StateEvents {
     pub despawned_objects: Vec<ObjectId>,
 }
 
-#[derive(Clone, Eq, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize)]
+#[derive(
+    Default, Clone, Eq, Debug, PartialEq, Component, Reflect, FromReflect, Serialize, Deserialize,
+)]
 pub struct Changed {
-    pub players_seen: HashMap<usize, bool>,
+    pub players_seen: Vec<usize>,
 }
 
 impl Changed {
-    pub fn all_seen(&self) -> bool {
-        for (_, bool) in self.players_seen.iter() {
-            if !bool {
+    /// Checks if all players that are marked as needs_state have been registered and returns the result
+    pub fn all_seen(&self, players: &Vec<Player>) -> bool {
+        for player in players.iter() {
+            if player.needs_state && !self.players_seen.contains(&player.id()) {
                 return false;
             }
         }
         true
     }
 
-    pub fn was_seen(&mut self, id: usize) -> bool {
-        let was_seen = self
-            .players_seen
-            .get(&id)
-            .expect("Changed Components must include every PlayerId");
-        let was_seen = *was_seen;
-        self.players_seen.insert(id, true);
+    /// Checks if the given player id has already been registered and returns the result. If the player
+    /// id hasn't seen the changes then it marks it as seen and returns false. If the player id has seen
+    /// the changes then it does nothing and returns true.
+    pub fn check_and_register_seen(&mut self, id: usize) -> bool {
+        return if self.players_seen.contains(&id) {
+            true
+        } else {
+            self.players_seen.push(id);
+            false
+        };
+    }
 
-        was_seen
+    /// Checks if the given player id has been registered and returns the results
+    pub fn was_seen(&mut self, id: usize) -> bool {
+        return self.players_seen.contains(&id);
     }
 }
 
@@ -315,4 +349,10 @@ impl Changed {
 #[derive(Clone, Eq, Debug, PartialEq, Resource, Reflect, FromReflect, Serialize, Deserialize)]
 pub struct DespawnedObjects {
     pub despawned_objects: HashMap<ObjectId, Changed>,
+}
+
+/// Resource inserted into the world that will be used to drive sending despawned object updates
+#[derive(Clone, Eq, Debug, PartialEq, Resource)]
+pub struct ResourceChangeTracking {
+    pub resources: HashMap<ComponentId, Changed>,
 }
